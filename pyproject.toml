@@ -56,9 +56,6 @@ path = "alexandria/version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["alexandria"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"alexandria/db/migrations" = "alexandria/db/migrations"
-
 [tool.ruff]
 line-length = 100
 target-version = "py311"
