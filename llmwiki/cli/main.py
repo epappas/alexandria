@@ -24,7 +24,10 @@ from llmwiki.cli import (
     paste_cmd,
     project_cmd,
     reindex_cmd,
+    secrets_cmd,
+    source_cmd,
     status_cmd,
+    sync_cmd,
     why_cmd,
     workspace_cmd,
 )
@@ -170,28 +173,17 @@ def _synthesize_stub() -> None:
     stub_command(8, "llmwiki synthesize", "run scheduled temporal synthesis from event streams")
 
 
-@app.command("sync", help="Pull from configured sources (Phase 4).")
-def _sync_stub() -> None:
-    stub_command(4, "llmwiki sync", "run sync for all configured source adapters")
+app.command("sync", help="Pull from configured sources.")(
+    sync_cmd.sync_command
+)
 
 
 # -- Stub command groups for later phases -----------------------------------
 
-source_app = typer.Typer(help="Source adapters (Phase 4).", no_args_is_help=True)
-
-
-@source_app.command("add")
-def _source_add_stub(
-    source_type: str = typer.Argument(..., help="Adapter type (local | github | rss | ...)."),
-) -> None:
-    stub_command(4, "llmwiki source add", "configure a source adapter")
-
-
-@source_app.command("list")
-def _source_list_stub() -> None:
-    stub_command(4, "llmwiki source list", "list all configured source adapters")
-
-
+source_app = typer.Typer(help="Source adapters.", no_args_is_help=True)
+source_app.command("add", help="Configure a new source adapter.")(source_cmd.source_add_command)
+source_app.command("list", help="List configured source adapters.")(source_cmd.source_list_command)
+source_app.command("remove", help="Remove a source adapter.")(source_cmd.source_remove_command)
 app.add_typer(source_app, name="source")
 
 
@@ -230,16 +222,12 @@ def _eval_run_stub(
 app.add_typer(eval_app, name="eval")
 
 
-secrets_app = typer.Typer(help="Secret vault (Phase 4).", no_args_is_help=True)
-
-
-@secrets_app.command("set")
-def _secrets_set_stub(
-    ref: str = typer.Argument(..., help="Secret reference name."),
-) -> None:
-    stub_command(4, "llmwiki secrets set", "store an encrypted secret in the local vault")
-
-
+secrets_app = typer.Typer(help="Secret vault.", no_args_is_help=True)
+secrets_app.command("set", help="Store an encrypted secret.")(secrets_cmd.secrets_set_command)
+secrets_app.command("list", help="List stored secrets (metadata only).")(secrets_cmd.secrets_list_command)
+secrets_app.command("rotate", help="Rotate a secret.")(secrets_cmd.secrets_rotate_command)
+secrets_app.command("revoke", help="Wipe and revoke a secret.")(secrets_cmd.secrets_revoke_command)
+secrets_app.command("reveal", help="Reveal a secret (audit-logged).")(secrets_cmd.secrets_reveal_command)
 app.add_typer(secrets_app, name="secrets")
 
 

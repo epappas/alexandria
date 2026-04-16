@@ -28,6 +28,10 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         follow_tool,
         history_tool,
         why_tool,
+        events_tool,
+        timeline_tool,
+        git_tool,
+        sources_tool,
     )
 
     guide_tool.register(mcp, resolve)
@@ -39,3 +43,7 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
     follow_tool.register(mcp, resolve)
     history_tool.register(mcp, resolve)
     why_tool.register(mcp, resolve)
+    events_tool.register(mcp, resolve)
+    timeline_tool.register(mcp, resolve)
+    git_tool.register(mcp, resolve)
+    sources_tool.register(mcp, resolve)
