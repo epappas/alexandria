@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llmwiki"
+dynamic = ["version"]
+description = "Local-first single-user knowledge engine — accumulates gathered knowledge and exposes it via MCP to connected agents like Claude Code."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Evangelos Pappas", email = "epappas@evalonlabs.com" }]
+keywords = ["llm", "mcp", "knowledge-base", "wiki", "agentic", "personal-knowledge"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "typer>=0.15.0",
+  "pydantic>=2.5.0",
+  "rich>=13.0.0",
+  "platformdirs>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.4.0",
+  "mypy>=1.8.0",
+]
+
+[project.scripts]
+llmwiki = "llmwiki.cli.main:app"
+
+[project.urls]
+Repository = "https://github.com/epappas/llmwiki"
+Documentation = "https://github.com/epappas/llmwiki/tree/main/docs"
+
+[tool.hatch.version]
+path = "llmwiki/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["llmwiki"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"llmwiki/db/migrations" = "llmwiki/db/migrations"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_any_explicit = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto"
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:typer.*",
+]

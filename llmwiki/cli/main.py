@@ -1,0 +1,294 @@
+"""Top-level Typer application for the ``llmwiki`` CLI.
+
+Implements the surface defined in ``docs/architecture/20_cli_surface.md``.
+Phase 0 ships the commands enumerated in ``docs/IMPLEMENTATION_PLAN.md``
+Phase 0; every other command is registered as a phase stub so the user can
+discover the surface via ``llmwiki -h`` while honouring the no-fakes rule.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import typer
+
+from llmwiki import __version__
+from llmwiki.cli import (
+    backup_cmd,
+    db_cmd,
+    doctor_cmd,
+    init_cmd,
+    paste_cmd,
+    project_cmd,
+    reindex_cmd,
+    status_cmd,
+    workspace_cmd,
+)
+from llmwiki.cli._phase_stub import stub_command
+from llmwiki.config import resolve_home
+from llmwiki.core.crash_dump import install_crash_handler
+
+app = typer.Typer(
+    name="llmwiki",
+    help=(
+        "llmwiki — local-first single-user knowledge engine.\n"
+        "\n"
+        "Accumulates your gathered knowledge (raw sources, compiled wiki pages, "
+        "event streams, AI conversations) and exposes it via MCP to connected "
+        "agents like Claude Code for retroactive query and synthesis.\n"
+        "\n"
+        "llmwiki is NOT a chat client. Interactive conversations happen in your "
+        "existing MCP-capable agent (Claude Code, Cursor, Codex, ...). llmwiki "
+        "is the knowledge engine those agents connect to."
+    ),
+    add_completion=False,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    pretty_exceptions_enable=False,
+)
+
+
+@app.callback()
+def root(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-V",
+        help="Print version and exit.",
+        is_eager=True,
+    ),
+) -> None:
+    """Top-level entry point. Installs the crash handler before any work."""
+    if version:
+        typer.echo(f"llmwiki {__version__}")
+        raise typer.Exit(code=0)
+    install_crash_handler(resolve_home())
+
+
+# -- Phase 0 commands (real implementations) --------------------------------
+
+app.command("init", help="Initialize ~/.llmwiki/ and the global workspace.")(
+    init_cmd.init_command
+)
+app.command("status", help="Show daemon, workspaces, and basic state.")(
+    status_cmd.status_command
+)
+app.command("paste", help="One-shot capture from stdin into raw/local/.")(
+    paste_cmd.paste_command
+)
+app.command("doctor", help="Run health checks across the install.")(
+    doctor_cmd.doctor_command
+)
+
+# -- Workspace and project groups -------------------------------------------
+
+workspace_app = typer.Typer(help="Workspace management.", no_args_is_help=True)
+workspace_app.command("use", help="Set the current workspace.")(workspace_cmd.use_command)
+workspace_app.command("current", help="Print the current workspace.")(
+    workspace_cmd.current_command
+)
+workspace_app.command("list", help="List all workspaces.")(workspace_cmd.list_command)
+app.add_typer(workspace_app, name="workspace")
+
+project_app = typer.Typer(help="Project workspace management.", no_args_is_help=True)
+project_app.command("create", help="Create a new project workspace.")(
+    project_cmd.create_command
+)
+project_app.command("list", help="List project workspaces.")(project_cmd.list_command)
+project_app.command("info", help="Show workspace state and counts.")(
+    project_cmd.info_command
+)
+project_app.command("rename", help="Rename a workspace.")(project_cmd.rename_command)
+project_app.command("delete", help="Soft-delete a workspace (moves to trash).")(
+    project_cmd.delete_command
+)
+app.add_typer(project_app, name="project")
+
+# -- Database group ----------------------------------------------------------
+
+db_app = typer.Typer(help="Database operations.", no_args_is_help=True)
+db_app.command("migrate", help="Apply pending schema migrations.")(db_cmd.migrate_command)
+db_app.command("status", help="Show schema version and pending migrations.")(
+    db_cmd.status_command
+)
+app.add_typer(db_app, name="db")
+
+# -- Backup group (mlops F3 — moved to Phase 0) -----------------------------
+
+backup_app = typer.Typer(help="Backup and restore.", no_args_is_help=True)
+backup_app.command("create", help="Create a backup tarball of ~/.llmwiki/.")(
+    backup_cmd.create_command
+)
+app.add_typer(backup_app, name="backup")
+
+# -- Reindex group (mlops F4 — fts-verify in Phase 0) -----------------------
+
+reindex_app = typer.Typer(help="Rebuild SQLite indexes from filesystem.", no_args_is_help=True)
+reindex_app.callback(invoke_without_command=True)(reindex_cmd.reindex_callback)
+app.add_typer(reindex_app, name="reindex")
+
+# -- Stubs for commands shipped in later phases -----------------------------
+
+
+@app.command("ingest", help="Compile a source into the wiki (Phase 2).")
+def _ingest_stub(
+    source: str = typer.Argument(..., help="Path or URL of the source to ingest."),
+) -> None:
+    stub_command(2, "llmwiki ingest", "stage a cascade of writes against a hostile verifier")
+
+
+@app.command("query", help="Answer from the wiki (Phase 1+).")
+def _query_stub(
+    question: str = typer.Argument(..., help="The question to answer."),
+) -> None:
+    stub_command(1, "llmwiki query", "synthesize an answer from the wiki via the agent loop")
+
+
+@app.command("lint", help="Find wiki rot (Phase 2+).")
+def _lint_stub() -> None:
+    stub_command(2, "llmwiki lint", "auto-fix deterministic issues; verifier reports heuristic")
+
+
+@app.command("why", help="Belief explainability (Phase 3).")
+def _why_stub(
+    query: str = typer.Argument(..., help="Topic, subject, or belief id."),
+) -> None:
+    stub_command(3, "llmwiki why", "return belief + provenance + history")
+
+
+@app.command("synthesize", help="Trigger temporal synthesis (Phase 8).")
+def _synthesize_stub() -> None:
+    stub_command(8, "llmwiki synthesize", "run scheduled temporal synthesis from event streams")
+
+
+@app.command("sync", help="Pull from configured sources (Phase 4).")
+def _sync_stub() -> None:
+    stub_command(4, "llmwiki sync", "run sync for all configured source adapters")
+
+
+# -- Stub command groups for later phases -----------------------------------
+
+source_app = typer.Typer(help="Source adapters (Phase 4).", no_args_is_help=True)
+
+
+@source_app.command("add")
+def _source_add_stub(
+    source_type: str = typer.Argument(..., help="Adapter type (local | github | rss | ...)."),
+) -> None:
+    stub_command(4, "llmwiki source add", "configure a source adapter")
+
+
+@source_app.command("list")
+def _source_list_stub() -> None:
+    stub_command(4, "llmwiki source list", "list all configured source adapters")
+
+
+app.add_typer(source_app, name="source")
+
+
+subscriptions_app = typer.Typer(
+    help="Subscription inbox (Phase 5).", no_args_is_help=True
+)
+
+
+@subscriptions_app.command("list")
+def _subs_list_stub() -> None:
+    stub_command(5, "llmwiki subscriptions list", "list pending subscription items")
+
+
+app.add_typer(subscriptions_app, name="subscriptions")
+
+
+mcp_app = typer.Typer(help="MCP integration (Phase 1).", no_args_is_help=True)
+
+
+@mcp_app.command("serve")
+def _mcp_serve_stub(
+    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+) -> None:
+    stub_command(1, "llmwiki mcp serve", "start the stdio MCP server")
+
+
+@mcp_app.command("install")
+def _mcp_install_stub(
+    client: str = typer.Argument(..., help="MCP client to install into."),
+) -> None:
+    stub_command(1, "llmwiki mcp install", "register llmwiki as an MCP server in a client")
+
+
+@mcp_app.command("status")
+def _mcp_status_stub() -> None:
+    stub_command(1, "llmwiki mcp status", "show running MCP sessions")
+
+
+app.add_typer(mcp_app, name="mcp")
+
+
+eval_app = typer.Typer(help="Evaluation metrics (Phase 9).", no_args_is_help=True)
+
+
+@eval_app.command("run")
+def _eval_run_stub(
+    metric: str = typer.Option("all", "--metric", help="Metric name (M1..M5 or all)."),
+) -> None:
+    stub_command(9, "llmwiki eval run", "compute one or all of the M1-M5 metrics")
+
+
+app.add_typer(eval_app, name="eval")
+
+
+secrets_app = typer.Typer(help="Secret vault (Phase 4).", no_args_is_help=True)
+
+
+@secrets_app.command("set")
+def _secrets_set_stub(
+    ref: str = typer.Argument(..., help="Secret reference name."),
+) -> None:
+    stub_command(4, "llmwiki secrets set", "store an encrypted secret in the local vault")
+
+
+app.add_typer(secrets_app, name="secrets")
+
+
+hooks_app = typer.Typer(help="Auto-save hooks (Phase 7).", no_args_is_help=True)
+
+
+@hooks_app.command("install")
+def _hooks_install_stub(
+    client: str = typer.Argument(..., help="Client to install hooks into."),
+) -> None:
+    stub_command(7, "llmwiki hooks install", "install Stop + PreCompact hooks")
+
+
+app.add_typer(hooks_app, name="hooks")
+
+
+daemon_app = typer.Typer(help="Daemon (Phase 6).", no_args_is_help=True)
+
+
+@daemon_app.command("start")
+def _daemon_start_stub() -> None:
+    stub_command(6, "llmwiki daemon start", "start the supervised-subprocess daemon")
+
+
+@daemon_app.command("stop")
+def _daemon_stop_stub() -> None:
+    stub_command(6, "llmwiki daemon stop", "stop the daemon")
+
+
+@daemon_app.command("status")
+def _daemon_status_stub() -> None:
+    stub_command(6, "llmwiki daemon status", "show daemon process state")
+
+
+app.add_typer(daemon_app, name="daemon")
+
+
+def main() -> None:
+    """Entry point for the ``llmwiki`` console script."""
+    app()
+
+
+if __name__ == "__main__":
+    main()
