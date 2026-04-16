@@ -17,6 +17,7 @@ from llmwiki.cli import (
     backup_cmd,
     db_cmd,
     doctor_cmd,
+    ingest_cmd,
     init_cmd,
     mcp_cmd,
     paste_cmd,
@@ -132,11 +133,9 @@ app.add_typer(reindex_app, name="reindex")
 # -- Stubs for commands shipped in later phases -----------------------------
 
 
-@app.command("ingest", help="Compile a source into the wiki (Phase 2).")
-def _ingest_stub(
-    source: str = typer.Argument(..., help="Path or URL of the source to ingest."),
-) -> None:
-    stub_command(2, "llmwiki ingest", "stage a cascade of writes against a hostile verifier")
+app.command("ingest", help="Compile a source into the wiki (staged + verified).")(
+    ingest_cmd.ingest_command
+)
 
 
 @app.command("query", help="Answer from the wiki (Phase 1+).")

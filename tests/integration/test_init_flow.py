@@ -98,8 +98,9 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
 def test_unimplemented_command_returns_phase_stub_exit_code(tmp_home: Path) -> None:
     """Per the no-fakes rule, unimplemented commands print 'phase N' and exit 2."""
     run_llmwiki(tmp_home, "init")
-    result = run_llmwiki(tmp_home, "ingest", "/some/source.md", expect_exit=2)
-    assert "Phase 2" in result.stdout or "Phase 2" in result.stderr
+    # ingest is now a real command (Phase 2b) — use a different stub for this test
+    result = run_llmwiki(tmp_home, "lint", expect_exit=2)
+    assert "Phase" in result.stdout or "Phase" in result.stderr
 
 
 def test_init_is_idempotent_with_force(tmp_home: Path) -> None:
