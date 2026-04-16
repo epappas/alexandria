@@ -128,7 +128,11 @@ def update_run_status(home: Path, run_id: str, new_status: RunStatus) -> None:
 
 
 def commit_run(home: Path, run_id: str, workspace_path: Path) -> list[str]:
-    """Atomically move staged files into the live wiki/ directory.
+    """Move staged files into the live wiki/ directory.
+
+    SECURITY: every destination path is verified to stay within wiki_dir.
+    A staged file whose relative path escapes via ``../`` is rejected and
+    the entire commit aborts — no partial writes.
 
     Returns the list of relative paths that were committed.
     """
@@ -138,15 +142,27 @@ def commit_run(home: Path, run_id: str, workspace_path: Path) -> list[str]:
 
     committed_paths: list[str] = []
     wiki_dir = workspace_path / "wiki"
+    wiki_resolved = wiki_dir.resolve()
 
+    # First pass: validate all paths stay within wiki_dir
+    pending: list[tuple[Path, Path, str]] = []
     for src_file in sorted(staged.rglob("*")):
         if not src_file.is_file():
             continue
         rel = src_file.relative_to(staged)
-        dest = wiki_dir / rel
+        dest = (wiki_dir / rel).resolve()
+        if not _is_within_boundary(dest, wiki_resolved):
+            raise RunError(
+                f"path traversal blocked: staged file {rel} resolves to "
+                f"{dest} which is outside wiki/ boundary {wiki_resolved}"
+            )
+        pending.append((src_file, dest, str(rel)))
+
+    # Second pass: copy (only after all paths validated)
+    for src_file, dest, rel_str in pending:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(src_file), str(dest))
-        committed_paths.append(str(rel))
+        committed_paths.append(rel_str)
 
     update_run_status(home, run_id, RunStatus.COMMITTED)
 
@@ -252,3 +268,12 @@ def update_run_row(conn: Any, run_id: str, **fields: Any) -> None:
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [run_id]
     conn.execute(f"UPDATE runs SET {set_clause} WHERE run_id = ?", values)
+
+
+def _is_within_boundary(path: Path, boundary: Path) -> bool:
+    """Check that ``path`` is inside ``boundary`` (prevents path traversal)."""
+    try:
+        path.relative_to(boundary)
+        return True
+    except ValueError:
+        return False

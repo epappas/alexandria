@@ -145,10 +145,16 @@ def verify_quote_anchor(
 
 
 def _resolve_source_path(workspace_path: Path, source_ref: str) -> Path | None:
-    """Resolve a source file reference to an absolute path."""
+    """Resolve a source file reference to an absolute path.
+
+    SECURITY: every resolved path is checked to ensure it stays within
+    the workspace boundary. Path traversal via ``../`` is rejected.
+    """
+    ws_resolved = workspace_path.resolve()
+
     # Try as-is relative to workspace
-    candidate = workspace_path / source_ref.lstrip("/")
-    if candidate.exists() and candidate.is_file():
+    candidate = (workspace_path / source_ref.lstrip("/")).resolve()
+    if _is_within(candidate, ws_resolved) and candidate.exists() and candidate.is_file():
         return candidate
 
     # Try under raw/
@@ -156,7 +162,17 @@ def _resolve_source_path(workspace_path: Path, source_ref: str) -> Path | None:
     if raw_dir.exists():
         name = Path(source_ref).name
         for match in raw_dir.rglob(name):
-            if match.is_file():
-                return match
+            resolved = match.resolve()
+            if _is_within(resolved, ws_resolved) and resolved.is_file():
+                return resolved
 
     return None
+
+
+def _is_within(path: Path, boundary: Path) -> bool:
+    """Check that ``path`` is inside ``boundary`` (prevents traversal)."""
+    try:
+        path.relative_to(boundary)
+        return True
+    except ValueError:
+        return False
