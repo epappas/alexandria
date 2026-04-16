@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "alexandria"
+name = "alexandria-wiki"
 dynamic = ["version"]
 description = "Local-first single-user knowledge engine — accumulates gathered knowledge and exposes it via MCP to connected agents like Claude Code."
 readme = "README.md"
