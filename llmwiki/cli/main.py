@@ -18,6 +18,7 @@ from llmwiki.cli import (
     db_cmd,
     doctor_cmd,
     init_cmd,
+    mcp_cmd,
     paste_cmd,
     project_cmd,
     reindex_cmd,
@@ -200,28 +201,12 @@ def _subs_list_stub() -> None:
 app.add_typer(subscriptions_app, name="subscriptions")
 
 
-mcp_app = typer.Typer(help="MCP integration (Phase 1).", no_args_is_help=True)
-
-
-@mcp_app.command("serve")
-def _mcp_serve_stub(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-) -> None:
-    stub_command(1, "llmwiki mcp serve", "start the stdio MCP server")
-
-
-@mcp_app.command("install")
-def _mcp_install_stub(
-    client: str = typer.Argument(..., help="MCP client to install into."),
-) -> None:
-    stub_command(1, "llmwiki mcp install", "register llmwiki as an MCP server in a client")
-
-
-@mcp_app.command("status")
-def _mcp_status_stub() -> None:
-    stub_command(1, "llmwiki mcp status", "show running MCP sessions")
-
-
+mcp_app = typer.Typer(help="MCP integration.", no_args_is_help=True)
+mcp_app.command("serve", help="Start the stdio MCP server.")(mcp_cmd.serve_command)
+mcp_app.command("install", help="Register llmwiki as an MCP server in a client.")(
+    mcp_cmd.install_command
+)
+mcp_app.command("status", help="Show MCP server registration status.")(mcp_cmd.status_command)
 app.add_typer(mcp_app, name="mcp")
 
 

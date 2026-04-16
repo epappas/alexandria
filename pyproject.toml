@@ -27,6 +27,7 @@ dependencies = [
   "pydantic>=2.5.0",
   "rich>=13.0.0",
   "platformdirs>=4.0.0",
+  "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -83,4 +84,6 @@ asyncio_mode = "auto"
 filterwarnings = [
   "error",
   "ignore::DeprecationWarning:typer.*",
+  "ignore::ResourceWarning",
+  "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
