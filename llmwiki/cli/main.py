@@ -24,10 +24,12 @@ from llmwiki.cli import (
     hooks_cmd,
     ingest_cmd,
     init_cmd,
+    lint_cmd,
     logs_cmd,
     mcp_cmd,
     paste_cmd,
     project_cmd,
+    query_cmd,
     reindex_cmd,
     secrets_cmd,
     source_cmd,
@@ -38,7 +40,6 @@ from llmwiki.cli import (
     why_cmd,
     workspace_cmd,
 )
-from llmwiki.cli._phase_stub import stub_command
 from llmwiki.config import resolve_home
 from llmwiki.core.crash_dump import install_crash_handler
 
@@ -150,16 +151,13 @@ app.command("ingest", help="Compile a source into the wiki (staged + verified)."
 )
 
 
-@app.command("query", help="Answer from the wiki (Phase 1+).")
-def _query_stub(
-    question: str = typer.Argument(..., help="The question to answer."),
-) -> None:
-    stub_command(1, "llmwiki query", "synthesize an answer from the wiki via the agent loop")
+app.command("query", help="Answer from the wiki by searching all knowledge sources.")(
+    query_cmd.query_command
+)
 
-
-@app.command("lint", help="Find wiki rot (Phase 2+).")
-def _lint_stub() -> None:
-    stub_command(2, "llmwiki lint", "auto-fix deterministic issues; verifier reports heuristic")
+app.command("lint", help="Find wiki rot: stale citations, missing sources.")(
+    lint_cmd.lint_command
+)
 
 
 app.command("why", help="Belief explainability + provenance + history (read-only).")(

@@ -95,12 +95,11 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
     assert result.stdout.strip() == "research"
 
 
-def test_unimplemented_command_returns_phase_stub_exit_code(tmp_home: Path) -> None:
-    """Per the no-fakes rule, unimplemented commands print 'phase N' and exit 2."""
+def test_lint_on_fresh_workspace_finds_no_issues(tmp_home: Path) -> None:
+    """lint on a fresh workspace with no wiki pages exits cleanly."""
     run_llmwiki(tmp_home, "init")
-    # ingest is now a real command (Phase 2b) — use a different stub for this test
-    result = run_llmwiki(tmp_home, "lint", expect_exit=2)
-    assert "Phase" in result.stdout or "Phase" in result.stderr
+    result = run_llmwiki(tmp_home, "lint", expect_exit=0)
+    assert "No wiki directory" in result.stdout or "No issues" in result.stdout
 
 
 def test_init_is_idempotent_with_force(tmp_home: Path) -> None:
