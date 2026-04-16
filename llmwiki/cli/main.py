@@ -15,6 +15,7 @@ import typer
 from llmwiki import __version__
 from llmwiki.cli import (
     backup_cmd,
+    beliefs_cmd,
     db_cmd,
     doctor_cmd,
     ingest_cmd,
@@ -24,6 +25,7 @@ from llmwiki.cli import (
     project_cmd,
     reindex_cmd,
     status_cmd,
+    why_cmd,
     workspace_cmd,
 )
 from llmwiki.cli._phase_stub import stub_command
@@ -150,11 +152,17 @@ def _lint_stub() -> None:
     stub_command(2, "llmwiki lint", "auto-fix deterministic issues; verifier reports heuristic")
 
 
-@app.command("why", help="Belief explainability (Phase 3).")
-def _why_stub(
-    query: str = typer.Argument(..., help="Topic, subject, or belief id."),
-) -> None:
-    stub_command(3, "llmwiki why", "return belief + provenance + history")
+app.command("why", help="Belief explainability + provenance + history (read-only).")(
+    why_cmd.why_command
+)
+
+# -- Beliefs group -----------------------------------------------------------
+beliefs_app = typer.Typer(help="Belief management and traceability.", no_args_is_help=True)
+beliefs_app.command("list", help="List beliefs in the workspace.")(beliefs_cmd.list_command)
+beliefs_app.command("history", help="Full supersession chain for a belief.")(beliefs_cmd.history_command)
+beliefs_app.command("verify", help="Re-validate belief quote anchors.")(beliefs_cmd.verify_command)
+beliefs_app.command("export", help="Export beliefs to JSON or CSV.")(beliefs_cmd.export_command)
+app.add_typer(beliefs_app, name="beliefs")
 
 
 @app.command("synthesize", help="Trigger temporal synthesis (Phase 8).")

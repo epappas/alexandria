@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
-    """Register every Phase 1 read-only tool on the given FastMCP instance."""
+    """Register all implemented MCP tools on the given FastMCP instance."""
     from llmwiki.mcp.tools import (
         guide_tool,
         overview_tool,
@@ -27,6 +27,7 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         read_tool,
         follow_tool,
         history_tool,
+        why_tool,
     )
 
     guide_tool.register(mcp, resolve)
@@ -37,3 +38,4 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
     read_tool.register(mcp, resolve)
     follow_tool.register(mcp, resolve)
     history_tool.register(mcp, resolve)
+    why_tool.register(mcp, resolve)
