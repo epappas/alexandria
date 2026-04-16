@@ -17,10 +17,10 @@
 
 > "fixed transition probabilities determined during indexing. This rigidity ignores the query-dependent nature of edge relevance, causing semantic drift where random walks are diverted into high-degree 'hub' nodes before reaching critical downstream evidence."
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
 CatRAG is load-bearing evidence that **even state-of-the-art graph RAG has structural problems**. The "static graph fallacy" names a real failure mode: high-degree hub nodes absorb random walks regardless of query intent. CatRAG's fix is to make the graph dynamic, but the fix itself concedes the diagnosis — static indexes fight against query-time context.
 
 Agentic navigation **avoids the problem by construction**. The agent's reasoning loop is query-adaptive by definition: on every step it decides what to read next based on what it has read so far. There is no static transition probability to fight. The cost is higher latency and model-capability dependence; the benefit is that scaling is a matter of better primitives (grep, follow, subagents) rather than better graph algorithms.
 
-This paper is the best single justification for llmwiki's no-graph, no-vector, agent-as-retriever commitment. When the SOTA graph approach admits its own structural flaw and proposes query-aware dynamic edge weighting as the fix, the principled move is to let the agent *be* the dynamic weighting — which is what agentic retrieval has always been.
+This paper is the best single justification for alexandria's no-graph, no-vector, agent-as-retriever commitment. When the SOTA graph approach admits its own structural flaw and proposes query-aware dynamic edge weighting as the fix, the principled move is to let the agent *be* the dynamic weighting — which is what agentic retrieval has always been.

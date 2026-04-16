@@ -1,6 +1,6 @@
 # Reference: Karpathy's Original LLM Wiki Pattern
 
-**Sources:** `raw/00_karpathy_tweet.md` (full verbatim tweet), `raw/01_karpathy_gist_llmwiki.md`
+**Sources:** `raw/00_karpathy_tweet.md` (full verbatim tweet), `raw/01_karpathy_gist_alexandria.md`
 
 ## The authoritative primary source
 
@@ -49,7 +49,7 @@ That last line is the mandate for this entire project.
 
 10. **Roadmap Karpathy mentions.** Synthetic data generation + fine-tuning to bake the wiki into model weights. Explicitly out of scope for MVP; noted for reference.
 
-## Community reception (from `01_karpathy_gist_llmwiki.md`)
+## Community reception (from `01_karpathy_gist_alexandria.md`)
 
 500+ comments on the gist, roughly:
 - **Supporters** report 200-page wikis built from 35 sources in about an hour with minimal prompt modification.

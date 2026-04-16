@@ -20,5 +20,5 @@
 
 1. **Dual-level retrieval** — low-level and high-level knowledge discovery, contrasted with flat-structure retrieval.
 2. **Graph + vector hybrid** — "The integration of graph structures with vector representations facilitates efficient retrieval of related entities and their relationships, significantly improving response times while maintaining contextual relevance."
-3. **Incremental update algorithm** — new data integrates without a full reindex. This is the property llmwiki needs for continuously-synced sources.
+3. **Incremental update algorithm** — new data integrates without a full reindex. This is the property alexandria needs for continuously-synced sources.
 4. **Comparison to GraphRAG** — the paper claims improvements in retrieval accuracy and efficiency; specific numbers not in the fetched abstract view.

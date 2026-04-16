@@ -1,6 +1,6 @@
 # Implementation Plan Reviews
 
-Independent reviews of the **llmwiki implementation plan** (`docs/IMPLEMENTATION_PLAN.md`) by three specialist agents, conducted before any code is written. This is the **first checkpoint** — the plan itself is the artifact under review.
+Independent reviews of the **alexandria implementation plan** (`docs/IMPLEMENTATION_PLAN.md`) by three specialist agents, conducted before any code is written. This is the **first checkpoint** — the plan itself is the artifact under review.
 
 The earlier round of reviews (`docs/research/reviews/01_*` through `03_*`) covered the **architecture**. This round covers the **plan to build it**. After each implementation phase ships, the same three agents will review the actual deliverables (the per-phase reviews will land in numbered subdirectories `phase00/`, `phase01/`, etc.).
 

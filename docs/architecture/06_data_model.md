@@ -2,12 +2,12 @@
 
 > **Cites:** `research/reference/02_lucasastorian_impl.md`, `research/reference/03_astrohan_skill.md`, `research/reference/04_atomicmemory_compiler.md`
 
-Files first, SQLite second. The filesystem is the source of truth. SQLite is a materialized view over it — if you delete `state.db`, `llmwiki reindex` rebuilds it from the files.
+Files first, SQLite second. The filesystem is the source of truth. SQLite is a materialized view over it — if you delete `state.db`, `alexandria reindex` rebuilds it from the files.
 
 ## On-disk layout
 
 ```
-~/.llmwiki/                              # $LLMWIKI_HOME, configurable
+~/.alexandria/                              # $ALEXANDRIA_HOME, configurable
 ├── config.toml                          # global config
 ├── state.db                             # SQLite index, provenance, sync state
 ├── secrets/                             # encrypted adapter credentials
@@ -45,14 +45,14 @@ Files first, SQLite second. The filesystem is the source of truth. SQLite is a m
 
 ## Why filesystem-first
 
-1. **Portable.** The user can `git init ~/.llmwiki/`, back it up with Syncthing, move it to a new machine by copying the folder.
+1. **Portable.** The user can `git init ~/.alexandria/`, back it up with Syncthing, move it to a new machine by copying the folder.
 2. **Tool-compatible.** Obsidian opens any `workspaces/<slug>/wiki/` directly. So does `grep`, `ripgrep`, `vim`, and any markdown editor.
 3. **Transparent.** The user can see what the agent wrote. No opaque database holding mysterious blobs.
-4. **Recoverable.** If SQLite corrupts, `llmwiki reindex` rebuilds from files. If a markdown file is bad, the user can fix it in their editor.
+4. **Recoverable.** If SQLite corrupts, `alexandria reindex` rebuilds from files. If a markdown file is bad, the user can fix it in their editor.
 
 ## SQLite schema
 
-SQLite runs in WAL mode. One file: `~/.llmwiki/state.db`. No per-workspace databases — a single schema indexes everything with a `workspace` column.
+SQLite runs in WAL mode. One file: `~/.alexandria/state.db`. No per-workspace databases — a single schema indexes everything with a `workspace` column.
 
 ### `workspaces`
 ```sql
@@ -152,7 +152,7 @@ Triggers keep `documents_fts` in sync with `documents`. Search queries go throug
 
 ### No chunks, no embeddings, no vectors — ever
 
-llmwiki does not chunk documents, does not compute embeddings, and does not store vectors. There is no `document_chunks` table, no embedding column, no HNSW index. Retrieval is **agentic** — the guardian agent uses `list` / `grep` / `search` (FTS5) / `read` / `follow` as navigation primitives and composes them in a reasoning loop. The agent is the retriever.
+alexandria does not chunk documents, does not compute embeddings, and does not store vectors. There is no `document_chunks` table, no embedding column, no HNSW index. Retrieval is **agentic** — the guardian agent uses `list` / `grep` / `search` (FTS5) / `read` / `follow` as navigation primitives and composes them in a reasoning loop. The agent is the retriever.
 
 This is a deliberate commitment grounded in Karpathy's original tweet (*"I thought I had to reach for fancy RAG, but the LLM has been pretty good about auto-maintaining index files and brief summaries"*) and Anthropic's published guidance (*"Traditional approaches using Retrieval Augmented Generation (RAG) use static retrieval ... our architecture uses a multi-step search that dynamically finds relevant information"*). See `research/reference/12_agentic_retrieval.md`.
 
@@ -401,7 +401,7 @@ wiki/topics/auth.md              ← canonical wiki page
 wiki/topics/auth.beliefs.json    ← machine-readable belief extract (git-versioned)
 ```
 
-`llmwiki reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` deterministically. The sidecar is the source of truth; the SQLite table is the queryable index. Filesystem-first invariant honoured.
+`alexandria reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` deterministically. The sidecar is the source of truth; the SQLite table is the queryable index. Filesystem-first invariant honoured.
 
 ### `subscriptions_queue`
 Pending subscription items not yet acted on. Used by the `subscriptions` MCP tool.
@@ -509,7 +509,7 @@ The `write` tool validates this on `create` — missing Sources line or zero foo
 
 ## Reindex semantics
 
-`llmwiki reindex [--workspace X]`:
+`alexandria reindex [--workspace X]`:
 
 1. Walks the workspace(s) on disk.
 2. For each file: compute sha256, compare to `documents.content_hash`. If different or missing, update/insert.

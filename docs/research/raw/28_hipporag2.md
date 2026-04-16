@@ -18,6 +18,6 @@
 
 7% gain on associative-memory tasks over the leading embedding model, **without** the factual-accuracy regression that earlier graph-augmented methods suffered.
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
-HippoRAG 2 is state-of-the-art for the **multi-hop associative memory** problem — exactly the "given Acme's contract and the new RFC, find everything that's affected" query shape. llmwiki addresses the same query shape differently: instead of building a knowledge graph with PPR traversal, we let the agent walk `wiki_claim_provenance` via the `follow` tool and compose `search` + `read` in a reasoning loop. The paper is what we would graduate to *if* agentic navigation stopped scaling — and the successor paper CatRAG (`raw/30_*`) shows the graph approach itself has an unsolved "static graph fallacy" problem that agentic navigation naturally avoids.
+HippoRAG 2 is state-of-the-art for the **multi-hop associative memory** problem — exactly the "given Acme's contract and the new RFC, find everything that's affected" query shape. alexandria addresses the same query shape differently: instead of building a knowledge graph with PPR traversal, we let the agent walk `wiki_claim_provenance` via the `follow` tool and compose `search` + `read` in a reasoning loop. The paper is what we would graduate to *if* agentic navigation stopped scaling — and the successor paper CatRAG (`raw/30_*`) shows the graph approach itself has an unsolved "static graph fallacy" problem that agentic navigation naturally avoids.

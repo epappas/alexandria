@@ -38,7 +38,7 @@ Every wiki write — from an interactive MCP session, a CLI batch operation, or 
 ### On-disk layout
 
 ```
-~/.llmwiki/runs/<run_id>/
+~/.alexandria/runs/<run_id>/
 ├── meta.json           # run_id, started_at, triggered_by, workspace, verifier_preset
 ├── plan.json           # the full write plan (ops + targets + staged content hashes)
 ├── staged/             # proposed changes, mirrors wiki/ layout
@@ -52,7 +52,7 @@ Every wiki write — from an interactive MCP session, a CLI batch operation, or 
 └── status              # pending | verifying | committed | rejected | abandoned
 ```
 
-On commit, `staged/` is moved into the workspace's `wiki/` via `git mv` followed by `git commit`. On reject, the whole directory moves to `~/.llmwiki/runs/<run_id>/failed/` for inspection. On abandon (daemon crash, SIGKILL, etc.), a startup sweep transitions orphaned runs to `abandoned` and moves them to `failed/` without rollback — the wiki is untouched because nothing was ever moved out of `staged/`.
+On commit, `staged/` is moved into the workspace's `wiki/` via `git mv` followed by `git commit`. On reject, the whole directory moves to `~/.alexandria/runs/<run_id>/failed/` for inspection. On abandon (daemon crash, SIGKILL, etc.), a startup sweep transitions orphaned runs to `abandoned` and moves them to `failed/` without rollback — the wiki is untouched because nothing was ever moved out of `staged/`.
 
 ### SQLite state
 
@@ -152,7 +152,7 @@ The three outcomes are the only branches. KISS.
 
 ### Manual override
 
-Humans can override a reject with `llmwiki verify override <run_id> --reason "..."`. This moves the run from `rejected` to `committed` and records the override in `runs.verdict = 'commit_override'`. Overrides are visible in `llmwiki status` and in weekly M1 reports from `14_evaluation_scaffold.md`. If M1 shows that overrides correlate with citation-fidelity drops, the eval scaffold surfaces the correlation.
+Humans can override a reject with `alexandria verify override <run_id> --reason "..."`. This moves the run from `rejected` to `committed` and records the override in `runs.verdict = 'commit_override'`. Overrides are visible in `alexandria status` and in weekly M1 reports from `14_evaluation_scaffold.md`. If M1 shows that overrides correlate with citation-fidelity drops, the eval scaffold surfaces the correlation.
 
 ## Verbatim quote anchors
 
@@ -180,13 +180,13 @@ Workflow:
 2. The guardian applies every edit to **staged copies** of the affected files in `runs/<run_id>/staged/`, not to the live `wiki/`. Each `str_replace` still requires exactly-one-match, but the target is the staged copy.
 3. If any single replacement fails (no match, multi-match, or a sub-step error), the entire run aborts with verdict `reject`. The live `wiki/` is untouched because nothing was ever moved out of `staged/`.
 4. On success across all N edits, the verifier runs against the full staged set.
-5. On `commit` verdict, the whole staging directory is moved into `wiki/` atomically via `git mv` + `git commit -m "llmwiki run <run_id>"`.
+5. On `commit` verdict, the whole staging directory is moved into `wiki/` atomically via `git mv` + `git commit -m "alexandria run <run_id>"`.
 
 Half-cascades become impossible. Either the whole plan lands or none of it does. This is the DRY win — there is no separate "cascade transaction" mechanism; it is the same staged-write transaction.
 
 ## Synthesis run envelope — already covered
 
-Closes llm-architect §2.6. The synthesis runs in `10_event_streams.md` and `11_inference_endpoint.md` are just a specific kind of run (`run_type = 'synthesis'`). They use the same staging, same verifier, same commit semantics. A daemon crash mid-synthesis leaves a `pending` or `verifying` run; the startup sweep transitions it to `abandoned` and moves its staging to `failed/`. The user sees it in `llmwiki synthesize review` and decides whether to re-run.
+Closes llm-architect §2.6. The synthesis runs in `10_event_streams.md` and `11_inference_endpoint.md` are just a specific kind of run (`run_type = 'synthesis'`). They use the same staging, same verifier, same commit semantics. A daemon crash mid-synthesis leaves a `pending` or `verifying` run; the startup sweep transitions it to `abandoned` and moves its staging to `failed/`. The user sees it in `alexandria synthesize review` and decides whether to re-run.
 
 No new concepts. No cross-store transaction. No orphan cleanup that disagrees with the filesystem. One mechanism, one code path.
 
@@ -209,8 +209,8 @@ The verifier roughly doubles inference cost for every guardian write. This is th
 Three exceptions, each explicit:
 
 1. **Structural pages in trusted contexts.** `write(append)` to `wiki/log.md` from the guardian's own operation logs is exempt — the log is append-only, tiny, and never cited. Its content comes from the run's own metadata, not from user source material.
-2. **User manual override.** `llmwiki ingest --no-verify <source>` runs the writer without the verifier pass, for users who want the speed and trust themselves. The run is marked `unverified` in the `runs` table and the weekly M1 report counts unverified runs separately.
-3. **Draft mode.** `llmwiki synthesize --workspace X --draft-only` produces a run that stops at `status = pending` without committing or verifying. The user reviews the staging directly via `llmwiki runs show <run_id>`. This is the dry-run path upgraded into a real staging run.
+2. **User manual override.** `alexandria ingest --no-verify <source>` runs the writer without the verifier pass, for users who want the speed and trust themselves. The run is marked `unverified` in the `runs` table and the weekly M1 report counts unverified runs separately.
+3. **Draft mode.** `alexandria synthesize --workspace X --draft-only` produces a run that stops at `status = pending` without committing or verifying. The user reviews the staging directly via `alexandria runs show <run_id>`. This is the dry-run path upgraded into a real staging run.
 
 All three exceptions are OFF by default and must be explicitly requested.
 
@@ -227,7 +227,7 @@ All three exceptions are OFF by default and must be explicitly requested.
 - The actual **ingest workflow** (plan → read → draft → stage → verify → commit) lives in `04_guardian_agent.md`'s updated workflow section. This doc defines the transaction shape the workflow uses.
 - The **cascade convergence policy** (hedge with dated marker when sources disagree) lives in `15_cascade_and_convergence.md`. The verifier's check #2 at the per-run level references that policy.
 - The **evaluation metrics** that test whether verification is actually working (M1 citation fidelity, M2 cascade coverage) live in `14_evaluation_scaffold.md`. The verifier emits signals; the eval scaffold measures them.
-- The **runs observability** (log correlation by `run_id`, `llmwiki logs show <run_id>`, `llmwiki runs show <run_id>`) lives in `17_observability.md`. The runs table is the source of truth; the log stream surfaces it.
+- The **runs observability** (log correlation by `run_id`, `alexandria logs show <run_id>`, `alexandria runs show <run_id>`) lives in `17_observability.md`. The runs table is the source of truth; the log stream surfaces it.
 
 ## Summary
 

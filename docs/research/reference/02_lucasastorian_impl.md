@@ -1,9 +1,9 @@
-# Reference: lucasastorian/llmwiki — Reference Python Implementation
+# Reference: lucasastorian/alexandria — Reference Python Implementation
 
-**Sources:** `raw/04_lucasastorian_llmwiki_repo.md`, `raw/12_lucasastorian_full_service_tour.md`
-**Local clone:** `/tmp/llmwiki-lucas`
+**Sources:** `raw/04_lucasastorian_alexandria_repo.md`, `raw/12_lucasastorian_full_service_tour.md`
+**Local clone:** `/tmp/alexandria-lucas`
 
-This is the closest production-ready reference to what we're building. It is a multi-tenant SaaS at llmwiki.app plus a self-hostable stack. About one-third Python (API + MCP server), two-thirds TypeScript (Next.js UI). Apache 2.0.
+This is the closest production-ready reference to what we're building. It is a multi-tenant SaaS at alexandria.app plus a self-hostable stack. About one-third Python (API + MCP server), two-thirds TypeScript (Next.js UI). Apache 2.0.
 
 ## Architecture at a glance
 - **Web** (Next.js 16) — dashboard, document viewer, wiki renderer.

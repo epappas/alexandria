@@ -11,7 +11,7 @@ Status: Fetched via WebFetch (README-level extraction)
 The llm-wiki-compiler transforms raw sources into a structured, interlinked markdown wiki. As stated in the README, it "Compile[s] raw sources into an interlinked markdown wiki," drawing inspiration from Karpathy's LLM Wiki pattern where knowledge is compiled once into a persistent artifact rather than re-discovered at query time.
 
 ## Key Distinction from RAG
-The project positions itself as complementary to Retrieval-Augmented Generation (RAG). While RAG retrieves chunks dynamically (query → search → answer → forget), llmwiki follows a different flow: "sources → compile → wiki → query → save → richer wiki → better answers." Saved query results become new wiki pages that enhance future answers.
+The project positions itself as complementary to Retrieval-Augmented Generation (RAG). While RAG retrieves chunks dynamically (query → search → answer → forget), alexandria follows a different flow: "sources → compile → wiki → query → save → richer wiki → better answers." Saved query results become new wiki pages that enhance future answers.
 
 ## Architecture & Pipeline
 Two-phase pipeline:
@@ -24,12 +24,12 @@ Design eliminates order-dependence and catches failures before writing. Incremen
 
 | Command | Function |
 |---------|----------|
-| `llmwiki ingest <url\|file>` | Fetch URLs or copy local files into `sources/` |
-| `llmwiki compile` | Extract concepts and generate pages incrementally |
-| `llmwiki query "question"` | Query the compiled wiki |
-| `llmwiki query "question" --save` | Answer and save result as a new page |
-| `llmwiki lint` | Validate wiki quality |
-| `llmwiki watch` | Auto-recompile on source changes |
+| `alexandria ingest <url\|file>` | Fetch URLs or copy local files into `sources/` |
+| `alexandria compile` | Extract concepts and generate pages incrementally |
+| `alexandria query "question"` | Query the compiled wiki |
+| `alexandria query "question" --save` | Answer and save result as a new page |
+| `alexandria lint` | Validate wiki quality |
+| `alexandria watch` | Auto-recompile on source changes |
 
 ## Output Structure
 ```

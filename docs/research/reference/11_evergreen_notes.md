@@ -2,7 +2,7 @@
 
 **Source:** `raw/21_matuschak_evergreen_notes.md`
 
-Andy Matuschak's "evergreen notes" is the most load-bearing personal knowledge management framing for llmwiki. Not a paper — a set of five principles that describe what a personal note should look like *to be worth keeping over years*.
+Andy Matuschak's "evergreen notes" is the most load-bearing personal knowledge management framing for alexandria. Not a paper — a set of five principles that describe what a personal note should look like *to be worth keeping over years*.
 
 ## The five principles (verbatim)
 
@@ -16,9 +16,9 @@ Definition (paraphrased): evergreen notes are written and organized to **evolve,
 
 ## Why these are the architecture's acceptance criteria
 
-Each principle maps onto a hard-enforced invariant in llmwiki:
+Each principle maps onto a hard-enforced invariant in alexandria:
 
-| Matuschak principle | llmwiki enforcement |
+| Matuschak principle | alexandria enforcement |
 |---|---|
 | Atomic — one concept per note | `write` validates wiki pages are scoped to a single concept via the template check; the guardian's prompt forbids "dumping" whole sources into one page |
 | Concept-oriented — named after the idea | The Astro-Han SKILL.md rule: wiki pages are named after the concept, not the raw source file. We inherit and enforce this. |
@@ -30,7 +30,7 @@ If a wiki page violates any of these five rules, it is a **lint target** in our 
 
 ## What Matuschak teaches beyond the principles
 
-1. **"What matters is better thinking."** Not better note-taking. The evergreen notes practice exists to develop insight, not to produce archive material. This reframes llmwiki's value proposition: we are not a dumping ground for articles, we are a thinking assistant. Every feature must be judged on whether it helps the user think, not on whether it files something.
+1. **"What matters is better thinking."** Not better note-taking. The evergreen notes practice exists to develop insight, not to produce archive material. This reframes alexandria's value proposition: we are not a dumping ground for articles, we are a thinking assistant. Every feature must be judged on whether it helps the user think, not on whether it files something.
 
 2. **Reading inbox / writing inbox.** Matuschak uses two inboxes — one for captured references, one for transient notes in flight. This is our `raw/subscriptions/` (reading inbox) + the "pending ingest" state on raw documents (writing inbox). Direct borrowing.
 

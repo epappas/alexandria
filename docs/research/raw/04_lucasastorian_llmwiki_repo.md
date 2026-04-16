@@ -1,5 +1,5 @@
-# Source: lucasastorian/llmwiki (GitHub repo)
-URL: https://github.com/lucasastorian/llmwiki
+# Source: lucasastorian/alexandria (GitHub repo)
+URL: https://github.com/lucasastorian/alexandria
 Fetched: 2026-04-15
 Status: Fetched via WebFetch (README-level extraction)
 

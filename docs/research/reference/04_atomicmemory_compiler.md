@@ -1,6 +1,6 @@
 # Reference: atomicmemory/llm-wiki-compiler — Two-Phase Pipeline
 
-**Source:** `raw/06_atomicmemory_llmwiki_compiler.md`
+**Source:** `raw/06_atomicmemory_alexandria_compiler.md`
 **Local clone:** `/tmp/llm-wiki-compiler`
 
 A TypeScript CLI that treats wiki generation as a deterministic compile step. Not what we're building, but the *pipeline shape* is worth borrowing.
@@ -20,7 +20,7 @@ Benefits of the separation:
 Each source's SHA is stored; unchanged sources are skipped on recompile. Only deltas re-enter the LLM. This is the cheapest way to support "watch" mode and keeps recompile costs bounded.
 
 ### Query compounding
-`llmwiki query "..." --save` writes the answer as a new wiki page and rebuilds the index, so future queries use it as context. This makes "ask-and-save" a first-class operation, not an afterthought.
+`alexandria query "..." --save` writes the answer as a new wiki page and rebuilds the index, so future queries use it as context. This makes "ask-and-save" a first-class operation, not an afterthought.
 
 ### Provenance
 Every paragraph gets a marker `^[filename.md]` pointing back to the source that contributed the claim. Frontmatter carries the full source list. Character-limit truncation is explicit: `truncated: true` and original length recorded, so downstream consumers can tell they're working with partial content.

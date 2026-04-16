@@ -20,6 +20,6 @@ Two categories of reasoning agentic RAG:
 1. **Predefined reasoning (System 1)** — fixed modular pipelines. Fast, structured, inflexible.
 2. **Agentic reasoning (System 2)** — the model autonomously orchestrates tools during inference. Deliberate, slow, adaptive.
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
-llmwiki is squarely in the **agentic reasoning (System 2)** camp. The user's gist (`raw/26_*`) extends this framing with IRCoT / Self-RAG / DeepRetrieval as examples. The survey validates the direction at the academic level — *"the field has shifted toward Reasoning Agentic RAG"* — and names the System 1 / System 2 distinction that maps cleanly onto "static pipeline vs agentic loop."
+alexandria is squarely in the **agentic reasoning (System 2)** camp. The user's gist (`raw/26_*`) extends this framing with IRCoT / Self-RAG / DeepRetrieval as examples. The survey validates the direction at the academic level — *"the field has shifted toward Reasoning Agentic RAG"* — and names the System 1 / System 2 distinction that maps cleanly onto "static pipeline vs agentic loop."

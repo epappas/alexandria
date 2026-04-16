@@ -2,7 +2,7 @@
 
 - **URL:** https://docs.github.com/en/rest/activity/events
 - **Fetched:** 2026-04-15
-- **Purpose:** determine what GitHub activity llmwiki can fetch and with what retention.
+- **Purpose:** determine what GitHub activity alexandria can fetch and with what retention.
 
 ---
 
@@ -28,9 +28,9 @@
 
 CreateEvent, DeleteEvent, DiscussionEvent, IssuesEvent, IssueCommentEvent, ForkEvent, GollumEvent, MemberEvent, PublicEvent, PushEvent, PullRequestEvent, PullRequestReviewCommentEvent, PullRequestReviewEvent, CommitCommentEvent, ReleaseEvent, WatchEvent.
 
-## Implication for llmwiki
+## Implication for alexandria
 
-The Events API is for **recent activity only** — a 30-day rolling window. For historical project understanding, llmwiki must use the full REST API endpoints directly:
+The Events API is for **recent activity only** — a 30-day rolling window. For historical project understanding, alexandria must use the full REST API endpoints directly:
 
 - `/repos/{owner}/{repo}/issues` — full issue history, paginated, no hard retention.
 - `/repos/{owner}/{repo}/pulls` — full PR history.

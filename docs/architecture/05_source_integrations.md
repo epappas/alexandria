@@ -44,7 +44,7 @@ Config: vault path.
 Markdown-specific: strips `[[wikilinks]]` to text, preserves frontmatter, follows aliases. **We never write into the vault.**
 
 #### `clipboard` / `paste` — one-shot captures
-The CLI offers `llmwiki paste --workspace X --title "..."` to drop something from stdin into `raw/local/`. A subscription-adjacent flow for things without a real source.
+The CLI offers `alexandria paste --workspace X --title "..."` to drop something from stdin into `raw/local/`. A subscription-adjacent flow for things without a real source.
 
 ### Code sources
 
@@ -85,7 +85,7 @@ Same shape as Notion: read-only, poll-based, block-to-markdown.
 #### `s3`, `gcs`
 Config: bucket, prefix, credentials.
 - **Source mode** — recurses the prefix; objects beneath it become raw items.
-- **Storage mode** — accepts `push()` calls that upload exported wiki pages (user opt-in via `llmwiki export --to s3://...`).
+- **Storage mode** — accepts `push()` calls that upload exported wiki pages (user opt-in via `alexandria export --to s3://...`).
 - Never writes to the bucket unless explicitly in storage mode.
 
 #### `google-drive`, `dropbox`
@@ -101,7 +101,7 @@ Continuous polling adapters that feed new items into `raw/subscriptions/<type>/<
 Config: IMAP server, account, password (OS keyring), folder, from-address allowlist.
 Polls the IMAP folder, converts matching emails to markdown (keeping HTML as fallback), stores under `raw/subscriptions/newsletter/YYYY-MM-DD-subject.md`.
 
-Workflow: user creates a filter in their email client routing newsletters to a dedicated folder, gives llmwiki read access to that folder, and the adapter pulls them without touching anything else.
+Workflow: user creates a filter in their email client routing newsletters to a dedicated folder, gives alexandria read access to that folder, and the adapter pulls them without touching anything else.
 
 #### `twitter` / `x-feed`
 Config: usernames or list IDs.
@@ -139,7 +139,7 @@ The daemon runs an `apscheduler` with one job per active source/subscription:
 - SUBSCRIPTION adapters: default cadence per type (newsletter: hourly, twitter: 30 min, rss: 4 hours, youtube: daily). Configurable per adapter.
 - Webhooks short-circuit the cadence when a provider pushes to `http://localhost:<port>/webhooks/<adapter>/<signature>`.
 
-Without the daemon, the user runs `llmwiki sync` and `llmwiki subscriptions poll` manually. Same code path, just invoked from the CLI instead of the scheduler.
+Without the daemon, the user runs `alexandria sync` and `alexandria subscriptions poll` manually. Same code path, just invoked from the CLI instead of the scheduler.
 
 ## Bidirectional storage — how "sync with" works
 
@@ -154,7 +154,7 @@ format = "obsidian-zip"   # or "raw-markdown" or "html"
 cadence = "15m"
 ```
 
-On every cadence tick (or `llmwiki export --push`), the daemon:
+On every cadence tick (or `alexandria export --push`), the daemon:
 1. Runs the `export` pipeline for the workspace into a temp dir.
 2. Diffs against the adapter's `last_push_manifest.json`.
 3. Pushes changed files via the adapter's `push()` method.
@@ -177,7 +177,7 @@ Re-syncing does NOT delete the old row. It marks it `superseded_by` and inserts 
 
 ## Credentials
 
-All secrets live in `~/.llmwiki/secrets/` as encrypted JSON. The master key comes from the OS keyring (`keyring` package — Secret Service on Linux, Keychain on macOS, Credential Locker on Windows). Failing that, a passphrase prompt.
+All secrets live in `~/.alexandria/secrets/` as encrypted JSON. The master key comes from the OS keyring (`keyring` package — Secret Service on Linux, Keychain on macOS, Credential Locker on Windows). Failing that, a passphrase prompt.
 
 No secret ever appears in `config.toml`. Adapter config holds a `secret_ref` that resolves via the secrets store.
 

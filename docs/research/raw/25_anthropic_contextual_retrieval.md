@@ -32,12 +32,12 @@ The technique is **contextual embeddings**: prepend a per-chunk explanatory prea
 
 BM25 excels where embeddings fail — precise term matches like error codes. The two techniques "balance precise term matching with broader semantic understanding."
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
 Three things:
 
 1. **The confirmation.** Even Anthropic's RAG-positive post admits *"traditional RAG systems ... often destroy context."* That is the point our architecture starts from.
-2. **Where RAG is the right tool.** Contextual Retrieval is designed for **large corpora a single agent cannot navigate by hand**. If a knowledge base has millions of chunks, someone must narrow before reading. llmwiki targets hundreds to low thousands — a regime where the agent can navigate without embeddings.
+2. **Where RAG is the right tool.** Contextual Retrieval is designed for **large corpora a single agent cannot navigate by hand**. If a knowledge base has millions of chunks, someone must narrow before reading. alexandria targets hundreds to low thousands — a regime where the agent can navigate without embeddings.
 3. **The hybrid rule is still good advice at any scale.** Keyword (BM25 / FTS5) plus pattern (grep) plus structural (glob / list) plus read. We use all three already. We do not use embeddings because at our scale we do not need them — the agent can reach every page through navigation primitives.
 
 The explicit architectural move: we do not scaffold pgvector. We commit to FTS5 (keyword / BM25 equivalent) + glob (structural) + pattern search + read as the primitives, and we make the agent the retriever.

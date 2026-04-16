@@ -1,6 +1,6 @@
 # 17 — Observability
 
-> **Cites:** `research/reviews/02_mlops_engineer.md` (#10, recommendations on run_id correlation + `llmwiki status --json`), `13_hostile_verifier.md` (the runs table is the observability backbone).
+> **Cites:** `research/reviews/02_mlops_engineer.md` (#10, recommendations on run_id correlation + `alexandria status --json`), `13_hostile_verifier.md` (the runs table is the observability backbone).
 
 ## Principles
 
@@ -11,7 +11,7 @@
 
 ## The log families
 
-All under `~/.llmwiki/logs/`, rotated daily:
+All under `~/.alexandria/logs/`, rotated daily:
 
 | File | Source | Contents |
 |---|---|---|
@@ -66,7 +66,7 @@ Optional:
 
 ## `run_id` correlation — the story
 
-When a user runs `llmwiki ingest paper.pdf`:
+When a user runs `alexandria ingest paper.pdf`:
 
 1. The CLI generates `run_id = 2026-04-16-<uuid7>` and passes it to the daemon via the IPC socket.
 2. The daemon records a `runs` row (`status='pending'`, `run_type='ingest'`).
@@ -75,14 +75,14 @@ When a user runs `llmwiki ingest paper.pdf`:
 5. The guardian reads the source (logs to `mcp-*.jsonl`), calls the LLM (logs to `llm-usage-*.jsonl`), stages writes to `runs/<run_id>/staged/`, and passes the run to the verifier.
 6. The verifier is a sub-run with `parent_run = <run_id>` and its own `run_id`. It logs to `verifier-*.jsonl`.
 7. On commit, the daemon logs to `daemon-*.jsonl`: `{run_id, event='run_committed'}`.
-8. The git commit carries `run_id` in its message footer: `llmwiki: run 2026-04-16-abc123`.
+8. The git commit carries `run_id` in its message footer: `alexandria: run 2026-04-16-abc123`.
 9. `wiki/log.md` records `## [2026-04-16] ingest | paper.pdf (run 2026-04-16-abc123)`.
 10. `wiki_log_entries` records the same run_id.
 
-**`llmwiki logs show <run_id>`** merges all log-family entries with matching `run_id` OR matching `correlation.parent_run` into a single timestamp-sorted stream:
+**`alexandria logs show <run_id>`** merges all log-family entries with matching `run_id` OR matching `correlation.parent_run` into a single timestamp-sorted stream:
 
 ```
-$ llmwiki logs show 2026-04-16-abc123
+$ alexandria logs show 2026-04-16-abc123
 
 2026-04-16T14:20:00.000Z  daemon       run_started           research       ingest paper.pdf
 2026-04-16T14:20:00.142Z  mcp          tool_call             research       read(path=raw/papers/paper.pdf)
@@ -98,7 +98,7 @@ $ llmwiki logs show 2026-04-16-abc123
 
 This is the post-mortem tool. A user asks *"what happened in last night's scheduled run?"* and a single command tells the whole story in order.
 
-## `llmwiki status --json`
+## `alexandria status --json`
 
 The single-call operational dashboard. Returns a JSON blob covering:
 
@@ -179,7 +179,7 @@ The single-call operational dashboard. Returns a JSON blob covering:
   },
   "warnings": [
     "slack-research adapter circuit breaker open until 14:50 UTC",
-    "last backup is 35h old — consider running llmwiki backup create"
+    "last backup is 35h old — consider running alexandria backup create"
   ]
 }
 ```
@@ -189,27 +189,27 @@ The `warnings` array is the **actionable** subset. If this array is empty, the s
 ### CLI formats
 
 ```
-llmwiki status               # pretty-printed human output
-llmwiki status --json        # the blob above
-llmwiki status --workspace X # scoped to one workspace
-llmwiki status --watch       # refresh every 5s (curses-ish)
+alexandria status               # pretty-printed human output
+alexandria status --json        # the blob above
+alexandria status --workspace X # scoped to one workspace
+alexandria status --watch       # refresh every 5s (curses-ish)
 ```
 
 ## Crash dumps
 
 On an unhandled exception anywhere in the daemon:
 
-1. A traceback is written to `~/.llmwiki/crashes/<timestamp>-<pid>-<child>.txt`.
+1. A traceback is written to `~/.alexandria/crashes/<timestamp>-<pid>-<child>.txt`.
 2. A state snapshot is appended: recent tool calls from the crashed run (if any), last heartbeats, current rate-limiter state, open file handles.
 3. The parent supervisor logs `{event='child_crashed', child=<name>, pid=<pid>, dump_path=<path>}` to `daemon-*.jsonl`.
-4. The crash count is surfaced in `llmwiki status` as a warning.
+4. The crash count is surfaced in `alexandria status` as a warning.
 
 Python `faulthandler` is enabled at import time for every child, which catches segfaults from C extensions (FTS5, asyncpg bindings) and writes a stack trace to stderr. The parent supervisor captures child stderr and routes to the crash dump file.
 
-### `llmwiki doctor`
+### `alexandria doctor`
 
 ```
-llmwiki doctor [--workspace X]
+alexandria doctor [--workspace X]
 ```
 
 Runs a suite of checks and reports pass/fail with actionable remediation:
@@ -221,13 +221,13 @@ Runs a suite of checks and reports pass/fail with actionable remediation:
 [OK]   All workspace directories present
 [OK]   Keyring secret store accessible
 [WARN] No backup in the last 24 hours
-       → run: llmwiki backup create
+       → run: alexandria backup create
 [OK]   MCP stdio entry point is executable
 [OK]   Claude Code hook installed and verified
 [ERR]  slack-research adapter circuit breaker open
-       → investigate: cat ~/.llmwiki/logs/sync-2026-04-16.jsonl | jq 'select(.data.adapter_id == "slack-research")'
+       → investigate: cat ~/.alexandria/logs/sync-2026-04-16.jsonl | jq 'select(.data.adapter_id == "slack-research")'
 [WARN] No scheduled synthesis in the last 14 days
-       → check: llmwiki synthesize review
+       → check: alexandria synthesize review
 [OK]   Eval M1 healthy on all workspaces
 [OK]   Eval M2 healthy on all workspaces
 ```
@@ -239,26 +239,26 @@ Doctor is the first thing a user runs when *"something feels off"*. It points at
 Because the hostile verifier is the load-bearing correctness mechanism, its runs are observable in two places:
 
 1. **`verifier-*.jsonl`** — every verdict with per-claim findings.
-2. **`llmwiki runs show <run_id>`** — the cross-log unified view with the verifier as a sub-run.
+2. **`alexandria runs show <run_id>`** — the cross-log unified view with the verifier as a sub-run.
 
 A user who wants to understand *"why did the verifier reject this ingest?"* runs:
 
 ```
-llmwiki runs show 2026-04-16-abc123
+alexandria runs show 2026-04-16-abc123
 ```
 
 And sees every step from read-source → stage → verify → reject, with the reject reason and the per-claim findings inlined. This is the debug surface for correctness issues.
 
 ## No telemetry, no opt-out required
 
-Everything in this doc writes to local files under `~/.llmwiki/`. There is no network traffic, no phone-home, no anonymized metrics server, no crash reporter uploading to an issue tracker. The observability surface is fully inspectable by the user with `jq`, `grep`, and a text editor. This is non-negotiable — it follows directly from invariant #1 (single-user, local).
+Everything in this doc writes to local files under `~/.alexandria/`. There is no network traffic, no phone-home, no anonymized metrics server, no crash reporter uploading to an issue tracker. The observability surface is fully inspectable by the user with `jq`, `grep`, and a text editor. This is non-negotiable — it follows directly from invariant #1 (single-user, local).
 
-Users who want remote observability can run their own OpenTelemetry collector against the JSONL files. llmwiki does not ship it, and the architecture assumes it does not exist.
+Users who want remote observability can run their own OpenTelemetry collector against the JSONL files. alexandria does not ship it, and the architecture assumes it does not exist.
 
 ## SOLID application
 
 - **Single Responsibility.** Each log family is a separate file with a separate emitter. One log family, one purpose. Downstream tools that want to merge read from all of them via `run_id`.
-- **Open/Closed.** Adding a new log family is adding a file path to the emitter registry. No changes to `llmwiki logs show`.
+- **Open/Closed.** Adding a new log family is adding a file path to the emitter registry. No changes to `alexandria logs show`.
 - **Liskov.** Every log line has the common shape above. Code that parses one line parses them all.
 - **Interface Segregation.** The status command reads from the runs table, the heartbeats table, and the last N log lines. It does not couple to the adapter implementations or the LLM provider internals.
 - **Dependency Inversion.** The status blob is produced by a `StatusReporter` class that composes `DaemonInspector`, `DbInspector`, `WorkspaceInspector`, and `AdapterInspector`. Each inspector is a narrow interface; tests substitute fakes.
@@ -287,6 +287,6 @@ Users who want remote observability can run their own OpenTelemetry collector ag
 
 ## Summary
 
-Seven log families, one `run_id` field correlating everything, one `llmwiki status --json` surfacing operational state, one `llmwiki logs show <run_id>` for post-mortem tracing, one `llmwiki doctor` for health checks, one `llmwiki runs show` for verifier debugging. Crash dumps go to `~/.llmwiki/crashes/`. No telemetry. No cloud.
+Seven log families, one `run_id` field correlating everything, one `alexandria status --json` surfacing operational state, one `alexandria logs show <run_id>` for post-mortem tracing, one `alexandria doctor` for health checks, one `alexandria runs show` for verifier debugging. Crash dumps go to `~/.alexandria/crashes/`. No telemetry. No cloud.
 
 Every observable question the user will ask has exactly one command that answers it.

@@ -34,9 +34,9 @@ The practice is, in Matuschak's words, "enormously indebted" to Niklas Luhmann's
 - Executable strategy for writing (daily / weekly process)
 - Taxonomy of note types (evergreen, literature, etc.)
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
-The wiki pages llmwiki builds need to satisfy all five principles *automatically*. The guardian agent must:
+The wiki pages alexandria builds need to satisfy all five principles *automatically*. The guardian agent must:
 
 1. Write **atomic** pages — one concept per page, not "everything I learned from this source."
 2. Name pages after the **concept**, not the source file.

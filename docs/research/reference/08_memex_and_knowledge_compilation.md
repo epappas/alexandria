@@ -14,15 +14,15 @@ Three direct quotes from section 6 of *As We May Think*:
 
 > "A memex is a device in which an individual stores all his books, records, and communications, and which is mechanized so that it may be consulted with exceeding speed and flexibility. It is an enlarged intimate supplement to his memory."
 
-Bush's thesis, eighty years before llmwiki, is that (a) the scientific record already exceeds human ability to find what exists in it, (b) the fix is not more cataloguing but **associative access**, and (c) the right unit is a **personal, private** store that captures one individual's thinking and its connections.
+Bush's thesis, eighty years before alexandria, is that (a) the scientific record already exceeds human ability to find what exists in it, (b) the fix is not more cataloguing but **associative access**, and (c) the right unit is a **personal, private** store that captures one individual's thinking and its connections.
 
 Every invariant in our architecture — markdown as the associative substrate, dense cross-links, one-user-one-store, the rejection of hierarchical taxonomies — is an instance of Bush's design 80 years later.
 
 The specific mapping:
 
-| Bush (1945) | llmwiki (2026) |
+| Bush (1945) | alexandria (2026) |
 |---|---|
-| Memex — personal associative device | `~/.llmwiki/workspaces/<slug>/` |
+| Memex — personal associative device | `~/.alexandria/workspaces/<slug>/` |
 | "Enlarged intimate supplement to memory" | The guardian agent's wiki |
 | Trails — explicit associative paths | Wiki cross-links + footnote citations |
 | "Stores all his books, records, and communications" | Pluggable source adapters |
@@ -65,4 +65,4 @@ Karpathy uses the word "compile" literally in his tweet. That is not a loose met
 
 Bush gives us the *shape* (personal, associative, private, dense). Darwiche & Marquis give us the *mechanism* (offline compilation, tractable query language). Karpathy's pattern is the synthesis: the LLM plays the role of the compiler, markdown plays the role of the target language, and the human plays the role of the user asking queries.
 
-The architecture's core claim — that this is fundamentally different from RAG — is defensible precisely because it sits in the knowledge compilation tradition, not the retrieval-and-generate tradition. RAG has no compilation step; llmwiki's whole point is that the compilation step is load-bearing.
+The architecture's core claim — that this is fundamentally different from RAG — is defensible precisely because it sits in the knowledge compilation tradition, not the retrieval-and-generate tradition. RAG has no compilation step; alexandria's whole point is that the compilation step is load-bearing.

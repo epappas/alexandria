@@ -6,17 +6,17 @@
 
 ## Why this doc exists
 
-MemPalace is a local-first Python personal-memory system with an MCP surface. It is a **sibling**, not a competitor. We share many values — local-first, zero API mandatory, MCP-first, Zettelkasten-inspired, pluggable backend — but we make different bets on the load-bearing retrieval question. Reading mempalace in depth sharpened three ideas for llmwiki and clarified three places where we deliberately diverge. This doc records both.
+MemPalace is a local-first Python personal-memory system with an MCP surface. It is a **sibling**, not a competitor. We share many values — local-first, zero API mandatory, MCP-first, Zettelkasten-inspired, pluggable backend — but we make different bets on the load-bearing retrieval question. Reading mempalace in depth sharpened three ideas for alexandria and clarified three places where we deliberately diverge. This doc records both.
 
 ## Where we agree
 
 1. **Local-first, privacy by architecture.** Every byte stays on the user's machine unless they opt in. Encrypted credentials via OS keyring. No telemetry, no phone-home.
 2. **MCP-first integration.** The system is a knowledge/memory engine exposed through MCP tools to whatever agent the user runs — Claude Code, Codex, OpenClaw, Cursor, Claude Desktop. Both projects explicitly refuse to be chat clients themselves.
-3. **Zettelkasten lineage.** Both cite Luhmann's Zettelkasten and apply the *"small cross-referenced index cards that point to each other"* pattern, though with different metaphors — MemPalace uses the method-of-loci palace structure (wings → rooms → drawers), llmwiki uses Karpathy's three-layer (raw → compiled wiki → schema).
-4. **Organization by people/projects/topics.** MemPalace's wing-per-person-or-project, room-per-topic maps almost exactly onto llmwiki's workspace-per-project, topic-subdirectory-per-topic. Same idea, different names.
-5. **Pluggable storage backend.** MemPalace has `backends/base.py` (ChromaDB default, PostgreSQL / LanceDB / PalaceStore planned in v4). llmwiki has its SQLite+filesystem split with the same spirit of swappability for the index layer.
+3. **Zettelkasten lineage.** Both cite Luhmann's Zettelkasten and apply the *"small cross-referenced index cards that point to each other"* pattern, though with different metaphors — MemPalace uses the method-of-loci palace structure (wings → rooms → drawers), alexandria uses Karpathy's three-layer (raw → compiled wiki → schema).
+4. **Organization by people/projects/topics.** MemPalace's wing-per-person-or-project, room-per-topic maps almost exactly onto alexandria's workspace-per-project, topic-subdirectory-per-topic. Same idea, different names.
+5. **Pluggable storage backend.** MemPalace has `backends/base.py` (ChromaDB default, PostgreSQL / LanceDB / PalaceStore planned in v4). alexandria has its SQLite+filesystem split with the same spirit of swappability for the index layer.
 6. **Append-only, incremental.** Both reject destructive rebuilds. Both treat a crash as "leave existing data untouched."
-7. **Background everything.** MemPalace's hooks move filing work off the chat window entirely. llmwiki's daemon moves scheduled synthesis, source polling, and event ingestion to the background. Neither tool wants to consume user chat tokens for bookkeeping.
+7. **Background everything.** MemPalace's hooks move filing work off the chat window entirely. alexandria's daemon moves scheduled synthesis, source polling, and event ingestion to the background. Neither tool wants to consume user chat tokens for bookkeeping.
 
 ## Where we deliberately diverge
 
@@ -24,27 +24,27 @@ MemPalace is a local-first Python personal-memory system with an MCP surface. It
 
 MemPalace's foundational promise is *"Verbatim always — Never summarize, paraphrase, or lossy-compress user data."* Every word the user has said is a drawer of ~800 characters, stored and searchable exactly as it was spoken. The metric is 100% recall.
 
-llmwiki takes a different position. The **raw layer** is verbatim (immutable source material), but the **wiki layer** is explicitly synthesized — concept pages, entity pages, cross-references, distilled summaries with cited footnotes. Karpathy's own framing is *"the LLM incrementally 'compiles' a wiki"*, and the compilation step is load-bearing. Our metric is not recall — it is **compounding knowledge**: the user's understanding of a topic should deepen over time as more sources are compiled into the same page.
+alexandria takes a different position. The **raw layer** is verbatim (immutable source material), but the **wiki layer** is explicitly synthesized — concept pages, entity pages, cross-references, distilled summaries with cited footnotes. Karpathy's own framing is *"the LLM incrementally 'compiles' a wiki"*, and the compilation step is load-bearing. Our metric is not recall — it is **compounding knowledge**: the user's understanding of a topic should deepen over time as more sources are compiled into the same page.
 
 These are different products targeting different failure modes:
 
 - **MemPalace's failure mode**: "I can't remember what we said three months ago about X." The fix is verbatim storage with high-recall retrieval.
-- **llmwiki's failure mode**: "I've read 50 papers about X and I still don't have a coherent understanding of X." The fix is compilation into durable pages.
+- **alexandria's failure mode**: "I've read 50 papers about X and I still don't have a coherent understanding of X." The fix is compilation into durable pages.
 
-**Neither is wrong.** A sophisticated user could run both: mempalace capturing every conversation verbatim for "what exactly did we say?" recall, llmwiki compiling the important material into a durable wiki for "what do we understand about this?" synthesis. They would not compete for the same slot on the user's disk.
+**Neither is wrong.** A sophisticated user could run both: mempalace capturing every conversation verbatim for "what exactly did we say?" recall, alexandria compiling the important material into a durable wiki for "what do we understand about this?" synthesis. They would not compete for the same slot on the user's disk.
 
 ### 2. Retrieval model: vector search vs agentic navigation
 
 **Both targets named explicitly:**
 
 - **MemPalace targets** multi-modal, fuzzy-recall personal AI memory at conversational latencies — *"remember when we talked about that idea but in vague terms"* (MISSION.md). Their query shape is *"recall something semantically similar to this hint"* over a corpus of verbatim conversation chunks. **Vector search wins this query shape.** Embeddings are exactly the right primitive for fuzzy semantic recall over chunked text, and 96.6% R@5 on LongMemEval is the right number to publish.
-- **llmwiki targets** single-user, retroactive, exact-identifier-heavy queries over compiled wiki pages with cited provenance — *"what did I decide about the auth refactor in March, and what's the source"* (`research/reference/01_karpathy_pattern.md` + invariant #15). Our query shape is *"navigate from a known concept or identifier through cross-references to verbatim source quotes"*. **Agentic navigation wins this query shape** because the agent reads pages it chose, follows footnotes via deterministic hash anchors (`13_hostile_verifier.md`), and walks the belief supersession chain (`19_belief_revision.md`).
+- **alexandria targets** single-user, retroactive, exact-identifier-heavy queries over compiled wiki pages with cited provenance — *"what did I decide about the auth refactor in March, and what's the source"* (`research/reference/01_karpathy_pattern.md` + invariant #15). Our query shape is *"navigate from a known concept or identifier through cross-references to verbatim source quotes"*. **Agentic navigation wins this query shape** because the agent reads pages it chose, follows footnotes via deterministic hash anchors (`13_hostile_verifier.md`), and walks the belief supersession chain (`19_belief_revision.md`).
 
 These are different products at different points on the design space. Neither is wrong for its target. A user who needs both could run both side-by-side without conflict.
 
-MemPalace uses ChromaDB vector embeddings with BM25 hybrid fallback and publishes serious benchmark numbers: 96.6% R@5 raw on LongMemEval, 98.4% hybrid, ≥99% with LLM rerank. These are real numbers on a real benchmark **for the LongMemEval query shape** (fuzzy semantic recall over conversation chunks). They do not transfer to llmwiki's query shape, and neither system's target invalidates the other.
+MemPalace uses ChromaDB vector embeddings with BM25 hybrid fallback and publishes serious benchmark numbers: 96.6% R@5 raw on LongMemEval, 98.4% hybrid, ≥99% with LLM rerank. These are real numbers on a real benchmark **for the LongMemEval query shape** (fuzzy semantic recall over conversation chunks). They do not transfer to alexandria's query shape, and neither system's target invalidates the other.
 
-llmwiki's `01_vision_and_principles.md` invariant #13 explicitly rejects vector stores. We built the case in `research/reference/12_agentic_retrieval.md` and `13_agentic_retrieval_design_space.md` around Anthropic's own published guidance (*"our architecture uses a multi-step search that dynamically finds relevant information, adapts to new findings, and analyzes results"*) and the CatRAG "static graph fallacy" critique. We expose navigation primitives (`list`, `grep`, `search` via FTS5, `read`, `follow`, `events`, `timeline`, `history`) and let the agent compose them. The agent IS the retriever.
+alexandria's `01_vision_and_principles.md` invariant #13 explicitly rejects vector stores. We built the case in `research/reference/12_agentic_retrieval.md` and `13_agentic_retrieval_design_space.md` around Anthropic's own published guidance (*"our architecture uses a multi-step search that dynamically finds relevant information, adapts to new findings, and analyzes results"*) and the CatRAG "static graph fallacy" critique. We expose navigation primitives (`list`, `grep`, `search` via FTS5, `read`, `follow`, `events`, `timeline`, `history`) and let the agent compose them. The agent IS the retriever.
 
 The divergence is principled. Vector search vs agentic navigation is a **design choice**, not a correctness question:
 
@@ -57,7 +57,7 @@ We explicitly do not adopt vectors because doing so would contradict an invarian
 
 MemPalace has a first-class temporal ER knowledge graph with `subject → predicate → object [valid_from → valid_to]` triples in SQLite — like Zep's Graphiti, local and free. It supports `kg_query`, `kg_add`, `kg_invalidate`, `kg_timeline`, `kg_stats` as MCP tools.
 
-llmwiki has the same information distributed across:
+alexandria has the same information distributed across:
 
 - **`documents.superseded_by`** — supersession chain.
 - **`wiki_claim_provenance`** — each footnote in a wiki page linked to the raw source it cites.
@@ -72,7 +72,7 @@ One honest concession: the explicit `valid_from / valid_to` shape in mempalace i
 
 ### ADOPTION 1 — The L0/L1 wake-up stack with bounded token budgets
 
-MemPalace's `layers.py` formalizes what llmwiki's `guide()` tool already does informally:
+MemPalace's `layers.py` formalizes what alexandria's `guide()` tool already does informally:
 
 - **L0 (~50-100 tok)** — identity. Plain text file `~/.mempalace/identity.txt`. "Who is this AI, who does it work for, what's the project."
 - **L1 (~500-800 tok)** — essential story. Auto-generated from the top-importance drawers, grouped by room, truncated to 3200 chars / 15 drawers / 2000-row scan cap.
@@ -81,7 +81,7 @@ MemPalace's `layers.py` formalizes what llmwiki's `guide()` tool already does in
 
 Wake-up total ~600-900 tokens, leaving ~95% of the context window free for the actual work.
 
-**This is directly applicable to llmwiki.** Our `guide(workspace)` currently loads SKILL.md + overview.md + index.md + log.md tail + self-awareness block in an ad-hoc way. Formalizing it as:
+**This is directly applicable to alexandria.** Our `guide(workspace)` currently loads SKILL.md + overview.md + index.md + log.md tail + self-awareness block in an ad-hoc way. Formalizing it as:
 
 - **L0** — workspace identity: `workspaces/<slug>/identity.md` if present (or auto-generated from workspace config), plus SKILL.md core rules. Hard budget: 500 tokens.
 - **L1** — essential state: overview.md + index.md top sections + last 10 log entries + pending counts (sources, subscriptions, events). Hard budget: 1500 tokens.
@@ -107,7 +107,7 @@ MemPalace's `convo_miner.py` ingests conversation history from five formats:
 
 And exchange-pair chunking (`>` quoted user turn + AI response = one unit), with a fallback to paragraph chunking. Mega-file splitting for concatenated multi-session exports.
 
-**llmwiki has no such source today and it is the biggest gap in the knowledge-engine story.** The user spends hours in Claude Code thinking with their AI. When the session ends, that context evaporates. llmwiki's promise of retroactive query (`01_vision_and_principles.md` #15) is hollow if "the conversation where I figured out the auth architecture" is not part of the knowledge engine.
+**alexandria has no such source today and it is the biggest gap in the knowledge-engine story.** The user spends hours in Claude Code thinking with their AI. When the session ends, that context evaporates. alexandria's promise of retroactive query (`01_vision_and_principles.md` #15) is hollow if "the conversation where I figured out the auth architecture" is not part of the knowledge engine.
 
 The right implementation:
 
@@ -127,15 +127,15 @@ MemPalace's two hooks on Claude Code Stop + PreCompact events:
 
 Zero extra tokens (bash scripts, local filesystem only). The AI does the classification because it has the context; the hook just triggers the timing.
 
-**llmwiki needs the same.** The shape is:
+**alexandria needs the same.** The shape is:
 
-- **`llmwiki hooks install claude-code`** — writes the right block to `.claude/settings.local.json` with a hook script `~/.llmwiki/hooks/stop.sh` and `~/.llmwiki/hooks/precompact.sh`.
-- **Stop hook (`stop.sh`)** — counts turns; every N messages triggers `llmwiki mine conversations --workspace <default>` as a detached background process. Honors `stop_hook_active` to avoid loops. Silent by default; `LLMWIKI_VERBOSE=1` enables a blocking mode that tells the agent to synthesize before stopping.
+- **`alexandria hooks install claude-code`** — writes the right block to `.claude/settings.local.json` with a hook script `~/.alexandria/hooks/stop.sh` and `~/.alexandria/hooks/precompact.sh`.
+- **Stop hook (`stop.sh`)** — counts turns; every N messages triggers `alexandria mine conversations --workspace <default>` as a detached background process. Honors `stop_hook_active` to avoid loops. Silent by default; `ALEXANDRIA_VERBOSE=1` enables a blocking mode that tells the agent to synthesize before stopping.
 - **PreCompact hook (`precompact.sh`)** — always fires, runs the same mine in the background.
 - **Cursor / Codex / Windsurf equivalents** — each client has its own hook shape but the capture target is identical. Install subcommands write the right config for each.
-- **`llmwiki hooks uninstall`** — removes the entries cleanly.
+- **`alexandria hooks uninstall`** — removes the entries cleanly.
 
-The hook scripts themselves are tiny — under 100 lines of bash each. The code that matters is the `llmwiki mine conversations` command, which is the Adoption 2 adapter's primary entry point.
+The hook scripts themselves are tiny — under 100 lines of bash each. The code that matters is the `alexandria mine conversations` command, which is the Adoption 2 adapter's primary entry point.
 
 **The combined effect** of Adoption 2 + Adoption 3 is the closed loop the user asked for: a knowledge engine that continuously accumulates the user's own thinking-with-AI sessions without any manual curation step. Every Claude Code conversation becomes raw material. Every weekly scheduled synthesis (from `10_event_streams.md`) can then compile the recent conversations into wiki updates. The user's thinking compounds, automatically, in the background.
 
@@ -162,18 +162,18 @@ Worth doing as a small update to `04_guardian_agent.md`'s lint section. Filing a
 
 ### Per-agent diary metadata
 
-MemPalace has `wing_reviewer`, `wing_architect`, `wing_ops` — separate wings for different named agents. In llmwiki terms, this is "per-agent metadata on wiki writes" — when Claude Code writes a page, record `client=claude-code`; when Cursor writes, record `client=cursor`. Useful for `history(workspace, client="cursor")` queries or for lint rules like "Claude Code wrote 40 pages this month but Cursor wrote 0 — is Cursor actually being used?"
+MemPalace has `wing_reviewer`, `wing_architect`, `wing_ops` — separate wings for different named agents. In alexandria terms, this is "per-agent metadata on wiki writes" — when Claude Code writes a page, record `client=claude-code`; when Cursor writes, record `client=cursor`. Useful for `history(workspace, client="cursor")` queries or for lint rules like "Claude Code wrote 40 pages this month but Cursor wrote 0 — is Cursor actually being used?"
 
 Small schema addition to `wiki_log_entries`, not a new architecture concept. Filed as a minor update.
 
 ## The summary for future readers
 
-llmwiki and mempalace are two locally-hosted, MCP-first, Zettelkasten-inspired personal knowledge systems with different retrieval bets. They complement rather than compete. From mempalace we adopt three things cleanly and defer three more:
+alexandria and mempalace are two locally-hosted, MCP-first, Zettelkasten-inspired personal knowledge systems with different retrieval bets. They complement rather than compete. From mempalace we adopt three things cleanly and defer three more:
 
 **Adopted immediately:**
 1. Formalize `guide()` as an L0/L1 tiered wake-up with bounded token budgets.
 2. Add conversation-transcript ingestion as a new source adapter covering Claude Code, Cursor, Codex, ChatGPT, Slack, and markdown formats (new doc `12_conversation_capture.md`).
-3. Add Stop + PreCompact hooks for Claude Code / Cursor / Codex / Windsurf that trigger `llmwiki mine conversations` in the background.
+3. Add Stop + PreCompact hooks for Claude Code / Cursor / Codex / Windsurf that trigger `alexandria mine conversations` in the background.
 
 **Deferred / minor updates:**
 4. A `wiki_facts` side table for temporal predicate queries (open question, revisit if temporal queries feel slow).
@@ -186,4 +186,4 @@ llmwiki and mempalace are two locally-hosted, MCP-first, Zettelkasten-inspired p
 - A first-class knowledge graph with PPR-style retrieval (CatRAG critique still applies).
 - AAAK compression (their own benchmarks show a regression from verbatim).
 
-The next reader of this doc should be able to tell, from this list alone, where llmwiki is taking influence from mempalace and where the influence stops — and why.
+The next reader of this doc should be able to tell, from this list alone, where alexandria is taking influence from mempalace and where the influence stops — and why.

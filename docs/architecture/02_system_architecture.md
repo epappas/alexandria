@@ -5,7 +5,7 @@
 ## One-screen view
 
 ```
-                      ~/.llmwiki/
+                      ~/.alexandria/
                       ├── config.toml
                       ├── state.db              (SQLite)
                       ├── secrets/              (encrypted creds)
@@ -24,7 +24,7 @@
              ┌──────────────┴────────────────┐
              │                               │
    ┌─────────┴─────────┐           ┌─────────┴─────────┐
-   │  llmwiki CLI      │           │  llmwiki daemon   │   (optional)
+   │  alexandria CLI      │           │  alexandria daemon   │   (optional)
    │                   │           │                   │
    │  init, project,   │           │  - sync scheduler │
    │  source, sync,    │           │  - subscriptions  │
@@ -36,15 +36,15 @@
                            ▼
                 ┌────────────────────┐
                 │  Guardian Agent    │   (Claude via MCP,
-                │  (LLM client)      │    or CLI `llmwiki chat`)
+                │  (LLM client)      │    or CLI `alexandria chat`)
                 └────────────────────┘
 ```
 
 Three entry points, one data directory:
 
-- **`llmwiki` CLI** — the primary user surface. All operations (init, add source, sync, ingest, query, lint, export) are subcommands.
-- **`llmwiki mcp serve --workspace <slug>`** — a stdio MCP server. The *primary* integration path for agents: Claude Code, Cursor, Codex CLI, Windsurf, and Claude Desktop launch it as a subprocess and speak MCP over stdin/stdout. **No daemon required.** One process per session, per workspace. See `08_mcp_integration.md` for the full tool surface and client configs.
-- **`llmwiki daemon`** — a long-running local process. Optional. Runs scheduled syncs, polls subscriptions, serves a local web UI at `http://localhost:<port>`, and exposes MCP over HTTP+SSE (for Claude.ai web and any client that prefers network transport). Not started by default; `llmwiki daemon start` enables it.
+- **`alexandria` CLI** — the primary user surface. All operations (init, add source, sync, ingest, query, lint, export) are subcommands.
+- **`alexandria mcp serve --workspace <slug>`** — a stdio MCP server. The *primary* integration path for agents: Claude Code, Cursor, Codex CLI, Windsurf, and Claude Desktop launch it as a subprocess and speak MCP over stdin/stdout. **No daemon required.** One process per session, per workspace. See `08_mcp_integration.md` for the full tool surface and client configs.
+- **`alexandria daemon`** — a long-running local process. Optional. Runs scheduled syncs, polls subscriptions, serves a local web UI at `http://localhost:<port>`, and exposes MCP over HTTP+SSE (for Claude.ai web and any client that prefers network transport). Not started by default; `alexandria daemon start` enables it.
 
 ## Components
 
@@ -55,21 +55,21 @@ Three entry points, one data directory:
 | **Daemon** | `uvicorn` + `fastapi` + `apscheduler` | Scheduled syncs, subscription polling, web UI, MCP server |
 | **Web UI** | Server-rendered HTML (Jinja) or a small HTMX interface | Dashboard, source status, wiki viewer, subscription inbox. No write surface — agent-only. |
 | **MCP server** | `fastmcp` | Tools the agent calls: `guide`, `search`, `read`, `write`, `delete`, `sources`, `subscriptions`, `history`. Runs as stdio subprocess or HTTP via the daemon — same code, two transports. |
-| **State store** | SQLite (`~/.llmwiki/state.db`) | Source adapters, sync runs, subscription queues, search indexes, provenance, structured log |
+| **State store** | SQLite (`~/.alexandria/state.db`) | Source adapters, sync runs, subscription queues, search indexes, provenance, structured log |
 | **Object storage** | Filesystem under `raw/` | PDFs, images, originals. Large blobs live next to their metadata. |
 
 One process per entry point (CLI invocation or daemon). Both share the same SQLite file; WAL mode keeps concurrent reads + occasional writes safe.
 
 ## Why SQLite + filesystem instead of Postgres
 
-- **Personal tool.** Zero ops. No services to run. No containers to start. `pip install llmwiki && llmwiki init` and you're done.
-- **Files are the primary artifact.** The user can `git init ~/.llmwiki/workspaces/customer-x`, open it in Obsidian, back it up with Dropbox. SQLite stays consistent because it's a derivative — rebuildable from the filesystem.
+- **Personal tool.** Zero ops. No services to run. No containers to start. `pip install alexandria && alexandria init` and you're done.
+- **Files are the primary artifact.** The user can `git init ~/.alexandria/workspaces/customer-x`, open it in Obsidian, back it up with Dropbox. SQLite stays consistent because it's a derivative — rebuildable from the filesystem.
 - **Search works.** SQLite FTS5 covers keyword search up to several thousand pages per workspace. Combined with `grep` (regex) and `list` (glob) primitives, it gives the agent everything it needs to navigate without an embedding pipeline.
 - **No tenancy to enforce.** No RLS, no `user_id` columns, no scoping middleware. The only boundary is **workspace** — which is literally a directory path.
 
 ## Why a daemon is optional
 
-Everything the daemon does, the CLI can also do on demand (`llmwiki sync`, `llmwiki subscriptions poll`, `llmwiki query`). The daemon exists to enable:
+Everything the daemon does, the CLI can also do on demand (`alexandria sync`, `alexandria subscriptions poll`, `alexandria query`). The daemon exists to enable:
 - Scheduled syncs (cron every N minutes).
 - Newsletter/Twitter polling.
 - Live web UI.
@@ -79,17 +79,17 @@ Users who don't want a background process can skip it and run everything from th
 
 ## Request flow examples
 
-### `llmwiki init`
+### `alexandria init`
 ```
-llmwiki init [--path ~/.llmwiki]
+alexandria init [--path ~/.alexandria]
   ↓
-Creates ~/.llmwiki/{config.toml, state.db, secrets/, workspaces/global/}
+Creates ~/.alexandria/{config.toml, state.db, secrets/, workspaces/global/}
 Creates workspaces/global/{SKILL.md, raw/, wiki/}
 Seeds wiki/overview.md, wiki/index.md, wiki/log.md with starter content
 Runs SQLite migrations
 ```
 
-### `llmwiki project create customer-acme`
+### `alexandria project create customer-acme`
 ```
 Creates workspaces/customer-acme/{SKILL.md, raw/, wiki/}
 Inserts workspaces row in SQLite
@@ -97,14 +97,14 @@ Prompts user for description
 Seeds structural files
 ```
 
-### `llmwiki source add --workspace customer-acme --type notion`
+### `alexandria source add --workspace customer-acme --type notion`
 ```
 Prompts for Notion integration token, database IDs
 Stores encrypted config in secrets/ and source_adapters row in SQLite
-Does NOT sync yet — prints next step: `llmwiki sync customer-acme`
+Does NOT sync yet — prints next step: `alexandria sync customer-acme`
 ```
 
-### `llmwiki sync customer-acme`
+### `alexandria sync customer-acme`
 ```
 Finds all source_adapters for the workspace
 Runs each adapter's list → fetch cycle
@@ -115,7 +115,7 @@ Prints summary: "Notion: 12 new, 3 updated. GitHub: 2 new."
 ```
 
 ### User asks the agent to ingest
-The agent is running in Claude.ai (or `llmwiki chat`) and connected to the MCP endpoint (`llmwiki daemon start` made it available). User says "ingest the new Notion pages."
+The agent is running in Claude.ai (or `alexandria chat`) and connected to the MCP endpoint (`alexandria daemon start` made it available). User says "ingest the new Notion pages."
 ```
 Agent → guide(workspace="customer-acme") — reads current state
 Agent → search(path="/raw/notion/*") — finds pending items
@@ -131,14 +131,14 @@ Every call lands on the local daemon, which writes directly to the workspace fil
 There is no deployment. It's a local Python package:
 
 ```
-pip install llmwiki           # or: pipx install llmwiki
-llmwiki init                  # creates ~/.llmwiki/
-llmwiki project create ...    # optional
-llmwiki source add ...
-llmwiki daemon start          # optional: web UI + MCP + scheduler
+pip install alexandria           # or: pipx install alexandria
+alexandria init                  # creates ~/.alexandria/
+alexandria project create ...    # optional
+alexandria source add ...
+alexandria daemon start          # optional: web UI + MCP + scheduler
 ```
 
-For power users: `llmwiki export --workspace X --format obsidian-zip` produces a portable artifact.
+For power users: `alexandria export --workspace X --format obsidian-zip` produces a portable artifact.
 
 ## Language and stack choices
 
@@ -164,7 +164,7 @@ Long-running sync jobs are moved off the main loop into a worker thread pool whe
 
 - No account system.
 - No cloud backend.
-- No shared wikis across machines (unless the user syncs `~/.llmwiki/` with Syncthing or git themselves — explicitly supported but not managed by us).
+- No shared wikis across machines (unless the user syncs `~/.alexandria/` with Syncthing or git themselves — explicitly supported but not managed by us).
 - No cross-workspace queries at MVP.
 - No server-side agent runs scheduled by us. (The daemon *can* schedule background lint, but it still talks to a local LLM — no remote compute.)
 

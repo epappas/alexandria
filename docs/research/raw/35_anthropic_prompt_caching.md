@@ -81,9 +81,9 @@ response.usage.input_tokens                  # Tokens AFTER last breakpoint
 
 Total input cost = `cache_read * 0.1×` + `cache_creation * 1.25×` + `input_tokens * 1.0×`.
 
-## Implication for llmwiki
+## Implication for alexandria
 
-The llmwiki guardian calls Claude in a shape that is ideal for this mechanism:
+The alexandria guardian calls Claude in a shape that is ideal for this mechanism:
 
 1. **`tools`** — the nine MCP tool definitions. Stable across every call in a session. **Cache at the end of the `tools` array.**
 2. **`system`** — the SKILL.md content, the workspace's schema, the static orientation block. Stable across every call for the same workspace. **Cache at the end of the `system` array.**

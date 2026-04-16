@@ -26,12 +26,12 @@ Events live in SQLite because the filesystem is the wrong shape for thousands of
 
 `01_vision_and_principles.md` states "Files first, DB second — SQLite is a materialized view over the filesystem." That invariant holds for the **document layer** (raw/ + wiki/). It does **not** hold for the **event layer**:
 
-- **Document layer** — `raw/` and `wiki/` under the workspace. Filesystem-first. `llmwiki reindex` rebuilds SQLite from the files. This is where Karpathy's pattern applies.
+- **Document layer** — `raw/` and `wiki/` under the workspace. Filesystem-first. `alexandria reindex` rebuilds SQLite from the files. This is where Karpathy's pattern applies.
 - **Event layer** — `events` table family in SQLite plus derived digest files under `raw/timeline/`. **Database-first.** Events are born from API calls, not from files on disk. Re-hydration is via API replay (re-fetching from the source with a time window), not filesystem reindex.
 
 Both domains live under the same workspace. The agent reads them through different MCP tools (`read` / `search` / `grep` for documents, `events` / `timeline` for event-layer queries). The wiki layer cross-references both.
 
-**Updated invariant 11 (from `01_vision_and_principles.md`):** *"Files first for documents, APIs-of-record for events. The document layer is reconstructible from `~/.llmwiki/`. The event layer is reconstructible from its source platforms (with retention caveats noted per adapter)."*
+**Updated invariant 11 (from `01_vision_and_principles.md`):** *"Files first for documents, APIs-of-record for events. The document layer is reconstructible from `~/.alexandria/`. The event layer is reconstructible from its source platforms (with retention caveats noted per adapter)."*
 
 ## The events table family
 
@@ -91,7 +91,7 @@ Each platform has a real-world constraint profile. The architecture must acknowl
 
 Adapter strategy:
 
-1. **Initial clone:** `git clone <url> ~/.llmwiki/workspaces/<slug>/raw/git/<repo>/` on setup. Depth is configurable (`full`, `--shallow-since=<date>`, `--depth=N`).
+1. **Initial clone:** `git clone <url> ~/.alexandria/workspaces/<slug>/raw/git/<repo>/` on setup. Depth is configurable (`full`, `--shallow-since=<date>`, `--depth=N`).
 2. **Incremental fetch:** `git fetch --all --prune` on every poll (default 5 minutes). Compare new tip against stored `last_fetched_sha` to identify new commits in each branch.
 3. **Event extraction:** for each new commit, run `git log --format='%H%n%an%n%ae%n%aI%n%s%n%b%n---' <range>` and parse into `events` rows. Extract `refs` from the commit message (PR numbers, issue numbers, co-authors, trailers, Signed-off-by lines).
 4. **Materialization:** commits land in the `events` table with `source='git-local'`, `event_type='commit'`, `external_id=<sha>`, `payload` containing the parsed commit plus file stats. The actual diff is NOT stored — the agent reads it live via `git_show` against the clone when needed. Zero duplication of content that git already stores efficiently.
@@ -195,7 +195,7 @@ IMAP from `09_subscriptions_and_feeds.md` still handles the *newsletter* case (p
 | Paid plans (Pro, Business+, Enterprise+) remove the limit | same |
 | API access follows the UI limit | same |
 
-**The honest reality:** on a free Slack workspace, llmwiki can only ingest what it captures during its run. Retroactive ingest of a multi-year free workspace is **impossible** — the content is gone from Slack's servers.
+**The honest reality:** on a free Slack workspace, alexandria can only ingest what it captures during its run. Retroactive ingest of a multi-year free workspace is **impossible** — the content is gone from Slack's servers.
 
 Adapter strategy:
 - **Install early.** Day-1 install on the free tier captures everything from then on. Aggressive initial backfill over the available 90-day window.
@@ -203,7 +203,7 @@ Adapter strategy:
 - **Scope:** specific channels + DMs + threads the user cares about. Never "everything in the workspace" — that's noise.
 - **Filtering:** by channel, by user mentions, by keyword, by thread participation. Configured per adapter.
 
-Auth: Slack app with `channels:history`, `groups:history`, `im:history`, `mpim:history` user token scopes. User installs the app to their workspace (admin approval may be required on locked-down Enterprise accounts). App is registered in Slack's developer portal either by us (pre-registered) or by the user themselves (`llmwiki auth register slack --client-id ... --client-secret ...`).
+Auth: Slack app with `channels:history`, `groups:history`, `im:history`, `mpim:history` user token scopes. User installs the app to their workspace (admin approval may be required on locked-down Enterprise accounts). App is registered in Slack's developer portal either by us (pre-registered) or by the user themselves (`alexandria auth register slack --client-id ... --client-secret ...`).
 
 Event types: `message_posted`, `message_edited`, `message_deleted`, `thread_replied`, `reaction_added`. `refs` extracts GitHub/Linear/Jira IDs, meeting links, file references.
 
@@ -216,7 +216,7 @@ I was unable to retrieve Discord's selfbot policy page directly in this sandbox 
 **Adapter strategy:**
 - User creates a Discord application in the Developer Portal, generates a bot token.
 - User invites the bot to each server they want to monitor, with `View Channels` and `Read Message History` permissions.
-- llmwiki's Discord adapter uses the bot token to poll channels or subscribe to the Gateway (websocket) for real-time events.
+- alexandria's Discord adapter uses the bot token to poll channels or subscribe to the Gateway (websocket) for real-time events.
 - DMs are **not accessible to bots** — bots can only be DM'd, not read DMs between other users. This is a hard limitation. For DMs, the user needs a different capture method (manual save) or must be the bot's recipient.
 
 Event types: `message_posted`, `message_edited`, `thread_created`, `reaction_added`, `voice_joined`, `member_joined`. Same `refs` extraction as Slack.
@@ -243,13 +243,13 @@ All have webhook or API-polling interfaces. Each adds an event-stream adapter mi
 
 Every event-stream adapter uses OAuth 2.0 (with one exception — GitHub PAT is a pragmatic shortcut). The pattern:
 
-1. User runs `llmwiki auth register <provider>` and provides their own OAuth client ID + secret (from Google Cloud Console, Slack app dashboard, Discord Developer Portal, etc.). Client credentials are **the user's**, not shipped with llmwiki.
-2. User runs `llmwiki auth login <provider> --workspace <slug>`. llmwiki opens a browser to the provider's authorize URL with `redirect_uri=http://localhost:<port>/oauth/callback` and a locally-generated PKCE code. A local listener accepts the callback.
-3. Access token + refresh token land in `~/.llmwiki/secrets/<adapter-id>.enc`, encrypted with the OS-keyring-derived master key.
-4. The daemon refreshes tokens automatically. Revocation is a single `llmwiki auth revoke <provider> --workspace <slug>`.
+1. User runs `alexandria auth register <provider>` and provides their own OAuth client ID + secret (from Google Cloud Console, Slack app dashboard, Discord Developer Portal, etc.). Client credentials are **the user's**, not shipped with alexandria.
+2. User runs `alexandria auth login <provider> --workspace <slug>`. alexandria opens a browser to the provider's authorize URL with `redirect_uri=http://localhost:<port>/oauth/callback` and a locally-generated PKCE code. A local listener accepts the callback.
+3. Access token + refresh token land in `~/.alexandria/secrets/<adapter-id>.enc`, encrypted with the OS-keyring-derived master key.
+4. The daemon refreshes tokens automatically. Revocation is a single `alexandria auth revoke <provider> --workspace <slug>`.
 
 We do **not** ship pre-registered client credentials for these providers. Rationale:
-- Keeps llmwiki truly local-first. No dependency on Anthropic or the author hosting anything.
+- Keeps alexandria truly local-first. No dependency on Anthropic or the author hosting anything.
 - Prevents credential-sharing scenarios where our client secret leaks.
 - Matches the established pattern for developer tools that talk to OAuth providers (e.g., `gh auth login` uses GitHub's device flow with GitHub's own published client ID, but anything more private requires user-provided credentials).
 
@@ -269,7 +269,7 @@ The daemon runs one scheduler job per active event-stream adapter. Defaults:
 | `teams` | 5 minutes (Graph delta queries) | yes |
 | `drive` / `dropbox` / `s3` | 10 minutes | yes |
 
-Without the daemon, polling runs from the CLI via `llmwiki sync --workspace <slug>`. Webhooks require the daemon's HTTP listener; without a daemon, polling is the only option and the user accepts the latency.
+Without the daemon, polling runs from the CLI via `alexandria sync --workspace <slug>`. Webhooks require the daemon's HTTP listener; without a daemon, polling is the only option and the user accepts the latency.
 
 ## The new agent tools
 
@@ -309,10 +309,10 @@ Bounded token budget: 50000 output tokens.
 The scheduled ingest writes **only** into `wiki/timeline/<period>.md` and sections of existing entity pages explicitly marked "Recent activity" — it cannot silently rewrite concept pages. Guardrails:
 
 1. **Write path ACL:** scheduled ingest is allowed to write `wiki/timeline/**` and append to `wiki/log.md`. Other writes require a dedicated `str_replace` call against an explicitly marked section (`<!-- AUTO:recent-activity -->...<!-- /AUTO -->`).
-2. **Token budget:** hard cap per run, enforced by the provider wrapper, recorded in `~/.llmwiki/logs/llm-usage.jsonl`. Configured per operation in `[llm.budgets]` — see `11_inference_endpoint.md`. Exceeded → the run errors and surfaces in status.
-3. **Dry-run preview:** `llmwiki synthesize --workspace X --dry-run` prints the estimated cost before committing to the run. See `11_inference_endpoint.md` for the preview shape.
-4. **Opt-in per workspace:** scheduled synthesis is **disabled by default**. Users enable explicitly with `llmwiki synthesize enable --workspace X`, which prompts for the cost preset and budget caps.
-5. **Human review:** the timeline page is a draft until the user runs `llmwiki timeline confirm <period>` or edits it. Until then it carries a `draft: true` frontmatter flag and is excluded from the wiki's main cross-references.
+2. **Token budget:** hard cap per run, enforced by the provider wrapper, recorded in `~/.alexandria/logs/llm-usage.jsonl`. Configured per operation in `[llm.budgets]` — see `11_inference_endpoint.md`. Exceeded → the run errors and surfaces in status.
+3. **Dry-run preview:** `alexandria synthesize --workspace X --dry-run` prints the estimated cost before committing to the run. See `11_inference_endpoint.md` for the preview shape.
+4. **Opt-in per workspace:** scheduled synthesis is **disabled by default**. Users enable explicitly with `alexandria synthesize enable --workspace X`, which prompts for the cost preset and budget caps.
+5. **Human review:** the timeline page is a draft until the user runs `alexandria timeline confirm <period>` or edits it. Until then it carries a `draft: true` frontmatter flag and is excluded from the wiki's main cross-references.
 
 This is the first automation that runs the agent without a human in the loop. The guardrails — bounded budgets, dry-run preview, opt-in activation, draft-until-confirmed, write-path ACL — are exactly what the user needs to trust it. The inference endpoint, provider selection, and prompt caching that make it affordable are defined in `11_inference_endpoint.md`.
 
@@ -358,13 +358,13 @@ This is the CatRAG lesson from `research/reference/13_agentic_retrieval_design_s
 Event streams touch the most private data a personal tool can handle — emails, chat messages, private meeting invites, private repos. Two hard rules:
 
 1. **Never leaves the machine.** All event data is stored locally in SQLite. The only outbound network calls are to the configured source APIs for polling. No telemetry, no cloud backup unless the user explicitly configures an S3 destination for their own backups.
-2. **Never returned through MCP as raw credentials.** The `events` and `sources` tools return event metadata and content, but never OAuth tokens, never API keys, never anything from `~/.llmwiki/secrets/`. A prompt-injected agent cannot exfiltrate credentials through the tool surface because the tools never expose them in the first place.
+2. **Never returned through MCP as raw credentials.** The `events` and `sources` tools return event metadata and content, but never OAuth tokens, never API keys, never anything from `~/.alexandria/secrets/`. A prompt-injected agent cannot exfiltrate credentials through the tool surface because the tools never expose them in the first place.
 
 Scoping:
 
 - Per-channel / per-repo / per-calendar inclusion lists in each adapter's config. Default is **nothing enabled** — the user explicitly opts in to each source.
 - Per-adapter allowlists for keywords or authors (e.g., "only Slack messages from #eng-architecture" or "only Gmail threads with acme.com addresses").
-- The user can `llmwiki events purge --source slack --before 2025-01-01` to delete local history at any time.
+- The user can `alexandria events purge --source slack --before 2025-01-01` to delete local history at any time.
 
 Credential storage, OS-keyring derivation, and encrypted-at-rest config are defined in `05_source_integrations.md` and `06_data_model.md` — the same mechanism as for SOURCE and SUBSCRIPTION adapters.
 
@@ -423,7 +423,7 @@ Pending scheduled synthesis: week 15 digest ready to run
 1. **Meeting transcripts.** Calendar events give us metadata; transcripts need an additional source (Google Meet transcripts via Drive, Otter.ai export, manual upload). We defer the transcript integration — capture the meeting metadata now, add transcript sources as a SOURCE adapter when the user wires it up.
 2. **Real-time ingestion for chat.** The Slack / Discord Gateway websocket gives near-real-time message delivery, but holding a websocket open 24/7 changes the daemon's shape from "scheduled polls" to "persistent connections." We default to polling at 1-minute intervals and leave websocket mode as an opt-in for users who want latency below a minute.
 3. **Summarisation-at-ingest vs summarisation-on-demand.** Chat channels can produce thousands of messages per day. Do we summarise into a digest as the events come in, or do we store raw and defer synthesis until the scheduled weekly ingest? **MVP: raw storage + weekly synthesis.** Scheduled per-day summarization is a v2 hook for high-volume channels.
-4. **Retroactive backfill of deleted content.** Slack free-tier deletes at 1 year. Discord doesn't delete but requires bot presence at the time messages were sent. These are fundamental platform limits; llmwiki surfaces them in adapter status and does not pretend to work around them.
+4. **Retroactive backfill of deleted content.** Slack free-tier deletes at 1 year. Discord doesn't delete but requires bot presence at the time messages were sent. These are fundamental platform limits; alexandria surfaces them in adapter status and does not pretend to work around them.
 5. **Meeting-is-a-cluster.** A "meeting" is not one event — it's a calendar invite + an email thread + a Google Doc agenda + Slack discussion during it + possibly a transcript after. Currently the user ties these together via `refs` correlation and queries. Whether to introduce a first-class `meetings` virtual view that materialises these clusters is a post-MVP question.
 
 ## Summary

@@ -12,7 +12,7 @@ Four design constraints from ai-engineer R4:
 
 1. **Freeze new capabilities until M1 and M2 are running.** Evaluation is not a v2 feature.
 2. **Reuse existing machinery.** The verifier agent from `13_hostile_verifier.md` is the measurement engine for M1, M2, and M5. No new agent runtime.
-3. **Run as a fourth sibling to ingest/query/lint.** A new operation with the same tool-surface discipline — `eval` in the MCP layer, `llmwiki eval` on the CLI.
+3. **Run as a fourth sibling to ingest/query/lint.** A new operation with the same tool-surface discipline — `eval` in the MCP layer, `alexandria eval` on the CLI.
 4. **Local-only.** No cloud benchmark service. All measurements happen on the user's machine against their own workspace.
 
 ## The five metrics
@@ -35,8 +35,8 @@ From ai-engineer §4, adopted verbatim with concrete thresholds.
 | Value | Meaning | Action |
 |---|---|---|
 | `M1 ≥ 0.95` | Healthy | No action. |
-| `0.85 ≤ M1 < 0.95` | Degraded | Surface in `llmwiki status`, log a warning. Scheduled synthesis continues. |
-| `M1 < 0.85` | Broken | Block scheduled synthesis. Require manual `llmwiki eval ack M1` to unblock. |
+| `0.85 ≤ M1 < 0.95` | Degraded | Surface in `alexandria status`, log a warning. Scheduled synthesis continues. |
+| `M1 < 0.85` | Broken | Block scheduled synthesis. Require manual `alexandria eval ack M1` to unblock. |
 
 **Why 50.** Sampling enough claims to produce a stable percentage on a weekly cadence without blowing the verifier budget. At 50 claims × verifier cost-per-claim, M1 runs in roughly 10-20 kTok of inference weekly per workspace.
 
@@ -57,7 +57,7 @@ From ai-engineer §4, adopted verbatim with concrete thresholds.
 |---|---|---|
 | `M2 ≥ 0.90` | Healthy | No action. |
 | `0.70 ≤ M2 < 0.90` | Degraded | Surface in status. Schedule a `lint --cascade-backfill` run. |
-| `M2 < 0.70` | Broken | Block new ingests (not just synthesis — ingests too). `llmwiki ingest` errors with a pointer to `llmwiki eval report M2`. |
+| `M2 < 0.70` | Broken | Block new ingests (not just synthesis — ingests too). `alexandria ingest` errors with a pointer to `alexandria eval report M2`. |
 
 M2 is deterministic — no LLM is needed to compute it, just grep and set membership. This makes it the cheapest metric and the one that runs on **every ingest**, not just weekly.
 
@@ -67,7 +67,7 @@ M2 is deterministic — no LLM is needed to compute it, just grep and set member
 
 **How it is measured:**
 
-1. Users seed a **gold standard** of 30 retroactive queries per workspace via `llmwiki eval gold add`. Each gold entry is `{query, expected_answer_topics, expected_citations, authored_at}`.
+1. Users seed a **gold standard** of 30 retroactive queries per workspace via `alexandria eval gold add`. Each gold entry is `{query, expected_answer_topics, expected_citations, authored_at}`.
 2. Monthly, the eval scaffold runs each gold query through the query workflow from `04_guardian_agent.md` — same tool surface, same agent loop, same model preset.
 3. For each run, measure:
    - **Tool-call count** (how many primitives the agent needed).
@@ -98,7 +98,7 @@ M3 is the most expensive metric — it runs a full query workflow 30 times. Runs
    - `hypothetical_on_the_fly_tokens` — an estimate of what a query-only system would spend: average tokens per query × number of queries × raw-corpus token count.
 3. Metric: `M4_crossover_week` = the week at which `ingest_cumulative_tokens < hypothetical_on_the_fly_tokens`.
 
-M4 is not a pass/fail metric. It is a **published number** per workspace in `llmwiki eval report`. Users with a negative crossover (ingest cost never pays off) know to reduce cascade scope or move to query-only mode.
+M4 is not a pass/fail metric. It is a **published number** per workspace in `alexandria eval report`. Users with a negative crossover (ingest cost never pays off) know to reduce cascade scope or move to query-only mode.
 
 This directly answers the cost model question from ai-engineer §3.8 and R6.
 
@@ -119,8 +119,8 @@ This directly answers the cost model question from ai-engineer §3.8 and R6.
 | Value | Meaning | Action |
 |---|---|---|
 | `M5 ≥ 0.95` | Healthy | No action. |
-| `0.85 ≤ M5 < 0.95` | Mild drift | Surface top contradictions in `llmwiki status`. |
-| `M5 < 0.85` | Significant drift | Block new ingests. Suggest `llmwiki lint --resolve-contradictions`. |
+| `0.85 ≤ M5 < 0.95` | Mild drift | Surface top contradictions in `alexandria status`. |
+| `M5 < 0.85` | Significant drift | Block new ingests. Suggest `alexandria lint --resolve-contradictions`. |
 
 M5 catches the "wiki becomes a graveyard" failure mode — it rises when cascade is missing contradictions. Combined with M2 (cascade coverage), M5 is the **early warning** for knowledge decay.
 
@@ -131,7 +131,7 @@ Alongside `ingest`, `query`, and `lint`, there is now a fourth operation. Same w
 - **Runs as a staged run** with `run_type = 'eval'` in the runs table. Eval runs do not write to `wiki/`; they only append to `wiki/log.md` (a structural exception already allowed by `13_hostile_verifier.md`) and to the eval tables in SQLite.
 - **Budget-bounded** via `[llm.budgets.eval]` in `11_inference_endpoint.md`.
 - **Uses the same verifier runtime** as the hostile verifier — no separate agent architecture. DRY.
-- **Runs on the daemon's scheduler** weekly by default (monthly for M3), or manually via `llmwiki eval run`.
+- **Runs on the daemon's scheduler** weekly by default (monthly for M3), or manually via `alexandria eval run`.
 
 ### Storage
 
@@ -164,18 +164,18 @@ CREATE TABLE eval_gold_queries (
 );
 ```
 
-The gold query table is per-workspace and user-maintained. `llmwiki eval gold add` prompts the user to author a query + expected result. `llmwiki eval gold import <file>` imports from a YAML.
+The gold query table is per-workspace and user-maintained. `alexandria eval gold add` prompts the user to author a query + expected result. `alexandria eval gold import <file>` imports from a YAML.
 
 ### CLI
 
 ```
-llmwiki eval run [--metric M1|M2|M3|M4|M5|all] [--workspace X]
-llmwiki eval report [--since 30d] [--workspace X]
-llmwiki eval gold add [--query ... --topics ... --citations ...]
-llmwiki eval gold list [--workspace X]
-llmwiki eval gold import <file>
-llmwiki eval ack <metric> [--reason "..."]    # acknowledge a broken metric to unblock
-llmwiki eval floor --preset <preset>          # capability floor test (see below)
+alexandria eval run [--metric M1|M2|M3|M4|M5|all] [--workspace X]
+alexandria eval report [--since 30d] [--workspace X]
+alexandria eval gold add [--query ... --topics ... --citations ...]
+alexandria eval gold list [--workspace X]
+alexandria eval gold import <file>
+alexandria eval ack <metric> [--reason "..."]    # acknowledge a broken metric to unblock
+alexandria eval floor --preset <preset>          # capability floor test (see below)
 ```
 
 ### MCP tool
@@ -190,11 +190,11 @@ The agent can ask *"what is the current health of workspace X's wiki?"* and get 
 
 ## Capability floor (ai-engineer R8)
 
-**Question:** what is the weakest LLM that can still run llmwiki's ingest workflow without silent failure?
+**Question:** what is the weakest LLM that can still run alexandria's ingest workflow without silent failure?
 
 **How it is measured:**
 
-1. `llmwiki eval floor --preset <preset>` runs the following sealed test:
+1. `alexandria eval floor --preset <preset>` runs the following sealed test:
    - 10 curated source documents (shipped in `tests/fixtures/floor/`)
    - 1 synthetic workspace
    - Full ingest workflow using the named preset
@@ -204,9 +204,9 @@ The agent can ask *"what is the current health of workspace X's wiki?"* and get 
    - `M2 score`
    - `tool_call_count` (how many MCP tool calls the agent made per ingest — weaker models tend to use more)
    - `verdict`: `supported` (M1 ≥ 0.95, M2 ≥ 0.90), `degraded` (M1 ≥ 0.85, M2 ≥ 0.80), `unsupported`
-3. Writes the result to `~/.llmwiki/state/floor-<preset>.json`.
+3. Writes the result to `~/.alexandria/state/floor-<preset>.json`.
 
-**Startup warning:** when the daemon starts with a preset whose floor score is `degraded` or `unsupported`, or whose floor test has not been run, it logs a warning and writes to `llmwiki status`. The daemon still starts — no blocking — but the user knows their configured model is at or below the floor.
+**Startup warning:** when the daemon starts with a preset whose floor score is `degraded` or `unsupported`, or whose floor test has not been run, it logs a warning and writes to `alexandria status`. The daemon still starts — no blocking — but the user knows their configured model is at or below the floor.
 
 This closes ai-engineer R8 and §3.7 (the caller-model dependency). The floor is measurable, per-preset, and the user can make an informed choice.
 
@@ -218,9 +218,9 @@ Per ai-engineer R4: *"Freeze new ingest sources until M1 and M2 are wired up and
 
 1. **M1 and M2 must be running and writing to `eval_runs` before any new source adapter is added** beyond the ones documented in `05_source_integrations.md`, `09_subscriptions_and_feeds.md`, `10_event_streams.md`, and `12_conversation_capture.md`.
 2. **M1 and M2 scores must be healthy on the shipped adapters before scheduled automatic synthesis is enabled** for any workspace. The hostile verifier from `13_hostile_verifier.md` runs per-ingest; the M1/M2 signal tells us whether the verifier is doing its job.
-3. **A broken M1 or M2 blocks scheduled synthesis** via the status field thresholds above. Users can manually `llmwiki eval ack` to unblock if they understand the risk.
+3. **A broken M1 or M2 blocks scheduled synthesis** via the status field thresholds above. Users can manually `alexandria eval ack` to unblock if they understand the risk.
 4. **M3 runs monthly** and its gold standard grows with the workspace. New gold queries are encouraged but not mandated.
-5. **M4 is informational** — it never blocks, but its output is published in `llmwiki status` so users can see the cost curve.
+5. **M4 is informational** — it never blocks, but its output is published in `alexandria status` so users can see the cost curve.
 6. **M5 is a warning signal** — degraded surfaces, broken blocks ingests to prevent contradiction compounding.
 
 ## SOLID application
@@ -235,7 +235,7 @@ Per ai-engineer R4: *"Freeze new ingest sources until M1 and M2 are wired up and
 
 - **One verifier runtime** serves the hostile verifier (`13_hostile_verifier.md`), M1, and M5. The verifier is an agent loop; the difference between "verify this write" and "evaluate this claim" is a prompt, not a codebase.
 - **One runs table** tracks verifier runs, eval runs, and synthesis runs. Different `run_type`, same state machine.
-- **One log stream** (`~/.llmwiki/logs/llm-usage-YYYY-MM-DD.jsonl`) captures all LLM calls regardless of who made them. M4 rolls it up; no new instrumentation.
+- **One log stream** (`~/.alexandria/logs/llm-usage-YYYY-MM-DD.jsonl`) captures all LLM calls regardless of who made them. M4 rolls it up; no new instrumentation.
 
 ## KISS notes
 
@@ -246,7 +246,7 @@ Per ai-engineer R4: *"Freeze new ingest sources until M1 and M2 are wired up and
 ## Worked example — week 12 of a research workspace
 
 ```
-$ llmwiki eval report --workspace research --since 30d
+$ alexandria eval report --workspace research --since 30d
 
 Workspace: research
 Eval runs in the last 30 days:
@@ -268,12 +268,12 @@ Trend (last 4 weeks):
 When a metric breaks:
 
 ```
-$ llmwiki eval report --workspace research
+$ alexandria eval report --workspace research
 
 M1 citation fidelity  0.81 (BROKEN)  last run 2026-04-15
   → scheduled synthesis is BLOCKED
-  → run `llmwiki eval report M1 --details` to see failing claims
-  → override with `llmwiki eval ack M1 --reason "..."` if you know why
+  → run `alexandria eval report M1 --details` to see failing claims
+  → override with `alexandria eval ack M1 --reason "..."` if you know why
 ```
 
 The user has a clear signal, a clear action, and a clear path to unblock.
@@ -283,10 +283,10 @@ The user has a clear signal, a clear action, and a clear path to unblock.
 - The **verifier runtime itself** — defined in `13_hostile_verifier.md`. Metrics consume it.
 - The **runs state machine** — also `13_hostile_verifier.md`. Eval runs are just `run_type = 'eval'`.
 - The **cost model** that M4 measures — the budgeting, accounting, and telemetry are in `11_inference_endpoint.md`.
-- The **dashboards and `llmwiki status` formatting** — that lives in `17_observability.md`. This doc writes the rows; observability shows them.
+- The **dashboards and `alexandria status` formatting** — that lives in `17_observability.md`. This doc writes the rows; observability shows them.
 
 ## Summary
 
 Five metrics. One operation (`eval`). Shared verifier runtime. Freeze clause adopted. Capability floor is measurable. Retroactive-query invariant is testable via M3. Every concern the ai-engineer raised in §4 has a number it reports and a threshold it enforces.
 
-This is the measurement surface. The next time someone asks *"is llmwiki working?"*, the answer is `llmwiki eval report`.
+This is the measurement surface. The next time someone asks *"is alexandria working?"*, the answer is `alexandria eval report`.

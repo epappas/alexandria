@@ -2,32 +2,32 @@
 
 > **Cites:** `research/raw/35_anthropic_prompt_caching.md`, `research/reference/12_agentic_retrieval.md`, `architecture/10_event_streams.md`, `architecture/07_open_questions.md` A.
 
-## llmwiki is a knowledge engine, not a chat client
+## alexandria is a knowledge engine, not a chat client
 
-**llmwiki does not host conversations.** Long interactive sessions happen in **connected MCP agents** — Claude Code, Cursor, Claude.ai, Codex, Windsurf, Claude Desktop, Zed, Continue. Those clients run the LLM, manage context, stream responses, handle user input. llmwiki exposes tools to them over MCP (see `08_mcp_integration.md`) and otherwise stays out of the way. In this primary mode, **llmwiki has no inference endpoint at all** — zero LLM config, zero provider setup, zero API keys required from llmwiki's side.
+**alexandria does not host conversations.** Long interactive sessions happen in **connected MCP agents** — Claude Code, Cursor, Claude.ai, Codex, Windsurf, Claude Desktop, Zed, Continue. Those clients run the LLM, manage context, stream responses, handle user input. alexandria exposes tools to them over MCP (see `08_mcp_integration.md`) and otherwise stays out of the way. In this primary mode, **alexandria has no inference endpoint at all** — zero LLM config, zero provider setup, zero API keys required from alexandria's side.
 
-This is the load-bearing design choice: llmwiki is a **knowledge engine**. It stores, indexes, retrieves, compiles, and maintains knowledge. It exposes that knowledge through a precise tool surface that any MCP-capable agent can use. The agent provides the reasoning loop; llmwiki provides the ground truth and the primitives to navigate it.
+This is the load-bearing design choice: alexandria is a **knowledge engine**. It stores, indexes, retrieves, compiles, and maintains knowledge. It exposes that knowledge through a precise tool surface that any MCP-capable agent can use. The agent provides the reasoning loop; alexandria provides the ground truth and the primitives to navigate it.
 
-## The one case where llmwiki owns the loop
+## The one case where alexandria owns the loop
 
-There is exactly one mode where llmwiki itself needs to drive an agent loop: **unattended background work**. The daemon runs operations when no client is connected, and those operations need to call an LLM directly:
+There is exactly one mode where alexandria itself needs to drive an agent loop: **unattended background work**. The daemon runs operations when no client is connected, and those operations need to call an LLM directly:
 
 - **Scheduled temporal synthesis** — weekly digest of event streams into `wiki/timeline/<period>.md` (`10_event_streams.md`). No user in the loop at 6am Sunday when the cron fires.
 - **Scheduled lint** — periodic health checks, broken-link auto-fixes, stale-citation detection.
-- **One-shot batch CLI operations** — `llmwiki synthesize --workspace X` run from the command line to trigger a synthesis outside the cron schedule, or `llmwiki lint --run --workspace X`. The user invokes the command but does not hold an open chat session; llmwiki runs the loop to completion and writes the results.
+- **One-shot batch CLI operations** — `alexandria synthesize --workspace X` run from the command line to trigger a synthesis outside the cron schedule, or `alexandria lint --run --workspace X`. The user invokes the command but does not hold an open chat session; alexandria runs the loop to completion and writes the results.
 
-In each case llmwiki runs a bounded, budgeted, opt-in agent loop against a configured inference endpoint, writes the output to the workspace, logs the cost, and exits. It is not interactive. There is no REPL. There is no streaming output to a terminal user.
+In each case alexandria runs a bounded, budgeted, opt-in agent loop against a configured inference endpoint, writes the output to the workspace, logs the cost, and exits. It is not interactive. There is no REPL. There is no streaming output to a terminal user.
 
-This is the **only** reason llmwiki needs a provider configuration. Every other path — every user question, every user-initiated ingest, every wiki edit happening in a chat — goes through the client's own inference via MCP.
+This is the **only** reason alexandria needs a provider configuration. Every other path — every user question, every user-initiated ingest, every wiki edit happening in a chat — goes through the client's own inference via MCP.
 
 ## Two inference modes
 
-| Mode | LLM runs in | llmwiki config needed | When |
+| Mode | LLM runs in | alexandria config needed | When |
 |---|---|---|---|
 | **Client MCP** (default) | Client (Claude Code / Claude.ai / Cursor / Codex / Windsurf / Claude Desktop) | None | All interactive work. The overwhelming majority of use. |
-| **Daemon-owned** (scheduled synthesis, scheduled lint, CLI batch ops) | llmwiki (via provider SDK) | Yes — provider, model, API key, budget caps | Unattended background / batch operations only. |
+| **Daemon-owned** (scheduled synthesis, scheduled lint, CLI batch ops) | alexandria (via provider SDK) | Yes — provider, model, API key, budget caps | Unattended background / batch operations only. |
 
-The Client MCP mode is a stateless relationship: llmwiki does not care which model or provider the client is using, does not see the client's API keys, does not count tokens on behalf of the client. The client pays for its own inference. llmwiki is indifferent.
+The Client MCP mode is a stateless relationship: alexandria does not care which model or provider the client is using, does not see the client's API keys, does not count tokens on behalf of the client. The client pays for its own inference. alexandria is indifferent.
 
 The Daemon-owned mode is the only place provider configuration matters. Everything below is about this mode.
 
@@ -78,7 +78,7 @@ class LLMProvider(Protocol):
     async def complete(self, req: CompletionRequest) -> CompletionResult: ...
 
     async def stream(self, req: CompletionRequest) -> AsyncIterator[dict]: ...
-    # yields delta events; used by `llmwiki chat` for live rendering
+    # yields delta events; used by `alexandria chat` for live rendering
 
     def estimate_cost(self, req: CompletionRequest) -> float: ...
     # pre-flight estimate from the price table and tokenizer — used for dry-run
@@ -116,7 +116,7 @@ Uses the `google-genai` SDK. Supports:
 
 ### 4. `openai-compatible` — custom endpoints, local or remote
 
-This is the load-bearing escape hatch. Any inference stack that speaks the OpenAI Chat Completions / Responses API works with llmwiki behind this one provider. The user points the preset at their endpoint URL and llmwiki does not care what is on the other end.
+This is the load-bearing escape hatch. Any inference stack that speaks the OpenAI Chat Completions / Responses API works with alexandria behind this one provider. The user points the preset at their endpoint URL and alexandria does not care what is on the other end.
 
 **Confirmed supported (MVP):**
 
@@ -126,7 +126,7 @@ This is the load-bearing escape hatch. Any inference stack that speaks the OpenA
 - **LM Studio** — `http://localhost:1234/v1`. Desktop app, good for Mac users with Metal acceleration.
 - **llama.cpp server** — `./llama-server --host 0.0.0.0 --port 8080 --api-key ""`. CPU-friendly, runs on Raspberry Pi through to Threadripper.
 - **Text Generation Inference (TGI)** from HuggingFace — `http://<host>:8080/v1`. Production option used by HF Spaces.
-- **LiteLLM proxy** — a unified gateway that re-exposes ~100 providers (Together, Fireworks, Groq, OpenRouter, DeepInfra, Cohere, AWS Bedrock, Azure OpenAI, and more) as a single OpenAI-compatible endpoint. Run it as `litellm --config config.yaml` and point llmwiki at it to access any provider without adding a new adapter to llmwiki itself.
+- **LiteLLM proxy** — a unified gateway that re-exposes ~100 providers (Together, Fireworks, Groq, OpenRouter, DeepInfra, Cohere, AWS Bedrock, Azure OpenAI, and more) as a single OpenAI-compatible endpoint. Run it as `litellm --config config.yaml` and point alexandria at it to access any provider without adding a new adapter to alexandria itself.
 
 **Configuration is identical across all of them:**
 
@@ -166,11 +166,11 @@ prompt_cache_ttl = "5m"
 # uses Claude API subscription via API key
 ```
 
-**Tool use** on custom endpoints depends on the underlying model. Llama 3.3, Qwen 2.5, DeepSeek V3, Mistral Large, and most recent open-weight 30B+ models implement OpenAI-style tool calling well. Smaller or older models often don't. The provider wrapper detects tool-use capability from a one-shot probe (`llmwiki llm test <preset>` sends a trivial tool-use request and reports pass/fail) and falls back to a system-prompt-based JSON-parsing emulation layer when native tool calling is unavailable.
+**Tool use** on custom endpoints depends on the underlying model. Llama 3.3, Qwen 2.5, DeepSeek V3, Mistral Large, and most recent open-weight 30B+ models implement OpenAI-style tool calling well. Smaller or older models often don't. The provider wrapper detects tool-use capability from a one-shot probe (`alexandria llm test <preset>` sends a trivial tool-use request and reports pass/fail) and falls back to a system-prompt-based JSON-parsing emulation layer when native tool calling is unavailable.
 
 **Prompt caching** on custom endpoints: paid caching in the Anthropic sense doesn't exist for local/self-hosted stacks, but **KV cache reuse happens automatically** in vLLM, SGLang (via RadixAttention), and llama.cpp server whenever the prefix matches. Our structural discipline — stable `tools` first, stable `system` next, dynamic `messages` last — pays off for free: the local serving stack skips re-computation on the matching prefix and latency drops dramatically on cache hits, with no config needed.
 
-**No telemetry to a third party.** When pointed at a local endpoint, llmwiki makes zero outbound calls beyond the configured URL. Privacy-maximalist setups (fully offline with a self-hosted vLLM/SGLang cluster) are first-class.
+**No telemetry to a third party.** When pointed at a local endpoint, alexandria makes zero outbound calls beyond the configured URL. Privacy-maximalist setups (fully offline with a self-hosted vLLM/SGLang cluster) are first-class.
 
 ### Explicitly not at MVP
 
@@ -190,7 +190,7 @@ default = "claude-opus"
 provider = "anthropic"
 model = "claude-opus-4-6"
 max_output_tokens = 8192
-api_key_ref = "anthropic_key"           # points to ~/.llmwiki/secrets/anthropic_key.enc
+api_key_ref = "anthropic_key"           # points to ~/.alexandria/secrets/anthropic_key.enc
 prompt_cache_ttl = "5m"                 # or "1h"
 thinking = "off"                         # or "low" | "medium" | "high"
 
@@ -231,19 +231,19 @@ Per-workspace override in `workspaces/<slug>/config.toml`:
 scheduled_synthesis = "local-llama"     # this workspace runs local for privacy
 ```
 
-The CLI exposes `llmwiki llm list`, `llmwiki llm add <preset>`, `llmwiki llm test <preset>` (sends a trivial ping to verify credentials + endpoint), and `llmwiki llm cost <preset> --last 30d` (prints recent usage from the telemetry log).
+The CLI exposes `alexandria llm list`, `alexandria llm add <preset>`, `alexandria llm test <preset>` (sends a trivial ping to verify credentials + endpoint), and `alexandria llm cost <preset> --last 30d` (prints recent usage from the telemetry log).
 
 ## Caching honesty: interactive path benefits, daemon path does not
 
 **Closes:** `research/reviews/01_llm_architect.md` §2.5 (cache TTL honesty + cost arithmetic).
 
-llmwiki has two LLM-call paths and they have **opposite caching profiles**. Both paths structure their prefixes identically, but only one of them sees real caching wins. The doc must say so:
+alexandria has two LLM-call paths and they have **opposite caching profiles**. Both paths structure their prefixes identically, but only one of them sees real caching wins. The doc must say so:
 
 ### Interactive path through MCP — cache-benefiting
 
-The connected client (Claude Code / Cursor / etc.) makes many calls per session, often within seconds of each other. Anthropic's 5-minute default TTL is well within session length. The stable `tools` + `system` prefix (which on the client side includes the MCP tool schemas + the cached llmwiki `guide()` response from `04_guardian_agent.md`'s tiered wake-up) hits the cache on every call after the first. **Real-world savings:** ~90% off input cost on the cached portion for the duration of the session. This is the marketing number from `research/raw/35_anthropic_prompt_caching.md` and it is correct for this path.
+The connected client (Claude Code / Cursor / etc.) makes many calls per session, often within seconds of each other. Anthropic's 5-minute default TTL is well within session length. The stable `tools` + `system` prefix (which on the client side includes the MCP tool schemas + the cached alexandria `guide()` response from `04_guardian_agent.md`'s tiered wake-up) hits the cache on every call after the first. **Real-world savings:** ~90% off input cost on the cached portion for the duration of the session. This is the marketing number from `research/raw/35_anthropic_prompt_caching.md` and it is correct for this path.
 
-llmwiki itself does not control the client's caching — the client constructs its own prompts. llmwiki's job here is to keep its `guide()` output **stable enough to be cacheable**, which the L0/L1 split in `04_guardian_agent.md` enforces by separating stable identity content (L0) from dynamic state (L1) and capping both with hard output-token budgets.
+alexandria itself does not control the client's caching — the client constructs its own prompts. alexandria's job here is to keep its `guide()` output **stable enough to be cacheable**, which the L0/L1 split in `04_guardian_agent.md` enforces by separating stable identity content (L0) from dynamic state (L1) and capping both with hard output-token budgets.
 
 ### Daemon-owned path — cache-neutral but prefix-structured for consistency
 
@@ -252,7 +252,7 @@ Scheduled synthesis runs once a week. Lint runs once a day. Eval runs vary (M1/M
 **The honest number for the daemon path:** prompt caching saves nothing. We still structure prefixes the same way (`tools → system → messages` with stable content first) for two reasons:
 
 1. **Code DRY.** Both paths use the same provider abstraction. Special-casing the daemon would mean two prompt-construction code paths.
-2. **1-hour cache opt-in for back-to-back runs.** When a user manually triggers `llmwiki synthesize --workspace X` followed within 30 minutes by `llmwiki synthesize --workspace Y`, the 1-hour cache TTL (`prompt_cache_ttl = "1h"` in the preset config — see `[llm.presets]` below) does pay off because the second run's tool/system prefix matches the first if both use the same guardian schema. Default is 5m to avoid the 2× write cost when this case is rare.
+2. **1-hour cache opt-in for back-to-back runs.** When a user manually triggers `alexandria synthesize --workspace X` followed within 30 minutes by `alexandria synthesize --workspace Y`, the 1-hour cache TTL (`prompt_cache_ttl = "1h"` in the preset config — see `[llm.presets]` below) does pay off because the second run's tool/system prefix matches the first if both use the same guardian schema. Default is 5m to avoid the 2× write cost when this case is rare.
 
 The cost arithmetic in `11_inference_endpoint.md` previously implied 90% savings for both paths. **Updated:** interactive path sees the savings; daemon path does not (set `prompt_cache_ttl = "1h"` per preset only when the user expects multiple back-to-back runs within an hour). The `M4` cost-characterization metric from `14_evaluation_scaffold.md` measures actual cache hit rates per workspace, not assumed ones.
 
@@ -274,7 +274,7 @@ verifier  = { input_tokens = 200000, output_tokens = 40000, max_usd = 2.00 }
 total_max_usd = 6.00
 ```
 
-The verifier's spend is logged separately in `~/.llmwiki/logs/verifier-YYYY-MM-DD.jsonl` and `~/.llmwiki/logs/llm-usage-YYYY-MM-DD.jsonl` so M4 can break out writer cost vs verifier cost. Users who consider the verifier expensive can switch its preset to a cheaper model (Sonnet rather than Opus) — its job is read+vote, which Sonnet handles competently.
+The verifier's spend is logged separately in `~/.alexandria/logs/verifier-YYYY-MM-DD.jsonl` and `~/.alexandria/logs/llm-usage-YYYY-MM-DD.jsonl` so M4 can break out writer cost vs verifier cost. Users who consider the verifier expensive can switch its preset to a cheaper model (Sonnet rather than Opus) — its job is read+vote, which Sonnet handles competently.
 
 ## Prompt caching strategy
 
@@ -287,7 +287,7 @@ From `research/raw/35_anthropic_prompt_caching.md`:
 - Hierarchy: `tools → system → messages`. Invalidating a level invalidates all subsequent levels.
 - **Rule:** place `cache_control` on *the last block whose prefix is identical across requests*.
 
-### How llmwiki structures every Anthropic call
+### How alexandria structures every Anthropic call
 
 ```python
 anthropic_request = {
@@ -325,11 +325,11 @@ anthropic_request = {
 | Medium workspace, ~100 pages, deep SKILL.md | ~15 kTok | Yes, significant savings on every call. |
 | Large workspace | capped by what we include in `system` | Yes. We do not put the entire wiki in context — the agent reads pages on demand via `read`. The cached `system` block holds only orientation. |
 
-The threshold matters for tiny workspaces — we document in the `llmwiki cost` CLI output whether the workspace clears the minimum, and note the per-model floor. A user whose `SKILL.md + tools + orientation` is below 4096 tokens sees the same correctness, just higher per-call cost; the fix is either upgrading to Sonnet (2048-token floor) or accepting the cost until the workspace grows.
+The threshold matters for tiny workspaces — we document in the `alexandria cost` CLI output whether the workspace clears the minimum, and note the per-model floor. A user whose `SKILL.md + tools + orientation` is below 4096 tokens sees the same correctness, just higher per-call cost; the fix is either upgrading to Sonnet (2048-token floor) or accepting the cost until the workspace grows.
 
 ### Scheduled synthesis — the only cost-sensitive case
 
-Scheduled synthesis is the **only** mode where llmwiki's own cost matters — it is the only mode where llmwiki calls the LLM. Interactive work happens in the MCP client and its cost is the client's concern, not ours. Example arithmetic:
+Scheduled synthesis is the **only** mode where alexandria's own cost matters — it is the only mode where alexandria calls the LLM. Interactive work happens in the MCP client and its cost is the client's concern, not ours. Example arithmetic:
 
 - Workspace has 12 kTok of static orientation (SKILL.md + tool defs + overview + index head + schema).
 - Weekly digest prompt has 5 kTok of dynamic content (this week's events summary).
@@ -379,7 +379,7 @@ Interactive ingest/query/lint triggered by a user in an MCP client is **not** su
 
 ### 2. Dry-run preview
 
-`llmwiki synthesize --workspace X --dry-run` prints:
+`alexandria synthesize --workspace X --dry-run` prints:
 ```
 Would run scheduled synthesis on workspace 'customer-acme'
   Model:       claude-opus-4-6 (preset: claude-opus)
@@ -390,7 +390,7 @@ Would run scheduled synthesis on workspace 'customer-acme'
 Proceed? [y/N]
 ```
 
-Same for `llmwiki ingest --dry-run` and `llmwiki lint --dry-run`. Reuses the provider's `estimate_cost()`.
+Same for `alexandria ingest --dry-run` and `alexandria lint --dry-run`. Reuses the provider's `estimate_cost()`.
 
 ### 3. Monthly caps per workspace
 
@@ -401,11 +401,11 @@ monthly_usd = 20.00       # hard cap
 warn_at     = 15.00       # warn in status + logs
 ```
 
-When hit, scheduled runs are disabled until the start of the next calendar month or until the user runs `llmwiki llm caps reset --workspace customer-acme`.
+When hit, scheduled runs are disabled until the start of the next calendar month or until the user runs `alexandria llm caps reset --workspace customer-acme`.
 
 ### 4. Telemetry
 
-Every completion call logs to `~/.llmwiki/logs/llm-usage.jsonl`:
+Every completion call logs to `~/.alexandria/logs/llm-usage.jsonl`:
 ```json
 {"ts":"2026-04-15T09:00:00Z","workspace":"customer-acme","op":"scheduled_synthesis",
  "preset":"claude-sonnet","model":"claude-sonnet-4-6",
@@ -414,20 +414,20 @@ Every completion call logs to `~/.llmwiki/logs/llm-usage.jsonl`:
  "stop_reason":"end_turn","tool_calls":12}
 ```
 
-`llmwiki llm cost [--workspace X] [--since 30d]` rolls this up for display. No cloud, no telemetry exports — strictly local.
+`alexandria llm cost [--workspace X] [--since 30d]` rolls this up for display. No cloud, no telemetry exports — strictly local.
 
 ### 5. Opt-in for scheduled runs
 
-As already specified in `10_event_streams.md`: scheduled synthesis is **disabled by default** per workspace. Users opt in explicitly with `llmwiki synthesize enable --workspace X`. The first enablement prompts for budget caps and cost preset. This is the single biggest safety valve — the user cannot be surprised by scheduled cost.
+As already specified in `10_event_streams.md`: scheduled synthesis is **disabled by default** per workspace. Users opt in explicitly with `alexandria synthesize enable --workspace X`. The first enablement prompts for budget caps and cost preset. This is the single biggest safety valve — the user cannot be surprised by scheduled cost.
 
 ## API key storage
 
 Same pattern as source-adapter credentials (`06_data_model.md`):
 
-- Keys live in `~/.llmwiki/secrets/<ref>.enc`.
+- Keys live in `~/.alexandria/secrets/<ref>.enc`.
 - Encryption key derived from the OS keyring (`keyring` library — macOS Keychain, Linux Secret Service / libsecret, Windows Credential Locker). Passphrase fallback for headless environments.
 - `config.toml` references by name (`api_key_ref = "anthropic_key"`), never by value.
-- `llmwiki auth set anthropic --key sk-ant-...` or `llmwiki auth set anthropic --interactive` stores the key; `llmwiki auth list` shows names + masked prefixes; `llmwiki auth remove anthropic` clears it.
+- `alexandria auth set anthropic --key sk-ant-...` or `alexandria auth set anthropic --interactive` stores the key; `alexandria auth list` shows names + masked prefixes; `alexandria auth remove anthropic` clears it.
 - **Keys are never returned through MCP.** The `sources` / `events` / `subscriptions` MCP tools can list adapter *names* but not tokens. This is invariant 10 in `01_vision_and_principles.md` applied to LLM credentials.
 
 ## Rate limits, retries, and fallback
@@ -436,7 +436,7 @@ Every provider exposes its rate limits through error responses. The wrapper hand
 
 - **429 / 529** (rate-limited, overloaded) — exponential backoff with jitter. Up to 5 retries, cap at 30 seconds between attempts.
 - **500 / 502 / 503** (server errors) — retry with backoff, up to 3 attempts.
-- **400 / 401 / 403 / 413** (client errors) — no retry; fail fast and log the full error to `~/.llmwiki/logs/llm-errors.jsonl`.
+- **400 / 401 / 403 / 413** (client errors) — no retry; fail fast and log the full error to `~/.alexandria/logs/llm-errors.jsonl`.
 - **Timeout (default 120s)** — configurable per preset.
 
 ### Fallback chains (optional)
@@ -460,12 +460,12 @@ Local inference matters for three reasons: **privacy** (content never leaves the
 
 ```bash
 ollama pull llama3.3:70b                          # or qwen2.5:72b, mistral-large, etc.
-llmwiki llm add local-ollama \
+alexandria llm add local-ollama \
   --provider openai-compatible \
   --endpoint http://localhost:11434/v1 \
   --model llama3.3:70b
-llmwiki llm test local-ollama
-llmwiki llm route scheduled_synthesis local-ollama
+alexandria llm test local-ollama
+alexandria llm route scheduled_synthesis local-ollama
 ```
 
 ### Recipe 2 — vLLM (GPU box, production throughput)
@@ -479,11 +479,11 @@ vllm serve Qwen/Qwen2.5-72B-Instruct \
   --enable-prefix-caching          # critical: enables prefix KV reuse
 
 # On the client
-llmwiki llm add gpu-qwen \
+alexandria llm add gpu-qwen \
   --provider openai-compatible \
   --endpoint http://gpu-box.local:8000/v1 \
   --model Qwen/Qwen2.5-72B-Instruct
-llmwiki llm test gpu-qwen
+alexandria llm test gpu-qwen
 ```
 
 Prefix caching in vLLM is conceptually identical to Anthropic's prompt caching — the stable `tools + system` prefix is kept in the KV cache, and every subsequent call with the same prefix skips the re-computation. Our structural discipline (stable first, dynamic last) gives the same latency win without any per-message cache markers.
@@ -496,7 +496,7 @@ python -m sglang.launch_server \
   --model-path meta-llama/Llama-3.3-70B-Instruct \
   --host 0.0.0.0 --port 30000
 
-llmwiki llm add gpu-llama \
+alexandria llm add gpu-llama \
   --provider openai-compatible \
   --endpoint http://gpu-box.local:30000/v1 \
   --model meta-llama/Llama-3.3-70B-Instruct
@@ -524,29 +524,29 @@ model_list:
 ```
 ```bash
 litellm --config ~/litellm-config.yaml --port 4000
-llmwiki llm add gateway \
+alexandria llm add gateway \
   --provider openai-compatible \
   --endpoint http://localhost:4000/v1 \
   --model claude-opus           # or gpt-5, together-llama, etc.
 ```
 
-One llmwiki preset, any underlying provider. Useful when the user wants to switch providers without reconfiguring llmwiki.
+One alexandria preset, any underlying provider. Useful when the user wants to switch providers without reconfiguring alexandria.
 
 ### What works well locally vs where frontier models still win
 
-- **Scheduled synthesis and lint** — structured tasks, Llama 3.3 70B / Qwen 2.5 72B / DeepSeek V3 all perform acceptably. Tool use is reliable. These are the exact workloads llmwiki's daemon drives, so local models are a first-class option for the scheduled-daemon mode.
-- **Complex batch synthesis with cascade updates** (`llmwiki synthesize` on a large workspace with many cross-references) — frontier models (Claude Opus 4.6, GPT-5) still win on quality. Local is possible but the user should expect more review work and set appropriate budgets.
-- **Tool-use reliability on sub-30B models** — inconsistent. The wrapper probes capability via `llmwiki llm test <preset>` and falls back to JSON-parsing emulation when native tool calling is unavailable.
+- **Scheduled synthesis and lint** — structured tasks, Llama 3.3 70B / Qwen 2.5 72B / DeepSeek V3 all perform acceptably. Tool use is reliable. These are the exact workloads alexandria's daemon drives, so local models are a first-class option for the scheduled-daemon mode.
+- **Complex batch synthesis with cascade updates** (`alexandria synthesize` on a large workspace with many cross-references) — frontier models (Claude Opus 4.6, GPT-5) still win on quality. Local is possible but the user should expect more review work and set appropriate budgets.
+- **Tool-use reliability on sub-30B models** — inconsistent. The wrapper probes capability via `alexandria llm test <preset>` and falls back to JSON-parsing emulation when native tool calling is unavailable.
 
-Interactive work is not llmwiki's concern — that happens in the MCP client, which brings its own model choice. A user who wants "local-only everywhere" runs Claude Code or similar pointed at an Ollama / vLLM endpoint themselves (Claude Code and other MCP clients support this independently) and configures llmwiki's scheduled daemon to match.
+Interactive work is not alexandria's concern — that happens in the MCP client, which brings its own model choice. A user who wants "local-only everywhere" runs Claude Code or similar pointed at an Ollama / vLLM endpoint themselves (Claude Code and other MCP clients support this independently) and configures alexandria's scheduled daemon to match.
 
-We do not ship model weights. The user is responsible for their serving stack. llmwiki's job is to speak the OpenAI-compatible protocol correctly against whatever endpoint is running — and in practice that covers the entire open-weight ecosystem plus every closed-source provider via LiteLLM.
+We do not ship model weights. The user is responsible for their serving stack. alexandria's job is to speak the OpenAI-compatible protocol correctly against whatever endpoint is running — and in practice that covers the entire open-weight ecosystem plus every closed-source provider via LiteLLM.
 
-## What llmwiki explicitly does not do
+## What alexandria explicitly does not do
 
-**No interactive chat client.** There is no `llmwiki chat` REPL. No terminal UI hosting a conversation. No streaming output rendered by llmwiki to a user. No chat history stored per-session on our side. No `/history` / `/clear` / `/save` commands. Interactive work happens in Claude Code, Cursor, Claude.ai, Codex, Claude Desktop, or any other MCP-capable agent — those tools already do it well, and llmwiki does not compete with them.
+**No interactive chat client.** There is no `alexandria chat` REPL. No terminal UI hosting a conversation. No streaming output rendered by alexandria to a user. No chat history stored per-session on our side. No `/history` / `/clear` / `/save` commands. Interactive work happens in Claude Code, Cursor, Claude.ai, Codex, Claude Desktop, or any other MCP-capable agent — those tools already do it well, and alexandria does not compete with them.
 
-The load-bearing reason: **llmwiki is the knowledge engine, not the agent runtime**. Building a chat client would duplicate what every MCP agent already provides, while pulling llmwiki's design focus away from the things only llmwiki can do — maintaining the workspace, running event streams, compiling wikis, validating citations, and serving the tool surface that makes all of this accessible to any agent.
+The load-bearing reason: **alexandria is the knowledge engine, not the agent runtime**. Building a chat client would duplicate what every MCP agent already provides, while pulling alexandria's design focus away from the things only alexandria can do — maintaining the workspace, running event streams, compiling wikis, validating citations, and serving the tool surface that makes all of this accessible to any agent.
 
 The daemon-owned agent loop for scheduled synthesis is structurally a tiny runner — tens of lines of Python wrapping the provider's tool-use cycle (`complete → receive tool_use → execute tool → feed tool_result → repeat until end_turn or budget`). It has no user interaction because there is no user in the room. It writes results to disk, logs cost, and exits. That is a fundamentally different thing from a chat client and does not grow into one.
 
@@ -554,9 +554,9 @@ The daemon-owned agent loop for scheduled synthesis is structurally a tiny runne
 
 `07_open_questions.md` Section A asked *"where does the agent loop actually run?"*. This doc decides the answer:
 
-- **Client MCP is the only interactive mode** and handles all user-facing work. llmwiki has no inference configuration for it.
-- **Daemon-owned operations** are the only place llmwiki itself calls an LLM. Scheduled synthesis, scheduled lint, and CLI batch runs (`llmwiki synthesize`, `llmwiki lint --run`). All opt-in, budgeted, dry-run previewable, with mandatory cost telemetry.
-- **`llmwiki chat` is explicitly not built.** Users who want interactive chat use an MCP client.
+- **Client MCP is the only interactive mode** and handles all user-facing work. alexandria has no inference configuration for it.
+- **Daemon-owned operations** are the only place alexandria itself calls an LLM. Scheduled synthesis, scheduled lint, and CLI batch runs (`alexandria synthesize`, `alexandria lint --run`). All opt-in, budgeted, dry-run previewable, with mandatory cost telemetry.
+- **`alexandria chat` is explicitly not built.** Users who want interactive chat use an MCP client.
 
 Both modes share the same tool surface (`04_guardian_agent.md`), the same workspace boundaries, the same data model, and the same agent-loop shape. The difference is who holds the loop.
 
@@ -568,6 +568,6 @@ Both modes share the same tool surface (`04_guardian_agent.md`), the same worksp
 
 3. **Streaming tool-use parsing.** The cleanest chat UX streams tool calls as they are generated. The Anthropic SDK supports this via the streaming API, but our wrapper has to parse partial tool_use blocks correctly. Not a blocker — we buffer to the end of each block if the SDK returns incomplete deltas, at the cost of slightly less interactive feel.
 
-4. **Multi-agent orchestration run by llmwiki.** Mode 2 and 3 could support spawning subagents inside llmwiki (using the same `AnthropicProvider` as the lead) for cross-workspace synthesis or heavy research tasks. Architecture is ready for it (re-entrant MCP server, external memory via `wiki_log_entries`). Not MVP.
+4. **Multi-agent orchestration run by alexandria.** Mode 2 and 3 could support spawning subagents inside alexandria (using the same `AnthropicProvider` as the lead) for cross-workspace synthesis or heavy research tasks. Architecture is ready for it (re-entrant MCP server, external memory via `wiki_log_entries`). Not MVP.
 
 5. **On-device fine-tuning.** Karpathy's original tweet mentions *"synthetic data generation + finetuning to have your LLM know the data in its weights."* Explicitly deferred. The pattern needs years more research before it's a stable personal-tool feature.

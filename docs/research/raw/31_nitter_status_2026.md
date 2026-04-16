@@ -1,4 +1,4 @@
-# Source: Nitter — project status (for llmwiki's Twitter/X subscription adapter)
+# Source: Nitter — project status (for alexandria's Twitter/X subscription adapter)
 
 - **URL:** https://github.com/zedeus/nitter
 - **Fetched:** 2026-04-15
@@ -14,7 +14,7 @@
 - The README still claims *"Uses Twitter's unofficial API (no developer account required)"* but this conflicts with the real-account requirement in practice.
 - Session tokens must be generated from throwaway Twitter accounts; see the project wiki's "Creating session tokens" page.
 
-## Implication for llmwiki
+## Implication for alexandria
 
 Nitter works, but it is **no longer zero-setup**. A user who wants to subscribe to Twitter accounts has to:
 
@@ -22,4 +22,4 @@ Nitter works, but it is **no longer zero-setup**. A user who wants to subscribe 
 2. Maintain one or more throwaway Twitter accounts to provide session tokens.
 3. Handle rate limits, IP bans, and account suspensions themselves.
 
-For llmwiki this means Twitter subscriptions are a **tier-3 operational choice**, not a default. We document the three realistic options honestly (self-hosted nitter, rsshub-style bridges, manual tweet save via fxtwitter) and flag Twitter as fragile. We do not pretend to deliver "follow anyone on Twitter" out of the box — the platform makes that impossible without significant user-side investment.
+For alexandria this means Twitter subscriptions are a **tier-3 operational choice**, not a default. We document the three realistic options honestly (self-hosted nitter, rsshub-style bridges, manual tweet save via fxtwitter) and flag Twitter as fragile. We do not pretend to deliver "follow anyone on Twitter" out of the box — the platform makes that impossible without significant user-side investment.

@@ -1,6 +1,6 @@
 # Architecture Reviews
 
-Independent reviews of the llmwiki architecture by three specialist agents, run 2026-04-16. Each reviewer was given the same documentation map, the existing invariants they were told not to re-litigate, and a specialty-specific question set. Each produced a full review independently; none of them saw the others' output.
+Independent reviews of the alexandria architecture by three specialist agents, run 2026-04-16. Each reviewer was given the same documentation map, the existing invariants they were told not to re-litigate, and a specialty-specific question set. Each produced a full review independently; none of them saw the others' output.
 
 The reviews are preserved verbatim so future architecture decisions can cite the original critiques (not my synthesis of them).
 

@@ -47,7 +47,7 @@ Subscriptions are SourceAdapter instances with `kind = SUBSCRIPTION`. The single
 | `newsletter` | IMAP against user's mail account | For paid Substack, Stratechery, any email-delivered content |
 | `twitter-nitter` | Nitter RSS | User runs their own Nitter instance |
 | `twitter-rsshub` | rsshub-style bridge | Low-volume casual following |
-| `twitter-manual` | `llmwiki tweet-save <url>` CLI command using fxtwitter | Individual tweets the user wants to preserve |
+| `twitter-manual` | `alexandria tweet-save <url>` CLI command using fxtwitter | Individual tweets the user wants to preserve |
 
 ## The generic RSS adapter — architecture
 
@@ -107,10 +107,10 @@ Image handling: every `<img>` in the HTML gets downloaded to `raw/subscriptions/
 Paywalled Substack, paid-tier Stratechery, and similar publications deliver full content in the email version. The pattern:
 
 1. User enables *"email me new posts"* on the paid subscription (Substack default; most providers support this).
-2. User creates a mail filter routing these emails to a dedicated folder/label — e.g., Gmail label `llmwiki-newsletters`.
+2. User creates a mail filter routing these emails to a dedicated folder/label — e.g., Gmail label `alexandria-newsletters`.
 3. User generates an **app password** specifically for that label via their provider's scoped-access mechanism (Gmail → App passwords; Fastmail → App passwords; iCloud → App-specific passwords).
-4. User adds an `newsletter` adapter to llmwiki: `llmwiki source add newsletter --imap-host imap.gmail.com --imap-user ... --imap-folder llmwiki-newsletters --from-allowlist "*@substack.com,*@stratechery.com"`.
-5. llmwiki stores the credentials encrypted in `~/.llmwiki/secrets/` (keyring-derived master key; see `06_data_model.md`).
+4. User adds an `newsletter` adapter to alexandria: `alexandria source add newsletter --imap-host imap.gmail.com --imap-user ... --imap-folder alexandria-newsletters --from-allowlist "*@substack.com,*@stratechery.com"`.
+5. alexandria stores the credentials encrypted in `~/.alexandria/secrets/` (keyring-derived master key; see `06_data_model.md`).
 6. The daemon polls the folder hourly via IMAP IDLE (if supported) or STARTTLS+SELECT otherwise.
 
 Per-email processing:
@@ -134,7 +134,7 @@ There is no reliable, unauthenticated way to follow arbitrary Twitter/X accounts
 
 ### Tier 1 — `twitter-nitter` (most reliable, user owns the infrastructure)
 
-The user runs their own Nitter instance on a VPS, laptop, or Docker container. They configure throwaway Twitter account(s) to provide session tokens (a current Nitter requirement per `raw/31_*`). llmwiki's adapter points at `https://nitter.theirhost.com/<user>/rss`.
+The user runs their own Nitter instance on a VPS, laptop, or Docker container. They configure throwaway Twitter account(s) to provide session tokens (a current Nitter requirement per `raw/31_*`). alexandria's adapter points at `https://nitter.theirhost.com/<user>/rss`.
 
 - **Pro:** works reliably, no third-party dependency, respects the user's privacy choices.
 - **Con:** non-trivial ops burden. Throwaway accounts get suspended; session tokens expire; Twitter actively fights this.
@@ -150,7 +150,7 @@ The user points the adapter at an rsshub-style bridge — either a public instan
 
 ### Tier 3 — `twitter-manual` (one tweet at a time, always works)
 
-`llmwiki tweet-save <url>` — a CLI command that hits `api.fxtwitter.com` (the same public proxy we used to retrieve Karpathy's tweet for `raw/00_*`) and saves a single tweet verbatim to `raw/subscriptions/twitter-manual/<handle>/<yyyy-mm-dd>-<tweet-id>.md`.
+`alexandria tweet-save <url>` — a CLI command that hits `api.fxtwitter.com` (the same public proxy we used to retrieve Karpathy's tweet for `raw/00_*`) and saves a single tweet verbatim to `raw/subscriptions/twitter-manual/<handle>/<yyyy-mm-dd>-<tweet-id>.md`.
 
 - **Pro:** always works, no auth, no ops.
 - **Con:** no feed — the user has to know which tweets to save.
@@ -176,7 +176,7 @@ Subscriptions are the main reason the optional daemon exists. One `apscheduler` 
 
 All cadences are configurable per-adapter via the workspace config. The daemon respects per-host concurrency caps (e.g., max 1 concurrent request to any rsshub-like bridge).
 
-Without the daemon, the same code runs manually: `llmwiki sync` and `llmwiki subscriptions poll` do the same work on demand.
+Without the daemon, the same code runs manually: `alexandria sync` and `alexandria subscriptions poll` do the same work on demand.
 
 ## Deduplication, versioning, failures
 
@@ -189,7 +189,7 @@ All subscriptions use the `external_id` + `content_hash` machinery already defin
 Failure modes:
 
 - **Feed unreachable (DNS, 5xx, timeout):** mark `source_adapters.status = 'error'` with `last_error`. Retain previously-fetched items. Retry per backoff policy.
-- **Parser failure on a single item:** log to `~/.llmwiki/logs/sync-<date>.jsonl`, skip the item, continue the run.
+- **Parser failure on a single item:** log to `~/.alexandria/logs/sync-<date>.jsonl`, skip the item, continue the run.
 - **Rate-limit hit:** exponential backoff per adapter. Cap retries. Mark `degraded` after N consecutive failures.
 - **Credentials expired (IMAP app password revoked):** mark `auth_required`, surface in CLI/UI status, do not silently retry.
 - **Content decoded as empty:** mark the item `suspicious`, keep the source URL, let the user investigate.
@@ -201,7 +201,7 @@ Failure modes:
 ### CLI
 
 ```
-$ llmwiki subscriptions list --workspace research
+$ alexandria subscriptions list --workspace research
 12 pending subscription items across 4 sources:
 
   substack  Every                2 new   (free-full)
@@ -209,9 +209,9 @@ $ llmwiki subscriptions list --workspace research
   youtube   Fireship             1 new   (title+desc only)
   rss       simonwillison.net    6 new   (atom-full)
 
-  $ llmwiki subscriptions show 3   # render one by title
-  $ llmwiki subscriptions ingest --where "from:Every"   # trigger agent
-  $ llmwiki subscriptions dismiss 7   # mark as read without ingesting
+  $ alexandria subscriptions show 3   # render one by title
+  $ alexandria subscriptions ingest --where "from:Every"   # trigger agent
+  $ alexandria subscriptions dismiss 7   # mark as read without ingesting
 ```
 
 ### Web UI (when daemon is running)
@@ -272,13 +272,13 @@ These are query-only. They don't touch the wiki layer unless the user explicitly
 
 ## Privacy, safety, and credentials
 
-- All credentials live in `~/.llmwiki/secrets/*.enc`, encrypted with a key derived from the OS keyring (see `06_data_model.md`).
+- All credentials live in `~/.alexandria/secrets/*.enc`, encrypted with a key derived from the OS keyring (see `06_data_model.md`).
 - No credential is ever returned from the `sources` or `subscriptions` MCP tools. The agent sees adapter type, name, counts, and status — never tokens or passwords.
 - HTTP fetches use an allowlisted resolver that refuses private IPs (no SSRF to local services from a malicious feed URL).
 - IMAP clients use STARTTLS + IMAPS; plaintext IMAP is refused.
-- Per-host concurrency caps prevent a runaway poll from getting llmwiki rate-limited or IP-banned.
-- All fetches are logged to `~/.llmwiki/logs/sync-<date>.jsonl` with `{adapter_id, url, status, latency_ms, item_count}`. No content in the logs — only metadata.
+- Per-host concurrency caps prevent a runaway poll from getting alexandria rate-limited or IP-banned.
+- All fetches are logged to `~/.alexandria/logs/sync-<date>.jsonl` with `{adapter_id, url, status, latency_ms, item_count}`. No content in the logs — only metadata.
 
 ## Summary
 
-Subscriptions are SourceAdapters with continuous polling. Blog/Substack/YouTube feeds work cleanly via RSS/Atom. Paid newsletters work via IMAP against a scoped mail label. Twitter is fragile and we support three tiers honestly: self-hosted Nitter, rsshub-style bridges, or `llmwiki tweet-save` for individual tweets. Items land in `raw/subscriptions/...` as pending, the guardian sees them through the `subscriptions` MCP tool, and ingest is user-triggered by default. No auto-ingest unless the user opts in per source. No silent failures.
+Subscriptions are SourceAdapters with continuous polling. Blog/Substack/YouTube feeds work cleanly via RSS/Atom. Paid newsletters work via IMAP against a scoped mail label. Twitter is fragile and we support three tiers honestly: self-hosted Nitter, rsshub-style bridges, or `alexandria tweet-save` for individual tweets. Items land in `raw/subscriptions/...` as pending, the guardian sees them through the `subscriptions` MCP tool, and ingest is user-triggered by default. No auto-ingest unless the user opts in per source. No silent failures.

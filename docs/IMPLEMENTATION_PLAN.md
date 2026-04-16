@@ -1,4 +1,4 @@
-# llmwiki — Implementation Plan
+# alexandria — Implementation Plan
 
 > **Status:** Draft v1, awaiting first-checkpoint review by `llm-architect`, `ai-engineer`, `mlops-engineer`.
 >
@@ -10,7 +10,7 @@
 > 5. **Every phase produces a demoable end-to-end system.** A user can install whatever has been shipped through phase N, follow a documented workflow, and have something working that they can use immediately. No phase ends in a state that requires the next phase to be useful.
 > 6. **Every phase ends with a three-agent review** (`llm-architect`, `ai-engineer`, `mlops-engineer`) of the actual code, tests, and demo — not of intentions.
 
-This plan defines **13 sequential phases** that take llmwiki from empty repository to v1.0.0 release. Each phase is sized to be small enough to ship cleanly but large enough to deliver real user value. Phase boundaries are chosen so that a phase failure (e.g., a critical reviewer finding) blocks only that phase's work, never invalidates a prior phase.
+This plan defines **13 sequential phases** that take alexandria from empty repository to v1.0.0 release. Each phase is sized to be small enough to ship cleanly but large enough to deliver real user value. Phase boundaries are chosen so that a phase failure (e.g., a critical reviewer finding) blocks only that phase's work, never invalidates a prior phase.
 
 ## Architecture references
 
@@ -29,9 +29,9 @@ These apply across all phases.
 
 - **Package layout:**
   ```
-  llmwiki/
+  alexandria/
   ├── __init__.py
-  ├── __main__.py              # python -m llmwiki entry point
+  ├── __main__.py              # python -m alexandria entry point
   ├── cli/                      # Typer command groups, one file per group
   │   ├── __init__.py
   │   ├── main.py
@@ -108,7 +108,7 @@ These apply across all phases.
 - **One concern per file.** When a file exceeds 400 lines, refactor.
 - **One responsibility per class.** When a class touches more than one of (storage, scheduling, LLM call, IO, validation), split it.
 - **No god objects.** No `Workspace` class that owns SQLite + filesystem + verifier + cli + everything.
-- **Imports are explicit.** No `from llmwiki.core import *`. No re-exports for convenience.
+- **Imports are explicit.** No `from alexandria.core import *`. No re-exports for convenience.
 - **Type hints everywhere.** `mypy --strict` clean. `Any` requires a comment justifying it.
 
 ### Test strategy
@@ -124,7 +124,7 @@ These apply across all phases.
 
 ### Database discipline
 
-- **Every schema change is a numbered migration file** in `llmwiki/db/migrations/`. No exceptions.
+- **Every schema change is a numbered migration file** in `alexandria/db/migrations/`. No exceptions.
 - **Migrations are immutable once applied to main.** A bug in an applied migration is fixed by a new migration that corrects it.
 - **Every migration is tested**: a test creates a fresh DB, runs migrations 0001 → N, and asserts the resulting schema matches the expected shape. A migration that fails this test cannot merge.
 - **`PRAGMA user_version`** is the single source of truth for current schema version.
@@ -132,7 +132,7 @@ These apply across all phases.
 
 ### CLI discipline
 
-- **Every command in `20_cli_surface.md` exists** by the end of its phase. A command without a working implementation must not appear in `llmwiki -h` (and therefore must not appear in the help spec for that phase).
+- **Every command in `20_cli_surface.md` exists** by the end of its phase. A command without a working implementation must not appear in `alexandria -h` (and therefore must not appear in the help spec for that phase).
 - **`-h` / `--help` work everywhere**, including unimplemented sub-commands when the parent command is implemented (the unimplemented sub-command prints a clear `not yet shipped — planned for phase N` message and exits with code 2). This is the **only** exception to the "no placeholders" rule, and it is allowed only because the user needs `-h` discovery to work end-to-end.
 - **Exit codes:** 0 success, 1 user error, 2 system error or not-yet-shipped, 3 quota / budget / circuit-breaker tripped.
 - **`--json` output** wherever applicable, with a stable schema documented in the relevant architecture doc.
@@ -140,7 +140,7 @@ These apply across all phases.
 
 ### Logging and observability discipline
 
-- **Every operation produces logs in JSONL format** under `~/.llmwiki/logs/`, organized into the seven log families defined in `17_observability.md`.
+- **Every operation produces logs in JSONL format** under `~/.alexandria/logs/`, organized into the seven log families defined in `17_observability.md`.
 - **Every operation has a `run_id`** that correlates across log families.
 - **No print statements outside the CLI's user-facing output layer.** Diagnostic logs go to the log files; the CLI prints structured human or JSON output to stdout.
 
@@ -162,38 +162,38 @@ These apply across all phases.
 
 1. **Project skeleton**
    - `pyproject.toml` with Typer, pydantic, aiosqlite, sqlite-utils, ruff, mypy, pytest, pytest-asyncio
-   - `python -m llmwiki` and `llmwiki` console script entry points
+   - `python -m alexandria` and `alexandria` console script entry points
    - Pre-commit hooks: `ruff check`, `ruff format --check`, `mypy --strict`
 
 2. **CLI scaffold (Typer)**
-   - `llmwiki -h` produces the canonical help from `20_cli_surface.md`. Commands implemented in this phase are functional; commands not yet shipped print `not yet shipped — planned for phase N` and exit code 2.
-   - `llmwiki --version` prints version from `llmwiki/__init__.py:__version__`.
+   - `alexandria -h` produces the canonical help from `20_cli_surface.md`. Commands implemented in this phase are functional; commands not yet shipped print `not yet shipped — planned for phase N` and exit code 2.
+   - `alexandria --version` prints version from `alexandria/__init__.py:__version__`.
 
 3. **Config loading**
-   - `config.py`: parses `~/.llmwiki/config.toml` with pydantic models. Default values match `01_vision_and_principles.md`.
-   - `LLMWIKI_HOME`, `LLMWIKI_WORKSPACE` env var overrides.
+   - `config.py`: parses `~/.alexandria/config.toml` with pydantic models. Default values match `01_vision_and_principles.md`.
+   - `ALEXANDRIA_HOME`, `ALEXANDRIA_WORKSPACE` env var overrides.
 
 4. **SQLite + migration framework** (from `16_operations_and_reliability.md`)
    - `db/connection.py`: WAL mode connection wrapper.
    - `db/migrator.py`: reads `db/migrations/*.sql` in order, checks `schema_migrations` table + `PRAGMA user_version`, applies pending, takes auto-backup before each.
    - `db/migrations/0001_initial.sql`: creates `workspaces`, `documents`, `documents_fts`, `schema_migrations`, `daemon_heartbeats` tables.
-   - `llmwiki db migrate` and `llmwiki db status` commands.
+   - `alexandria db migrate` and `alexandria db status` commands.
    - Tests: fresh DB → migrate to head → verify schema; corrupt migration file → migrate fails cleanly.
 
 5. **Workspace primitives** (from `03_workspaces_and_scopes.md`)
    - `core/workspace.py`: `Workspace` dataclass + `WorkspaceConfig`, `init_workspace`, `list_workspaces`, `resolve_workspace`.
-   - On-disk layout: `~/.llmwiki/workspaces/<slug>/{SKILL.md, identity.md, config.toml, raw/, wiki/}`.
+   - On-disk layout: `~/.alexandria/workspaces/<slug>/{SKILL.md, identity.md, config.toml, raw/, wiki/}`.
    - SQLite row in `workspaces` table created on init.
 
-6. **`llmwiki init`** — creates `~/.llmwiki/`, runs initial migration, creates the `global` workspace, writes default config.
+6. **`alexandria init`** — creates `~/.alexandria/`, runs initial migration, creates the `global` workspace, writes default config.
 
-7. **`llmwiki workspace use <slug>`**, `workspace current`, `workspace list`.
+7. **`alexandria workspace use <slug>`**, `workspace current`, `workspace list`.
 
-8. **`llmwiki project create <name>`**, `project list`, `project info <name>`, `project rename`, `project delete` (soft delete to `~/.llmwiki/.trash/`).
+8. **`alexandria project create <name>`**, `project list`, `project info <name>`, `project rename`, `project delete` (soft delete to `~/.alexandria/.trash/`).
 
-9. **`llmwiki paste`** — reads stdin into `raw/local/<yyyy-mm-dd-slug>.md` with sha256 dedup against existing files.
+9. **`alexandria paste`** — reads stdin into `raw/local/<yyyy-mm-dd-slug>.md` with sha256 dedup against existing files.
 
-10. **`llmwiki status` (basic)** — daemon: not running; workspaces: list with counts; schema version; data dir.
+10. **`alexandria status` (basic)** — daemon: not running; workspaces: list with counts; schema version; data dir.
 
 ### Tests
 - Unit: every public function in `core/workspace.py`, `db/migrator.py`, `config.py`.
@@ -201,7 +201,7 @@ These apply across all phases.
 - E2E: `subprocess.run` of the binary in a tempdir, asserts on stdout.
 
 ### Demoable end state
-A user runs `pip install -e .`, then `llmwiki init`, then `llmwiki project create research`, then `echo "test note" | llmwiki paste --workspace research --title test`, then `llmwiki status` and sees the workspace, the file, the schema version. Every command in the help that isn't implemented prints a clear "phase N" message — no surprise crashes.
+A user runs `pip install -e .`, then `alexandria init`, then `alexandria project create research`, then `echo "test note" | alexandria paste --workspace research --title test`, then `alexandria status` and sees the workspace, the file, the schema version. Every command in the help that isn't implemented prints a clear "phase N" message — no surprise crashes.
 
 ### Phase exit criteria
 - All tests green on a fresh checkout.
@@ -214,14 +214,14 @@ A user runs `pip install -e .`, then `llmwiki init`, then `llmwiki project creat
 
 ## Phase 1 — Read-only MCP server (~1.5 weeks)
 
-**Goal:** Claude Code can connect to llmwiki via stdio MCP and read the workspace.
+**Goal:** Claude Code can connect to alexandria via stdio MCP and read the workspace.
 
 ### Deliverables
 
 1. **FastMCP integration**
    - `mcp/server.py`: `FastMCP` instance, stdio transport, workspace binding (open + pinned modes from `08_mcp_integration.md`).
-   - `llmwiki mcp serve` command (open mode).
-   - `llmwiki mcp serve --workspace <slug>` (pinned mode).
+   - `alexandria mcp serve` command (open mode).
+   - `alexandria mcp serve --workspace <slug>` (pinned mode).
 
 2. **Read-only tools** from `04_guardian_agent.md`
    - `guide` (with L0/L1 tiered output, hard token budgets per `04_guardian_agent.md`)
@@ -239,24 +239,24 @@ A user runs `pip install -e .`, then `llmwiki init`, then `llmwiki project creat
    - The tool list in `mcp/tools/__init__.py` is the single registry.
 
 4. **MCP installer** (`mcp install <client>`)
-   - `hooks/installer/claude_code.py` — writes `~/.claude.json` or `.mcp.json` with the `_llmwiki_managed: true` marker.
-   - `llmwiki mcp install claude-code` command.
-   - `llmwiki mcp install claude-desktop` (Mac path).
+   - `hooks/installer/claude_code.py` — writes `~/.claude.json` or `.mcp.json` with the `_alexandria_managed: true` marker.
+   - `alexandria mcp install claude-code` command.
+   - `alexandria mcp install claude-desktop` (Mac path).
 
 5. **MCP status** (`mcp status`) — lists running stdio sessions by parent PID.
 
 ### Tests
 - Unit: each tool's pure logic (FTS5 query construction, glob handling, budget enforcement).
 - Integration: spawn the MCP server in a subprocess, send real MCP protocol messages over stdio, assert correct responses. Use the real `mcp` package, not a fake.
-- E2E: `claude mcp add llmwiki -- llmwiki mcp serve`; spawn `claude` subprocess (if available in CI) to run a single tool call; assert response. If `claude` binary is not in CI, use a small Python client implementing the MCP protocol against our server.
+- E2E: `claude mcp add alexandria -- alexandria mcp serve`; spawn `claude` subprocess (if available in CI) to run a single tool call; assert response. If `claude` binary is not in CI, use a small Python client implementing the MCP protocol against our server.
 
 ### Demoable end state
-User runs `llmwiki mcp install claude-code`, restarts Claude Code, types *"what's in my llmwiki global workspace?"*, and Claude Code calls `guide` then `list` then `read` and reports back. No writes yet — read-only.
+User runs `alexandria mcp install claude-code`, restarts Claude Code, types *"what's in my alexandria global workspace?"*, and Claude Code calls `guide` then `list` then `read` and reports back. No writes yet — read-only.
 
 ### Phase exit criteria
 - All tests green.
 - A real Claude Code session can connect, call every read-only tool, and get the right answer.
-- `llmwiki -h` shows the new commands as implemented.
+- `alexandria -h` shows the new commands as implemented.
 - **Three-agent review passes.**
 
 ---
@@ -272,7 +272,7 @@ User runs `llmwiki mcp install claude-code`, restarts Claude Code, types *"what'
 1. **Runs table and state machine** (from `13_hostile_verifier.md`)
    - Migration `0002_add_runs_and_provenance.sql`: creates `runs`, extends `wiki_claim_provenance` with quote anchor columns, creates indexes.
    - `core/runs.py`: `Run`, `RunState`, `RunRepository` with the five-state state machine.
-   - On-disk layout: `~/.llmwiki/runs/<run_id>/{meta.json, plan.json, staged/, verifier/, status}`.
+   - On-disk layout: `~/.alexandria/runs/<run_id>/{meta.json, plan.json, staged/, verifier/, status}`.
 
 2. **Staged write helpers** (from `15_cascade_and_convergence.md`)
    - `core/cascade/`: `stage_merge`, `stage_hedge`, `stage_new_page`, `stage_cross_ref`.
@@ -292,22 +292,22 @@ User runs `llmwiki mcp install claude-code`, restarts Claude Code, types *"what'
      - Performs semantic check #4 (LLM vote per claim)
      - Returns `commit | reject | revise` with per-claim findings
    - Verifier loop: writer → stage → verifier → commit/reject/revise. Bounded at 3 loops (`MAX_LOOPS`).
-   - Manual override: `llmwiki verify override <run_id> --reason "..."`, audit-logged.
+   - Manual override: `alexandria verify override <run_id> --reason "..."`, audit-logged.
 
 5. **`write` MCP tool** — staging-aware
    - `create`, `str_replace`, `append` operations all stage to `runs/<run_id>/staged/` first.
    - On staged-run completion, hand to verifier.
-   - On `commit` verdict, atomically move staged → wiki/ via `git mv` + `git commit -m "llmwiki run <run_id>"`.
+   - On `commit` verdict, atomically move staged → wiki/ via `git mv` + `git commit -m "alexandria run <run_id>"`.
    - Per-workspace `fcntl` advisory lock on the commit step.
    - On `reject` verdict, move staged → `failed/`, return reason.
 
 6. **Daemon-startup orphan sweep** — minimal version: on every daemon start, transition `pending` / `verifying` runs to `abandoned`.
 
-7. **`llmwiki ingest <source>`** — basic, local files only. Accepts a markdown or text file, runs the cascade workflow against it.
+7. **`alexandria ingest <source>`** — basic, local files only. Accepts a markdown or text file, runs the cascade workflow against it.
 
-8. **`llmwiki runs show <run_id>`** — inspect a run: meta, verdict, staged diff, verifier transcript.
+8. **`alexandria runs show <run_id>`** — inspect a run: meta, verdict, staged diff, verifier transcript.
 
-9. **`llmwiki verify override <run_id>`** — audit-logged manual override.
+9. **`alexandria verify override <run_id>`** — audit-logged manual override.
 
 10. **Anthropic LLM provider** (minimum viable) — used by the verifier and the writer in this phase. Full provider abstraction matures in Phase 8.
     - `llm/base.py`: `LLMProvider` protocol.
@@ -324,14 +324,14 @@ User runs `llmwiki mcp install claude-code`, restarts Claude Code, types *"what'
 - E2E: from Claude Code via MCP, ask the agent to ingest a markdown file → verify the cascade runs → verify the wiki updates land → verify the runs table records the commit.
 
 ### Demoable end state
-User runs `llmwiki ingest research/docs/intro.md` (a real file in their workspace's raw layer). The guardian reads it, plans a cascade, stages the writes, the verifier checks every footnote against the raw source via deterministic hash, and on success commits to `wiki/`. The user can then `llmwiki runs show <run_id>` to see exactly what happened. They can introduce a deliberate fabricated citation, run ingest again, and watch the verifier reject it with a structured reason.
+User runs `alexandria ingest research/docs/intro.md` (a real file in their workspace's raw layer). The guardian reads it, plans a cascade, stages the writes, the verifier checks every footnote against the raw source via deterministic hash, and on success commits to `wiki/`. The user can then `alexandria runs show <run_id>` to see exactly what happened. They can introduce a deliberate fabricated citation, run ingest again, and watch the verifier reject it with a structured reason.
 
 ### Phase exit criteria
 - All tests green.
 - A fabricated citation is **always** rejected without an LLM call (deterministic hash check).
 - A multi-page cascade either commits all pages or none.
 - The `runs` table is the source of truth for run state, and `runs show` returns it accurately.
-- `llmwiki -h` shows `ingest`, `runs show`, `verify override` as implemented.
+- `alexandria -h` shows `ingest`, `runs show`, `verify override` as implemented.
 - **Three-agent review passes.** This phase will get the most rigorous review because it is the load-bearing correctness mechanism.
 
 ---
@@ -358,17 +358,17 @@ User runs `llmwiki ingest research/docs/intro.md` (a real file in their workspac
 
 4. **`why` MCP tool and CLI**
    - `mcp/tools/why.py`: resolve query → SQL lookup → return current beliefs + history with provenance trail. The basic case is pure SQL; semantic re-validation is opt-in.
-   - `llmwiki why "<query>"` CLI command.
+   - `alexandria why "<query>"` CLI command.
    - JSON output for scripting.
 
 5. **`beliefs` CLI commands**
-   - `llmwiki beliefs list --topic <t>`
-   - `llmwiki beliefs history <belief_id>`
-   - `llmwiki beliefs verify` (re-runs hash check on every quote anchor)
-   - `llmwiki beliefs export --format json|csv`
-   - `llmwiki beliefs supersede <old> <new>` (manual)
+   - `alexandria beliefs list --topic <t>`
+   - `alexandria beliefs history <belief_id>`
+   - `alexandria beliefs verify` (re-runs hash check on every quote anchor)
+   - `alexandria beliefs export --format json|csv`
+   - `alexandria beliefs supersede <old> <new>` (manual)
 
-6. **Reindex extension** — `llmwiki reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` from sidecars.
+6. **Reindex extension** — `alexandria reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` from sidecars.
 
 ### Tests
 
@@ -377,7 +377,7 @@ User runs `llmwiki ingest research/docs/intro.md` (a real file in their workspac
 - E2E via Claude Code: agent asks "why do we believe X" → MCP `why` tool returns the chain → agent renders it for the user.
 
 ### Demoable end state
-User ingests two papers that disagree. They run `llmwiki why "OAuth refresh endpoint"` and see both the current belief and the prior superseded belief, each with the verbatim source quote and a `verified_against_source: true` flag. They can then run `llmwiki beliefs verify` to re-check every quote anchor against the live raw files.
+User ingests two papers that disagree. They run `alexandria why "OAuth refresh endpoint"` and see both the current belief and the prior superseded belief, each with the verbatim source quote and a `verified_against_source: true` flag. They can then run `alexandria beliefs verify` to re-check every quote anchor against the live raw files.
 
 ### Phase exit criteria
 - Every wiki write from Phase 2 onward now also produces beliefs.
@@ -424,8 +424,8 @@ User ingests two papers that disagree. They run `llmwiki why "OAuth refresh endp
 7. **Secret vault** (from `18_secrets_and_hooks.md`) — minimum viable
    - `secrets/vault.py`: AES-256-GCM via `cryptography`, master key from OS keyring via `keyring` package.
    - `secrets/resolver.py`: cached resolver injected into adapters.
-   - `LLMWIKI_VAULT_PASSPHRASE` env var fallback for headless servers.
-   - `llmwiki secrets set <ref>`, `secrets list`, `secrets verify <ref>`.
+   - `ALEXANDRIA_VAULT_PASSPHRASE` env var fallback for headless servers.
+   - `alexandria secrets set <ref>`, `secrets list`, `secrets verify <ref>`.
    - **Rotation, revocation, audit log come in Phase 11** to keep this phase focused.
 
 8. **MCP tools added in this phase**
@@ -435,10 +435,10 @@ User ingests two papers that disagree. They run `llmwiki why "OAuth refresh endp
    - `sources` (read-only adapter listing)
 
 9. **CLI commands**
-   - `llmwiki source add <type> --workspace <slug>` (interactive prompts for config)
-   - `llmwiki source list`
-   - `llmwiki source remove <id>`
-   - `llmwiki sync [<source-id>]`
+   - `alexandria source add <type> --workspace <slug>` (interactive prompts for config)
+   - `alexandria source list`
+   - `alexandria source remove <id>`
+   - `alexandria sync [<source-id>]`
 
 ### Tests
 
@@ -447,7 +447,7 @@ User ingests two papers that disagree. They run `llmwiki why "OAuth refresh endp
 - E2E: full workflow — `source add github`, `sync`, `events`, ingest something based on the events.
 
 ### Demoable end state
-User runs `llmwiki source add github --workspace research`, enters their PAT (stored encrypted), enters the repo `acme/web-app`. Then `llmwiki sync`. Then opens Claude Code and asks *"summarize the auth refactor PRs from the last week"* — Claude Code calls `events(workspace=research, source=github, refs_contains=auth, since=7d)`, gets the matching PRs, follows the refs to the related commits via `git_log`, synthesizes the answer.
+User runs `alexandria source add github --workspace research`, enters their PAT (stored encrypted), enters the repo `acme/web-app`. Then `alexandria sync`. Then opens Claude Code and asks *"summarize the auth refactor PRs from the last week"* — Claude Code calls `events(workspace=research, source=github, refs_contains=auth, since=7d)`, gets the matching PRs, follows the refs to the related commits via `git_log`, synthesizes the answer.
 
 ### Phase exit criteria
 - Real GitHub API hits work with rate limiting and circuit breakers.
@@ -479,11 +479,11 @@ User runs `llmwiki source add github --workspace research`, enters their PAT (st
 4. **MCP `subscriptions` tool** — read-only listing of pending items.
 
 5. **CLI commands**
-   - `llmwiki subscriptions list`
-   - `llmwiki subscriptions show <id>`
-   - `llmwiki subscriptions ingest [filter]`
-   - `llmwiki subscriptions dismiss <id>`
-   - `llmwiki subscriptions poll`
+   - `alexandria subscriptions list`
+   - `alexandria subscriptions show <id>`
+   - `alexandria subscriptions ingest [filter]`
+   - `alexandria subscriptions dismiss <id>`
+   - `alexandria subscriptions poll`
 
 ### Tests
 
@@ -493,7 +493,7 @@ User runs `llmwiki source add github --workspace research`, enters their PAT (st
 - E2E: full sub flow.
 
 ### Demoable end state
-User runs `llmwiki source add rss https://simonwillison.net/atom/everything/`, then `llmwiki sync`. Then `llmwiki subscriptions list` shows new items. They open Claude Code and ask *"summarize the new posts from this week"* — Claude Code calls `subscriptions` and `read`, synthesizes.
+User runs `alexandria source add rss https://simonwillison.net/atom/everything/`, then `alexandria sync`. Then `alexandria subscriptions list` shows new items. They open Claude Code and ask *"summarize the new posts from this week"* — Claude Code calls `subscriptions` and `read`, synthesizes.
 
 ### Phase exit criteria
 - Real RSS fetches work.
@@ -504,7 +504,7 @@ User runs `llmwiki source add rss https://simonwillison.net/atom/everything/`, t
 
 ## Phase 6 — Daemon and scheduling (~2.5 weeks)
 
-**Goal:** the optional `llmwiki daemon` runs scheduled syncs, polls subscriptions, hosts the MCP HTTP server, and produces structured logs with run_id correlation.
+**Goal:** the optional `alexandria daemon` runs scheduled syncs, polls subscriptions, hosts the MCP HTTP server, and produces structured logs with run_id correlation.
 
 ### Deliverables
 
@@ -529,26 +529,26 @@ User runs `llmwiki source add rss https://simonwillison.net/atom/everything/`, t
    - Every log line has `run_id`, `workspace`, `layer`, `event`, `level`.
    - `observability/logger.py`: structured logger that emits to the right log family.
 
-6. **`llmwiki status --json`** — full operational dashboard (the JSON shape from `17_observability.md`).
+6. **`alexandria status --json`** — full operational dashboard (the JSON shape from `17_observability.md`).
 
-7. **`llmwiki doctor`** — health checks with actionable remediation.
+7. **`alexandria doctor`** — health checks with actionable remediation.
 
-8. **`llmwiki logs show <run_id>`** — merged log view.
+8. **`alexandria logs show <run_id>`** — merged log view.
 
 9. **CLI commands**
-   - `llmwiki daemon start | stop | status`
-   - `llmwiki status --json --watch`
-   - `llmwiki doctor`
-   - `llmwiki logs show <run_id>`
+   - `alexandria daemon start | stop | status`
+   - `alexandria status --json --watch`
+   - `alexandria doctor`
+   - `alexandria logs show <run_id>`
 
 ### Tests
 
 - Unit: scheduler logic, IPC protocol, log emitter.
 - Integration: spawn daemon in a subprocess, verify children start, verify scheduled job fires, kill a child, verify restart, assert orphan sweep on startup transitions stale runs.
-- E2E: full daemon lifecycle with real adapters scheduled at 1-minute cadence; observe logs land; observe `llmwiki status --json` reflects state; observe `doctor` reports health.
+- E2E: full daemon lifecycle with real adapters scheduled at 1-minute cadence; observe logs land; observe `alexandria status --json` reflects state; observe `doctor` reports health.
 
 ### Demoable end state
-User runs `llmwiki daemon start`. Behind the scenes, the scheduler polls their RSS feeds every 4 hours, syncs their git repos every 5 minutes, and the MCP HTTP server is reachable at `http://localhost:7219/mcp`. They can run `llmwiki status` to see everything. They can `llmwiki doctor` to validate.
+User runs `alexandria daemon start`. Behind the scenes, the scheduler polls their RSS feeds every 4 hours, syncs their git repos every 5 minutes, and the MCP HTTP server is reachable at `http://localhost:7219/mcp`. They can run `alexandria status` to see everything. They can `alexandria doctor` to validate.
 
 ### Phase exit criteria
 - Daemon runs reliably for 24 hours continuous in CI.
@@ -579,21 +579,21 @@ User runs `llmwiki daemon start`. Behind the scenes, the scheduler polls their R
 
 3. **Hook installer** (from `18_secrets_and_hooks.md`)
    - `hooks/installer/claude_code.py`, `hooks/installer/codex.py`.
-   - `_llmwiki_managed: true` marker tagging.
+   - `_alexandria_managed: true` marker tagging.
    - Hook scripts: `hooks/scripts/claude-code-stop.sh`, `claude-code-precompact.sh`, `codex-stop.sh`, `codex-precompact.sh`.
-   - Scripts call `llmwiki capture conversation --detach`.
+   - Scripts call `alexandria capture conversation --detach`.
 
 4. **`capture_queue` table** for concurrent-session serialization (from `18_secrets_and_hooks.md`).
 
 5. **CLI commands**
-   - `llmwiki capture conversation [--detach]`
-   - `llmwiki captures list`
-   - `llmwiki captures purge --before <date>`
-   - `llmwiki hooks install <client>`
-   - `llmwiki hooks uninstall <client>`
-   - `llmwiki hooks verify [<client>]`
-   - `llmwiki hooks list`
-   - `llmwiki hooks status`
+   - `alexandria capture conversation [--detach]`
+   - `alexandria captures list`
+   - `alexandria captures purge --before <date>`
+   - `alexandria hooks install <client>`
+   - `alexandria hooks uninstall <client>`
+   - `alexandria hooks verify [<client>]`
+   - `alexandria hooks list`
+   - `alexandria hooks status`
 
 ### Tests
 
@@ -603,7 +603,7 @@ User runs `llmwiki daemon start`. Behind the scenes, the scheduler polls their R
 - E2E: spawn an MCP client subprocess, make tool calls, verify `mcp_session_log` rows land.
 
 ### Demoable end state
-User runs `llmwiki hooks install claude-code`, restarts Claude Code, has a session. After Stop fires, `llmwiki captures list` shows the captured session. `llmwiki why "anything from this session"` finds it.
+User runs `alexandria hooks install claude-code`, restarts Claude Code, has a session. After Stop fires, `alexandria captures list` shows the captured session. `alexandria why "anything from this session"` finds it.
 
 ### Phase exit criteria
 - Hooks install/uninstall/verify works end-to-end.
@@ -632,12 +632,12 @@ User runs `llmwiki hooks install claude-code`, restarts Claude Code, has a sessi
    - Drafts land at `wiki/timeline/<period>.md` with `draft: true` frontmatter.
 
 3. **CLI commands**
-   - `llmwiki llm list | add | test | cost`
-   - `llmwiki synthesize` (manual one-shot)
-   - `llmwiki synthesize enable | disable | pause | resume` (schedule control)
-   - `llmwiki synthesize rollback <run_id>`
-   - `llmwiki synthesize review`
-   - `llmwiki synthesize --dry-run` (preview cost before running)
+   - `alexandria llm list | add | test | cost`
+   - `alexandria synthesize` (manual one-shot)
+   - `alexandria synthesize enable | disable | pause | resume` (schedule control)
+   - `alexandria synthesize rollback <run_id>`
+   - `alexandria synthesize review`
+   - `alexandria synthesize --dry-run` (preview cost before running)
 
 4. **Caching strategy** (from `11_inference_endpoint.md`)
    - Stable `tools → system → messages` prefix construction.
@@ -653,7 +653,7 @@ User runs `llmwiki hooks install claude-code`, restarts Claude Code, has a sessi
 - Integration: rollback a committed synthesis run → git revert + state cleanup.
 
 ### Demoable end state
-User has been running llmwiki for a week with sources configured. They run `llmwiki synthesize enable --workspace research`. The next Sunday at 03:00 the daemon spawns a synthesis run, produces `wiki/timeline/2026-w16.md`, the verifier checks it, it commits. Monday morning the user reads the digest. They can `llmwiki synthesize review` to see drafts and `llmwiki synthesize rollback <run_id>` if they don't like one.
+User has been running alexandria for a week with sources configured. They run `alexandria synthesize enable --workspace research`. The next Sunday at 03:00 the daemon spawns a synthesis run, produces `wiki/timeline/2026-w16.md`, the verifier checks it, it commits. Monday morning the user reads the digest. They can `alexandria synthesize review` to see drafts and `alexandria synthesize rollback <run_id>` if they don't like one.
 
 ### Phase exit criteria
 - Scheduled synthesis runs unattended and reliably.
@@ -682,14 +682,14 @@ User has been running llmwiki for a week with sources configured. They run `llmw
 
 3. **Capability floor test fixtures** — 10 curated source documents shipped at `tests/fixtures/floor/`.
 
-4. **Daemon-startup floor warning** — when the configured preset's floor score is degraded or untested, log a warning and surface in `llmwiki status`.
+4. **Daemon-startup floor warning** — when the configured preset's floor score is degraded or untested, log a warning and surface in `alexandria status`.
 
 5. **CLI commands**
-   - `llmwiki eval run [--metric M1|M2|...|all]`
-   - `llmwiki eval report [--since 30d]`
-   - `llmwiki eval gold add | list | import <file>`
-   - `llmwiki eval ack <metric> --reason "..."`
-   - `llmwiki eval floor --preset <name>`
+   - `alexandria eval run [--metric M1|M2|...|all]`
+   - `alexandria eval report [--since 30d]`
+   - `alexandria eval gold add | list | import <file>`
+   - `alexandria eval ack <metric> --reason "..."`
+   - `alexandria eval floor --preset <name>`
 
 6. **Synthesis gating** — the synthesis worker checks M1/M2 health before every run; broken metric blocks unless `--force` is passed.
 
@@ -701,7 +701,7 @@ User has been running llmwiki for a week with sources configured. They run `llmw
 - E2E: capability floor test against Sonnet (real Anthropic call, small budget).
 
 ### Demoable end state
-User runs `llmwiki eval run --metric M1` and gets `M1: 0.97 (healthy)`. They run `llmwiki eval report --since 30d` and see trend lines for all five metrics. They deliberately break a citation and re-run M1; they see it drop to 0.84 (broken) and synthesis is now blocked.
+User runs `alexandria eval run --metric M1` and gets `M1: 0.97 (healthy)`. They run `alexandria eval report --since 30d` and see trend lines for all five metrics. They deliberately break a citation and re-run M1; they see it drop to 0.84 (broken) and synthesis is now blocked.
 
 ### Phase exit criteria
 - All five metrics produce real scores against real fixtures.
@@ -720,9 +720,9 @@ User runs `llmwiki eval run --metric M1` and gets `M1: 0.97 (healthy)`. They run
 
 1. **OAuth flow framework**
    - `secrets/oauth.py`: local-callback OAuth client.
-   - `llmwiki auth register <provider>` — store client credentials.
-   - `llmwiki auth login <provider>` — interactive OAuth flow.
-   - `llmwiki auth list`, `auth revoke`.
+   - `alexandria auth register <provider>` — store client credentials.
+   - `alexandria auth login <provider>` — interactive OAuth flow.
+   - `alexandria auth list`, `auth revoke`.
 
 2. **Google Calendar adapter** (`adapters/calendar.py`) — sync token incremental polling.
 
@@ -757,20 +757,20 @@ User configures Calendar + Gmail + Slack + Notion for their `customer-acme` work
 ### Deliverables
 
 1. **Backup and restore** (from `16_operations_and_reliability.md`)
-   - `llmwiki backup create [--output <path>]`
-   - `llmwiki backup restore <archive>`
+   - `alexandria backup create [--output <path>]`
+   - `alexandria backup restore <archive>`
    - Atomic SQLite snapshot via `sqlite3_backup_init`, git bundle for wiki history.
 
-2. **FTS5 integrity** — `llmwiki reindex --fts-verify`, `--fts-rebuild`, daemon-startup check.
+2. **FTS5 integrity** — `alexandria reindex --fts-verify`, `--fts-rebuild`, daemon-startup check.
 
 3. **Schema migration robustness** — auto-backup before every migration, downgrade refuses, tampered checksum aborts.
 
-4. **Crash dumps** — on unhandled exceptions, write `~/.llmwiki/crashes/<timestamp>.txt` with traceback and state snapshot.
+4. **Crash dumps** — on unhandled exceptions, write `~/.alexandria/crashes/<timestamp>.txt` with traceback and state snapshot.
 
 5. **Secret rotation, revocation, audit log** (full version from `18_secrets_and_hooks.md`)
-   - `llmwiki secrets rotate <ref>`
-   - `llmwiki secrets revoke <ref>`
-   - `llmwiki secrets reveal <ref> --confirm`
+   - `alexandria secrets rotate <ref>`
+   - `alexandria secrets revoke <ref>`
+   - `alexandria secrets reveal <ref> --confirm`
    - 7-day backup of rotated secrets.
    - `_audit.jsonl` for every sensitive operation.
 
@@ -791,7 +791,7 @@ User configures Calendar + Gmail + Slack + Notion for their `customer-acme` work
 
 ## Phase 12 — Documentation, packaging, release (~1 week)
 
-**Goal:** v1.0.0 ready for `pip install llmwiki`.
+**Goal:** v1.0.0 ready for `pip install alexandria`.
 
 ### Deliverables
 
@@ -800,10 +800,10 @@ User configures Calendar + Gmail + Slack + Notion for their `customer-acme` work
 3. **`pyproject.toml` polish** — version 1.0.0, classifiers, keywords, project URLs.
 4. **Release notes** (`CHANGELOG.md`).
 5. **CI/CD setup** — GitHub Actions running unit + integration on every PR, e2e nightly.
-6. **Tag and publish** to PyPI under `llmwiki`.
+6. **Tag and publish** to PyPI under `alexandria`.
 
 ### Phase exit criteria
-- A fresh user can `pip install llmwiki` and follow GETTING_STARTED.md to a working setup.
+- A fresh user can `pip install alexandria` and follow GETTING_STARTED.md to a working setup.
 - All architecture docs match the shipped code.
 - **Three-agent review passes — final approval.**
 

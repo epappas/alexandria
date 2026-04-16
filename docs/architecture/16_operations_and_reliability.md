@@ -4,7 +4,7 @@
 
 ## Scope
 
-This doc covers the **operational infrastructure** that keeps llmwiki trustworthy in production: daemon supervision, schema migrations, source-run state machines, rate limiting, circuit breakers, backup/restore, and FTS5 integrity. The *observability* for these systems lives in `17_observability.md`. The *secrets management* and *hook lifecycle* live in `18_secrets_and_hooks.md`.
+This doc covers the **operational infrastructure** that keeps alexandria trustworthy in production: daemon supervision, schema migrations, source-run state machines, rate limiting, circuit breakers, backup/restore, and FTS5 integrity. The *observability* for these systems lives in `17_observability.md`. The *secrets management* and *hook lifecycle* live in `18_secrets_and_hooks.md`.
 
 Every concern in this doc maps to a specific mlops-engineer critique or recommendation. DRY: each concern has exactly one home.
 
@@ -12,12 +12,12 @@ Every concern in this doc maps to a specific mlops-engineer critique or recommen
 
 **Closes:** mlops #4, recommendation on splitting the daemon.
 
-The current `02_system_architecture.md` describes one `llmwiki daemon` process doing scheduler, pollers, ingestion workers, webhook receivers, MCP HTTP server, and the web UI. A crash anywhere takes the whole thing down. The fix is a **supervised-subprocess model** with a thin parent process owning lifecycle and IPC.
+The current `02_system_architecture.md` describes one `alexandria daemon` process doing scheduler, pollers, ingestion workers, webhook receivers, MCP HTTP server, and the web UI. A crash anywhere takes the whole thing down. The fix is a **supervised-subprocess model** with a thin parent process owning lifecycle and IPC.
 
 ### Process topology
 
 ```
-llmwiki daemon (parent)
+alexandria daemon (parent)
 ├── scheduler          (apscheduler loop; picks the next job)
 ├── adapter_workers    (pool of K processes; one job each)
 ├── synthesis_worker   (isolated; scheduled temporal synthesis only)
@@ -91,21 +91,21 @@ DELETE FROM daemon_heartbeats;
 
 The sweep runs inside a single transaction. After the sweep, the parent starts its children. No child ever sees a stale `running` state. The sweep is idempotent: re-running it on an already-clean database is a no-op.
 
-For synthesis runs specifically, the sweep additionally moves `runs/<run_id>/staged/` to `runs/<run_id>/failed/` so the filesystem state matches the SQLite state. Staged runs that crash mid-verify are not resumed — the user sees them in `llmwiki synthesize review` and decides whether to retry.
+For synthesis runs specifically, the sweep additionally moves `runs/<run_id>/staged/` to `runs/<run_id>/failed/` so the filesystem state matches the SQLite state. Staged runs that crash mid-verify are not resumed — the user sees them in `alexandria synthesize review` and decides whether to retry.
 
 ### Concurrent writers on the same workspace — the llm-architect §2.7 question
 
 Two MCP clients bind the same workspace and both try to `write` at once:
 
 1. **SQLite writes are serialized by WAL mode.** Two simultaneous writes get one immediate execution and one brief blocking wait; neither corrupts anything.
-2. **Filesystem writes are serialized by a per-workspace file lock.** The guardian acquires `~/.llmwiki/workspaces/<slug>/.lock` (an `fcntl` advisory lock) before staging any run. Second writer waits up to 30 seconds; past that, the MCP tool returns `workspace_busy` and the caller decides whether to retry.
+2. **Filesystem writes are serialized by a per-workspace file lock.** The guardian acquires `~/.alexandria/workspaces/<slug>/.lock` (an `fcntl` advisory lock) before staging any run. Second writer waits up to 30 seconds; past that, the MCP tool returns `workspace_busy` and the caller decides whether to retry.
 3. **Cross-session deduplication via session_id.** When the conversation-capture adapter (`12_conversation_capture.md`) processes two transcripts from the same session simultaneously (e.g., after a restart), the `session_lock` table enforces serial processing per `session_id`.
 
 First writer wins, second waits or fails loud. No silent races. The invariant is: **every commit to `wiki/` happens inside a file-locked run**, and the lock release and the git commit are the last two steps of the commit transaction.
 
 ## 2. Schema migrations framework
 
-**Closes:** mlops #3, recommendation on `llmwiki db migrate`.
+**Closes:** mlops #3, recommendation on `alexandria db migrate`.
 
 ### The `schema_migrations` table
 
@@ -129,7 +129,7 @@ VALUES (0, 'bootstrap', 'builtin', '', '2026-01-01T00:00:00Z', 'builtin');
 ### Migration files
 
 ```
-llmwiki/migrations/
+alexandria/migrations/
 ├── 0001_initial.sql
 ├── 0002_add_events.sql
 ├── 0003_add_runs_and_verifier.sql
@@ -142,23 +142,23 @@ llmwiki/migrations/
 
 Files are **ordered, immutable, and checksummed**. A migration file that has been applied (its sha256 is in the table) and then edited later will fail the daemon startup check with a `migration tampered` error. The only way to fix a broken migration is to write a new one that corrects the damage.
 
-### `llmwiki db migrate`
+### `alexandria db migrate`
 
 ```
-llmwiki db migrate                    # apply all pending migrations
-llmwiki db migrate --target 0005      # apply through version 5 only
-llmwiki db migrate --dry-run          # show what would run
-llmwiki db status                     # current version + pending list
-llmwiki db downgrade --target <v>     # not supported — returns an error pointing to backup/restore
+alexandria db migrate                    # apply all pending migrations
+alexandria db migrate --target 0005      # apply through version 5 only
+alexandria db migrate --dry-run          # show what would run
+alexandria db status                     # current version + pending list
+alexandria db downgrade --target <v>     # not supported — returns an error pointing to backup/restore
 ```
 
 **Workflow:**
 
-1. `llmwiki db migrate` opens the SQLite file.
+1. `alexandria db migrate` opens the SQLite file.
 2. Reads `MAX(version) FROM schema_migrations` — call it `current`.
-3. Scans `llmwiki/migrations/` for files with version > `current`, sorted ascending.
+3. Scans `alexandria/migrations/` for files with version > `current`, sorted ascending.
 4. For each pending migration:
-   - **Take a named backup** to `~/.llmwiki/db/backups/pre-migration-YYYYMMDD-HHMMSS-v<N>.db` via `sqlite3_backup_init` (not file copy — WAL-safe).
+   - **Take a named backup** to `~/.alexandria/db/backups/pre-migration-YYYYMMDD-HHMMSS-v<N>.db` via `sqlite3_backup_init` (not file copy — WAL-safe).
    - Compute the script sha256.
    - Execute the script inside a `BEGIN IMMEDIATE` transaction.
    - Insert the `schema_migrations` row.
@@ -168,18 +168,18 @@ llmwiki db downgrade --target <v>     # not supported — returns an error point
 
 ### Auto-migration on daemon startup
 
-By default, the parent process runs `llmwiki db migrate` before starting any children. The user can opt out with `[daemon] auto_migrate = false` in `config.toml`, which causes the daemon to refuse to start on a version mismatch and require an explicit `llmwiki db migrate` run.
+By default, the parent process runs `alexandria db migrate` before starting any children. The user can opt out with `[daemon] auto_migrate = false` in `config.toml`, which causes the daemon to refuse to start on a version mismatch and require an explicit `alexandria db migrate` run.
 
 ### Downgrade policy
 
 **Downgrade is not supported in-place.** Rolling back a schema change on a live SQLite database with application data is a landmine. Instead, the user:
 
 1. Stops the daemon.
-2. Restores the backup from `~/.llmwiki/db/backups/`.
+2. Restores the backup from `~/.alexandria/db/backups/`.
 3. Installs the older binary version.
 4. Starts the daemon.
 
-This is documented explicitly in `llmwiki db status` output when the current schema version is ahead of the installed binary's expected version.
+This is documented explicitly in `alexandria db status` output when the current schema version is ahead of the installed binary's expected version.
 
 ## 3. Rate limiter and circuit breakers
 
@@ -253,7 +253,7 @@ Failure definition per adapter:
 
 ### Visible status
 
-Both rate limiter and circuit breakers expose their state via `llmwiki status` (see `17_observability.md`). A user who sees *"GitHub rate-limited, retry in 00:14:22"* knows exactly what is happening.
+Both rate limiter and circuit breakers expose their state via `alexandria status` (see `17_observability.md`). A user who sees *"GitHub rate-limited, retry in 00:14:22"* knows exactly what is happening.
 
 ### No waiting forever
 
@@ -261,21 +261,21 @@ If a caller blocks on `rate_limiter.acquire` for more than 60 seconds, the call 
 
 ## 4. Backup and restore
 
-**Closes:** mlops recommendation on `llmwiki backup create|restore`, mlops #1 on event-layer backup.
+**Closes:** mlops recommendation on `alexandria backup create|restore`, mlops #1 on event-layer backup.
 
-### `llmwiki backup create`
+### `alexandria backup create`
 
 ```
-llmwiki backup create [--output <path>] [--workspace <slug>] [--include-secrets]
+alexandria backup create [--output <path>] [--workspace <slug>] [--include-secrets]
 ```
 
 Produces a timestamped tar.gz containing:
 
 ```
-llmwiki-backup-<timestamp>/
+alexandria-backup-<timestamp>/
 ├── manifest.json           # version, checksum, creation time
 ├── db/
-│   └── llmwiki.sqlite       # via sqlite3 .backup — WAL-safe, consistent snapshot
+│   └── alexandria.sqlite       # via sqlite3 .backup — WAL-safe, consistent snapshot
 ├── workspaces/
 │   └── <slug>/
 │       ├── raw/              # direct copy
@@ -293,28 +293,28 @@ The SQLite snapshot uses `sqlite3_backup_init` (API call, not file copy) to get 
 
 Secrets are **excluded by default** — restoring a backup on a new machine won't decrypt them anyway because the OS-keyring-derived key differs. Users with `passphrase` mode (see `18_secrets_and_hooks.md`) can include secrets with `--include-secrets` and re-enter the passphrase on restore.
 
-### `llmwiki backup restore`
+### `alexandria backup restore`
 
 ```
-llmwiki backup restore <archive-path> [--into <dir>] [--dry-run]
+alexandria backup restore <archive-path> [--into <dir>] [--dry-run]
 ```
 
-- Refuses to run over a non-empty `~/.llmwiki/` unless `--into` points to a different directory.
+- Refuses to run over a non-empty `~/.alexandria/` unless `--into` points to a different directory.
 - Verifies the manifest checksum before unpacking.
-- Unpacks workspaces, runs `llmwiki db migrate` against the restored SQLite to bring it to the current binary's schema version, and re-runs `llmwiki reindex --fts-rebuild` to re-construct FTS indexes.
+- Unpacks workspaces, runs `alexandria db migrate` against the restored SQLite to bring it to the current binary's schema version, and re-runs `alexandria reindex --fts-rebuild` to re-construct FTS indexes.
 - Does NOT re-fetch events from source APIs. Events in the backup are all you get. The restore docs say so plainly.
 
 ### What the backup does NOT protect against
 
 **Event-layer retention at the source** (mlops #1). If your SQLite is lost AND your latest backup is older than 30 days, your GitHub events older than 30 days are permanently gone — the GitHub Events API cap (verified in `research/raw/33_github_events_api.md`) cannot recover them. The same applies to Slack free tier (90-day access), Gmail history (7-day sliding window), and similar sources.
 
-The backup is your **actual** event-layer backup window. Users who care about event history run `llmwiki backup create` on a cron — typically daily:
+The backup is your **actual** event-layer backup window. Users who care about event history run `alexandria backup create` on a cron — typically daily:
 
 ```cron
-0 3 * * * /usr/local/bin/llmwiki backup create --output /backup/llmwiki-$(date +\%Y\%m\%d).tar.gz
+0 3 * * * /usr/local/bin/alexandria backup create --output /backup/alexandria-$(date +\%Y\%m\%d).tar.gz
 ```
 
-The `llmwiki status` output surfaces *"last backup: N days ago"* so the user notices drift.
+The `alexandria status` output surfaces *"last backup: N days ago"* so the user notices drift.
 
 ## 5. FTS5 integrity verification
 
@@ -331,7 +331,7 @@ The `llmwiki status` output surfaces *"last backup: N days ago"* so the user not
 
 Any of these produce silent result corruption — searches return wrong or missing rows with no error.
 
-### `llmwiki reindex --fts-verify`
+### `alexandria reindex --fts-verify`
 
 ```python
 def fts_verify() -> FtsVerifyReport:
@@ -348,7 +348,7 @@ def fts_verify() -> FtsVerifyReport:
     return FtsVerifyReport(status='ok', rows=content_count)
 ```
 
-### `llmwiki reindex --fts-rebuild`
+### `alexandria reindex --fts-rebuild`
 
 Runs `INSERT INTO documents_fts(documents_fts) VALUES('rebuild')` — the built-in FTS5 rebuild command — which is O(N) but correct. Works for both `documents_fts` and `events_fts`.
 
@@ -357,27 +357,27 @@ Runs `INSERT INTO documents_fts(documents_fts) VALUES('rebuild')` — the built-
 On every parent-process startup, after migrations but before starting children, the parent runs `fts_verify()`. If the result is `mismatch` or `incomplete_fts`:
 
 1. Write a warning to `daemon-YYYY-MM-DD.jsonl`.
-2. Mark FTS as `degraded` in `llmwiki status`.
+2. Mark FTS as `degraded` in `alexandria status`.
 3. Start children anyway (FTS is for search; search still functions degraded).
 4. Schedule a background `fts_rebuild` via the scheduler, single-threaded, low priority.
 5. On rebuild completion, clear the `degraded` flag and log success.
 
-The user sees the degradation in `llmwiki status` and knows a rebuild is in flight. They can query the wiki during rebuild; search will be slow and incomplete until rebuild completes.
+The user sees the degradation in `alexandria status` and knows a rebuild is in flight. They can query the wiki during rebuild; search will be slow and incomplete until rebuild completes.
 
 ## 6. Kill switches for synthesis
 
 **Closes:** mlops #9 on kill switches.
 
-### `llmwiki synthesize pause|resume`
+### `alexandria synthesize pause|resume`
 
 ```
-llmwiki synthesize pause [--workspace <slug>]    # creates ~/.llmwiki/.disable-synthesis[-<slug>]
-llmwiki synthesize resume [--workspace <slug>]   # removes the sentinel
+alexandria synthesize pause [--workspace <slug>]    # creates ~/.alexandria/.disable-synthesis[-<slug>]
+alexandria synthesize resume [--workspace <slug>]   # removes the sentinel
 ```
 
 The scheduler checks for the sentinel file **before every synthesis run**, not just at daemon start. A paused synthesis survives daemon restart, survives schema migrations, survives reboot. The only way to resume is an explicit resume command (or deleting the file manually).
 
-### `llmwiki synthesize rollback <run_id>`
+### `alexandria synthesize rollback <run_id>`
 
 Reverts a committed synthesis run:
 
@@ -389,7 +389,7 @@ Reverts a committed synthesis run:
 
 Rollback is a write operation — it goes through the same staged-write mechanism as any other write. The "rollback" is itself a run with `run_type = 'rollback'`.
 
-### `llmwiki synthesize review`
+### `alexandria synthesize review`
 
 Lists synthesis runs in states `pending`, `verifying`, `rejected`, or `committed` (last 30 days), with:
 
@@ -398,7 +398,7 @@ Lists synthesis runs in states `pending`, `verifying`, `rejected`, or `committed
 - pages touched
 - user action needed
 
-The user can `llmwiki synthesize review <run_id>` for full details, or `llmwiki synthesize accept|reject|retry <run_id>` for action.
+The user can `alexandria synthesize review <run_id>` for full details, or `alexandria synthesize accept|reject|retry <run_id>` for action.
 
 ## SOLID application
 
@@ -426,7 +426,7 @@ The user can `llmwiki synthesize review <run_id>` for full details, or `llmwiki 
 
 ## What this doc does NOT cover
 
-- **Log correlation, `llmwiki status --json`, crash dumps, `llmwiki doctor`** — `17_observability.md`.
+- **Log correlation, `alexandria status --json`, crash dumps, `alexandria doctor`** — `17_observability.md`.
 - **Secrets management, hook install/uninstall, concurrent session locks** — `18_secrets_and_hooks.md`.
 - **The runs table and verifier state machine** — `13_hostile_verifier.md`.
 - **Evaluation metrics and the freeze clause** — `14_evaluation_scaffold.md`.

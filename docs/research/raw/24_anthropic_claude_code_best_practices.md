@@ -33,13 +33,13 @@ This is the explicit Anthropic prescription for how retrieval should work: the a
 
 > "Keep it concise. For each line, ask: 'Would removing this cause Claude to make mistakes?' If not, cut it. Bloated CLAUDE.md files cause Claude to ignore your actual instructions!"
 
-This is the direct analogue of llmwiki's `SKILL.md` + `guide()` tool: a stable orientation document the agent reads at session start. And the warning is critical: orientation docs that grow unbounded stop being read. We enforce brevity in our SKILL.md for the same reason.
+This is the direct analogue of alexandria's `SKILL.md` + `guide()` tool: a stable orientation document the agent reads at session start. And the warning is critical: orientation docs that grow unbounded stop being read. We enforce brevity in our SKILL.md for the same reason.
 
 ## Explore → plan → execute (verbatim)
 
 > "Letting Claude jump straight to coding can produce code that solves the wrong problem. Use Plan Mode to separate exploration from execution."
 
-The four-phase workflow: **Explore → Plan → Implement → Commit**. Applied to llmwiki query: **Explore (read overview, index, log) → Plan (decide which pages matter) → Synthesize (read + answer) → Log (append query to log.md if archived)**.
+The four-phase workflow: **Explore → Plan → Implement → Commit**. Applied to alexandria query: **Explore (read overview, index, log) → Plan (decide which pages matter) → Synthesize (read + answer) → Log (append query to log.md if archived)**.
 
 ## Subagents for investigation (verbatim)
 
@@ -53,7 +53,7 @@ Subagents **are the answer** to "my agent read 50 files and now its context is p
 
 > "**The infinite exploration.** You ask Claude to 'investigate' something without scoping it. Claude reads hundreds of files, filling the context. Fix: Scope investigations narrowly or use subagents so the exploration doesn't consume your main context."
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
 Claude Code is the working example of agentic retrieval over a filesystem. It reads, greps, lists, and follows its nose — with no embedding pipeline, no vector store, and no pre-chunked index. It works because:
 
@@ -61,4 +61,4 @@ Claude Code is the working example of agentic retrieval over a filesystem. It re
 2. **Orientation docs (CLAUDE.md) + navigation primitives + subagents** is a complete retrieval system. That's the trio.
 3. **Context management is the agent's job, and it's a hard problem.** The architecture should help the agent manage context: provide summaries at multiple levels (overview, index, per-topic summaries), support scoped reads (page ranges, sections), and expose subagent patterns.
 
-Everything in Claude Code's best practices transfers directly to llmwiki with a literal rename: codebase → workspace, CLAUDE.md → SKILL.md, Read/Grep/Glob → our `read`/`search`/`list` tools. The patterns that work for code work for knowledge, and Anthropic has published the playbook.
+Everything in Claude Code's best practices transfers directly to alexandria with a literal rename: codebase → workspace, CLAUDE.md → SKILL.md, Read/Grep/Glob → our `read`/`search`/`list` tools. The patterns that work for code work for knowledge, and Anthropic has published the playbook.

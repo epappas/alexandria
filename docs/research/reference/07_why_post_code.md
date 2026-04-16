@@ -18,7 +18,7 @@ The developer role flips from prompter to **curator + questioner**. The agent ha
 
 1. **Steph Ango (Obsidian CEO) on vault separation.** Don't let an agent write into the same vault you keep your personal notes in. The agent's output is high-velocity and noisy; your personal notes are low-velocity and ground-truth. Cross-contamination corrodes trust.
 
-   > *For us:* `~/.llmwiki/` lives separately from `~/notes/` or `~/Obsidian/`. When we integrate with an existing Obsidian vault, we read-only mount it as a source, and write wiki pages into our own isolated workspace.
+   > *For us:* `~/.alexandria/` lives separately from `~/notes/` or `~/Obsidian/`. When we integrate with an existing Obsidian vault, we read-only mount it as a source, and write wiki pages into our own isolated workspace.
 
 2. **Elvis Saravia (DAIR.AI).** Data structure is foundational — no amount of agent cleverness compensates for sloppy input.
 

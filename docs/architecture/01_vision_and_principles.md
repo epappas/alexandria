@@ -4,28 +4,28 @@
 
 ## Vision
 
-`llmwiki` is a **local-first, single-user Python knowledge engine**. It accumulates, structures, and serves the user's gathered knowledge — source documents, compiled wiki pages, event streams from projects and communications — so that the user can **retroactively query, retrieve, and review** everything they have ever fed into it, across months or years. The wiki lives on disk under `~/.llmwiki/` (configurable) so it is the user's data, period.
+`alexandria` is a **local-first, single-user Python knowledge engine**. It accumulates, structures, and serves the user's gathered knowledge — source documents, compiled wiki pages, event streams from projects and communications — so that the user can **retroactively query, retrieve, and review** everything they have ever fed into it, across months or years. The wiki lives on disk under `~/.alexandria/` (configurable) so it is the user's data, period.
 
 This is Karpathy's LLM Wiki pattern, operationalized as a personal tool. Not a SaaS.
 
-### The five capabilities llmwiki provides
+### The five capabilities alexandria provides
 
 1. **Ingestions** — pulling content in. Source adapters (local files, Obsidian, Notion, GitHub docs, arXiv papers, S3/Drive), subscription adapters (RSS/Atom, Substack, YouTube, newsletters via IMAP), and event-stream adapters (GitHub activity, Google Calendar, Gmail, Slack, Discord, cloud-storage changes). Raw material is captured, normalized, and stored with full provenance.
 2. **Knowledge structuring** — compiling that raw material into a persistent wiki. Concept pages, entity pages, cross-references, cited claims, cascade updates, scheduled temporal digests of event streams. The wiki accumulates and compounds.
 3. **Questions** — answering them against the accumulated knowledge. Not just "what do I know about X" but *"what did I learn about X last month"* and *"what has changed since Q1"* — the retroactive query is the load-bearing use case.
-4. **Explorations** — navigation primitives the agent composes into research workflows. `list`, `grep`, `search`, `read`, `follow`, `events`, `timeline`, `history`. The agent walks the knowledge; llmwiki gives it the primitives to walk with.
+4. **Explorations** — navigation primitives the agent composes into research workflows. `list`, `grep`, `search`, `read`, `follow`, `events`, `timeline`, `history`. The agent walks the knowledge; alexandria gives it the primitives to walk with.
 5. **Subscriptions** — continuously keeping the knowledge current. Feeds for blogs / newsletters / videos; event streams for project activity; all accumulating into the same store, all queryable retroactively.
 
-### llmwiki is a knowledge engine, not a coding agent
+### alexandria is a knowledge engine, not a coding agent
 
-llmwiki is **not** Claude Code, OpenCode, Cursor, Copilot, or any other interactive agent. Those tools already exist, they are excellent at what they do, and llmwiki has no interest in replacing them. llmwiki **is the knowledge engine those agents connect to via MCP** (`08_mcp_integration.md`). When you ask Claude Code "what happened on the auth refactor last month," Claude Code is the agent running the reasoning loop; llmwiki is the engine that supplies the history, the commits, the meeting notes, the Slack discussions, the compiled wiki pages, and the navigation primitives Claude Code uses to find the answer.
+alexandria is **not** Claude Code, OpenCode, Cursor, Copilot, or any other interactive agent. Those tools already exist, they are excellent at what they do, and alexandria has no interest in replacing them. alexandria **is the knowledge engine those agents connect to via MCP** (`08_mcp_integration.md`). When you ask Claude Code "what happened on the auth refactor last month," Claude Code is the agent running the reasoning loop; alexandria is the engine that supplies the history, the commits, the meeting notes, the Slack discussions, the compiled wiki pages, and the navigation primitives Claude Code uses to find the answer.
 
 The division of labor is sharp:
 
 - **The connected MCP agent** (Claude Code / Cursor / Claude.ai / Codex / Windsurf) runs the conversation, holds the user's attention, streams responses, renders tool calls, takes input. It is the interactive surface.
-- **llmwiki** accumulates knowledge, maintains structure, enforces citations, polls sources, ingests events, indexes everything for fast agentic retrieval, and serves it all through a precise MCP tool surface. It is the memory and the retrieval layer.
+- **alexandria** accumulates knowledge, maintains structure, enforces citations, polls sources, ingests events, indexes everything for fast agentic retrieval, and serves it all through a precise MCP tool surface. It is the memory and the retrieval layer.
 
-The one place llmwiki runs an LLM directly is **unattended background work** — scheduled temporal synthesis from event streams, scheduled lint, and CLI batch operations (`llmwiki synthesize`, `llmwiki lint --run`). That runner is a bounded, budgeted, opt-in mini agent loop with no user interaction, specified in `11_inference_endpoint.md`. Everything else happens in the connected client.
+The one place alexandria runs an LLM directly is **unattended background work** — scheduled temporal synthesis from event streams, scheduled lint, and CLI batch operations (`alexandria synthesize`, `alexandria lint --run`). That runner is a bounded, budgeted, opt-in mini agent loop with no user interaction, specified in `11_inference_endpoint.md`. Everything else happens in the connected client.
 
 ### Retroactive query is the load-bearing use case
 
@@ -38,7 +38,7 @@ The value of a knowledge engine is cumulative, not instantaneous. A fresh instal
 - Every compiled wiki page that synthesizes the above into durable concepts and entities.
 - Every weekly timeline digest that narrates the changes.
 
-The user can ask Claude Code: *"What did we decide about auth back in February?"* and Claude Code uses llmwiki's tools to walk the event stream (the meeting where it was decided, the Slack discussion leading to the decision, the PR that implemented it, the wiki page that summarized it at the time, the revision that changed it later) and returns a grounded, cited, temporally-correct answer. That is what the architecture is for.
+The user can ask Claude Code: *"What did we decide about auth back in February?"* and Claude Code uses alexandria's tools to walk the event stream (the meeting where it was decided, the Slack discussion leading to the decision, the PR that implemented it, the wiki page that summarized it at the time, the revision that changed it later) and returns a grounded, cited, temporally-correct answer. That is what the architecture is for.
 
 ### Implementation invariants
 
@@ -46,11 +46,11 @@ The user can ask Claude Code: *"What did we decide about auth back in February?"
 - Zero accounts, zero hosting.
 - Markdown files on disk are the source of truth for the document layer; SQLite is the source of truth for the event layer (see invariant 11).
 - A small local daemon (optional) runs scheduled syncs, subscription polls, event-stream ingestion, scheduled temporal synthesis, and the MCP server over HTTP.
-- The stdio MCP mode (`llmwiki mcp serve`) works without the daemon at all.
+- The stdio MCP mode (`alexandria mcp serve`) works without the daemon at all.
 
 ## Why this instead of RAG
 
-| RAG | llmwiki |
+| RAG | alexandria |
 |---|---|
 | Knowledge lives in embeddings | Knowledge lives in curated markdown |
 | Synthesis happens at query time | Synthesis happens at ingest + maintenance |
@@ -68,10 +68,10 @@ Personal-scale knowledge. Hundreds of sources per workspace, tens of workspaces 
 
 ## Workspaces — scoping knowledge
 
-The user has more than one body of knowledge. `llmwiki` recognizes two kinds:
+The user has more than one body of knowledge. `alexandria` recognizes two kinds:
 
-- **Global workspace** (`~/.llmwiki/workspaces/global/`) — the user's personal general knowledge. Always exists. Created at `llmwiki init`.
-- **Project workspaces** (`~/.llmwiki/workspaces/<name>/`) — one per project, customer, client, research topic, or any coherent body of work. Created with `llmwiki project create <name>`.
+- **Global workspace** (`~/.alexandria/workspaces/global/`) — the user's personal general knowledge. Always exists. Created at `alexandria init`.
+- **Project workspaces** (`~/.alexandria/workspaces/<name>/`) — one per project, customer, client, research topic, or any coherent body of work. Created with `alexandria project create <name>`.
 
 Each workspace is a self-contained `raw/` + `wiki/` + its own sources, subscriptions, and log. The agent operates on **one workspace at a time**. Workspace selection is an explicit user action, not a runtime guess. See `03_workspaces_and_scopes.md`.
 
@@ -88,13 +88,13 @@ No separate "memory" layer. The wiki **is** the memory. The log is the memory's 
 
 ## Retrieval is a tool, not a pipeline
 
-llmwiki does **not** use retrieval-augmented generation. There is no vector store, no pre-chunked embedding index, no top-k retrieval pipeline. This is a deliberate design commitment grounded in Anthropic's own published guidance and a survey-level reading of the 2025–2026 retrieval literature (see `research/reference/12_agentic_retrieval.md` and `research/reference/13_agentic_retrieval_design_space.md`).
+alexandria does **not** use retrieval-augmented generation. There is no vector store, no pre-chunked embedding index, no top-k retrieval pipeline. This is a deliberate design commitment grounded in Anthropic's own published guidance and a survey-level reading of the 2025–2026 retrieval literature (see `research/reference/12_agentic_retrieval.md` and `research/reference/13_agentic_retrieval_design_space.md`).
 
 The sharpest framing comes from the gist at `raw/26_*`:
 
 > *"Retrieval is becoming a tool, not a pipeline. The agent decides when to retrieve, from what index, using what strategy — and that decision is itself part of the reasoning loop."*
 
-llmwiki is **one retrieval tool among many** that an agent composes via MCP. The agent chooses when to call us, which of our primitives to use, and how to combine our output with other MCP tools (web search, other wikis, code search, etc.). We do not own the session and we do not pretend to be "the retrieval layer." We are a sharply-scoped navigation surface over a compiled personal wiki, exposed through MCP.
+alexandria is **one retrieval tool among many** that an agent composes via MCP. The agent chooses when to call us, which of our primitives to use, and how to combine our output with other MCP tools (web search, other wikis, code search, etc.). We do not own the session and we do not pretend to be "the retrieval layer." We are a sharply-scoped navigation surface over a compiled personal wiki, exposed through MCP.
 
 Anthropic, in *Building a multi-agent research system*:
 
@@ -106,13 +106,13 @@ Karpathy, in the tweet this project is based on:
 
 **The guardian agent is the retriever.** Our job is to expose good navigation primitives and get out of the way. The agent orients itself through `guide()`, navigates with `list` / `grep` / `search`, reads what it decides is worth the context cost, follows citations with `follow`, and synthesizes. When a question is too wide for one context window, it spawns a subagent — the same pattern Claude Code uses on codebases.
 
-This is not "we'll add vectors later when we scale." At the scale llmwiki targets (tens to a few thousand pages per workspace) the agent can reach every relevant page through navigation. Beyond that scale, the fix is better orientation documents and smarter subagent patterns, not a parallel vector pipeline.
+This is not "we'll add vectors later when we scale." At the scale alexandria targets (tens to a few thousand pages per workspace) the agent can reach every relevant page through navigation. Beyond that scale, the fix is better orientation documents and smarter subagent patterns, not a parallel vector pipeline.
 
 ## Invariants
 
 These rules make the wiki trustworthy. Every feature must preserve them.
 
-1. **Single user.** One OS user, one `~/.llmwiki/`. No tenancy, no auth, no sessions. If two people want two wikis, they use two machine accounts.
+1. **Single user.** One OS user, one `~/.alexandria/`. No tenancy, no auth, no sessions. If two people want two wikis, they use two machine accounts.
 2. **Raw immutability.** Once a source lands, its file is frozen. Re-sync creates a new version record, never mutates the existing file.
 3. **Agent cannot write raw.** Guardian has read access to `raw/` and read-write to `wiki/`. Enforced in the tool layer, not just the prompt.
 4. **Wiki pages cite sources.** Every factual claim uses a footnote citation `[^1]: filename, p.3`. Writes without citations fail validation (structural pages exempted).
@@ -123,28 +123,28 @@ These rules make the wiki trustworthy. Every feature must preserve them.
 9. **Vault separation.** The agent never writes into a source vault (Obsidian, Notion, Drive, git). Those are read-only sources. The wiki always lives in our store. (*Steph Ango's rule — see `reference/07_why_post_code.md`.*)
 10. **Determinism over autonomy where trust matters.** Lint auto-fixes are limited to unambiguous rules (broken links with a single candidate, missing index entries). Judgment calls (contradictions, stale claims) are reported, not silently "resolved."
 11. **Files first for the document layer; APIs-of-record for the event layer.** Two domains inside a workspace:
-    - **Document layer** (`raw/` + `wiki/`) — filesystem is the source of truth. SQLite is a materialized view. Deleting `~/.llmwiki/` and running `llmwiki reindex` reconstructs the SQLite state. The user can `git init` the directory, version it, Syncthing it, or open it in Obsidian.
+    - **Document layer** (`raw/` + `wiki/`) — filesystem is the source of truth. SQLite is a materialized view. Deleting `~/.alexandria/` and running `alexandria reindex` reconstructs the SQLite state. The user can `git init` the directory, version it, Syncthing it, or open it in Obsidian.
     - **Event layer** (SQLite `events` table family + derived digest files under `raw/timeline/`) — SQLite is the source of truth for the local copy. Events are born from API calls, not files. Reconstruction is via API replay from the source platforms, subject to per-platform retention limits (e.g., GitHub Events API's 30-day cap, Slack free tier's 90-day window — see `10_event_streams.md`).
     Both layers live under the same workspace; the agent reads each through different MCP tools and the wiki layer can cross-reference both.
 12. **Subscriptions are just scheduled sources.** A newsletter feed and a Twitter feed are flavors of source adapters with a poll cadence. No special-case code paths.
 13. **Agent-as-retriever.** No embedding pipeline. No vector index. No top-k retrieval. Retrieval is the agent's reasoning loop composed over navigation primitives (`guide`, `list`, `grep`, `search`, `read`, `follow`). If a problem can't be solved with those primitives + subagents, the fix is better primitives, not a parallel retrieval system.
-14. **llmwiki is a knowledge engine, not a coding agent.** Interactive conversations happen in connected MCP agents — Claude Code, Cursor, Claude.ai, Codex, Claude Desktop, Windsurf, Zed, OpenCode, Continue — not in llmwiki. Those tools already handle streaming, context management, user input, and tool-use rendering; llmwiki does not compete with them. llmwiki exposes knowledge through a precise MCP tool surface (`08_mcp_integration.md`) and otherwise stays out of the way. The one case where llmwiki itself runs an agent loop is **unattended daemon work** — scheduled temporal synthesis, scheduled lint, CLI batch operations — and that runner is a bounded, budgeted, opt-in mini loop with no user interaction. See `11_inference_endpoint.md`.
+14. **alexandria is a knowledge engine, not a coding agent.** Interactive conversations happen in connected MCP agents — Claude Code, Cursor, Claude.ai, Codex, Claude Desktop, Windsurf, Zed, OpenCode, Continue — not in alexandria. Those tools already handle streaming, context management, user input, and tool-use rendering; alexandria does not compete with them. alexandria exposes knowledge through a precise MCP tool surface (`08_mcp_integration.md`) and otherwise stays out of the way. The one case where alexandria itself runs an agent loop is **unattended daemon work** — scheduled temporal synthesis, scheduled lint, CLI batch operations — and that runner is a bounded, budgeted, opt-in mini loop with no user interaction. See `11_inference_endpoint.md`.
 15. **Retroactive query is the load-bearing use case.** Every feature is evaluated against "does this make the user's knowledge *six months from now* more queryable, retrievable, and reviewable than it is today?" Features that don't accumulate value over time (flashy demos, one-shot reports) are rejected. Features that compound — subscriptions, event streams, structured logs, provenance links, scheduled digests, conversation capture — are prioritized.
-16. **Every wiki write passes through a hostile verifier.** The writer and the verifier are distinct agent runs — fresh context, read-only tools, adversarial prompt. Writes are not committed to the wiki layer until the verifier's verdict is `commit` or the user manually overrides via `llmwiki verify override`. Defined in `13_hostile_verifier.md`. Mandatory exceptions are explicit and small (structural log appends, user `--no-verify`, draft-only mode).
-17. **Cascade is atomic.** A write plan that touches N pages either commits all N or none. Staged writes live in `~/.llmwiki/runs/<run_id>/staged/` and are moved into `wiki/` only after the verifier passes. Half-cascades cannot exist. Defined in `13_hostile_verifier.md` and `15_cascade_and_convergence.md`. The same staged-run mechanism is reused for synthesis crash recovery and budget-stop rollback — one abstraction, four concerns closed.
+16. **Every wiki write passes through a hostile verifier.** The writer and the verifier are distinct agent runs — fresh context, read-only tools, adversarial prompt. Writes are not committed to the wiki layer until the verifier's verdict is `commit` or the user manually overrides via `alexandria verify override`. Defined in `13_hostile_verifier.md`. Mandatory exceptions are explicit and small (structural log appends, user `--no-verify`, draft-only mode).
+17. **Cascade is atomic.** A write plan that touches N pages either commits all N or none. Staged writes live in `~/.alexandria/runs/<run_id>/staged/` and are moved into `wiki/` only after the verifier passes. Half-cascades cannot exist. Defined in `13_hostile_verifier.md` and `15_cascade_and_convergence.md`. The same staged-run mechanism is reused for synthesis crash recovery and budget-stop rollback — one abstraction, four concerns closed.
 18. **Convergence is hedged with dated markers.** When a new source contradicts an existing claim, the guardian preserves both with a `::: disputed` marker and an "Updated YYYY-MM-DD per <source>" annotation. *"What did I think in April?"* must remain answerable. Defined in `15_cascade_and_convergence.md`. Silently overwriting a claim is a verifier reject.
 19. **Evaluation is continuous and gated.** The engine runs five metrics (M1 citation fidelity, M2 cascade coverage, M3 retroactive query benchmark, M4 cost characterization, M5 self-consistency) on a schedule. Broken M1 or M2 blocks scheduled synthesis until manually acknowledged. New source adapters are blocked until M1+M2 are wired up and producing weekly reports. Defined in `14_evaluation_scaffold.md`. The retroactive-query invariant is now testable.
 20. **Beliefs are explainable and traceable.** Every substantive assertion in the wiki is recorded as a structured belief with stable identity, supersession history, and a provenance chain to a verbatim source quote whose hash is checked deterministically against the live raw file. The user can ask *"why do I believe X?"* and get the full chain — current belief, supporting sources with verbatim quotes, prior superseded beliefs, the run that changed the wiki's mind, and the reason for the change — in one `why()` tool call. Beliefs supersede on cascade contradictions per `15_cascade_and_convergence.md`; the historical chain is never deleted, only marked. Defined in `19_belief_revision.md`. *"What did I think in April?"* is now a single SQL filter.
 
 ## A sibling project, and what we learned from it
 
-[MemPalace](https://github.com/mempalace/mempalace) is a local-first personal AI memory system that shares many of llmwiki's values — local-first, MCP-first, Zettelkasten-inspired, zero-API-mandatory, explicitly not a chat client. We diverge on the load-bearing retrieval question (mempalace uses vector embeddings with serious benchmark numbers — 96.6% R@5 on LongMemEval raw; llmwiki uses agentic navigation per invariant #13) and on the storage unit (mempalace stores verbatim drawers / chunks; llmwiki compiles synthesized wiki pages). Neither bet is wrong; they target different failure modes and a sophisticated user could run both side-by-side.
+[MemPalace](https://github.com/mempalace/mempalace) is a local-first personal AI memory system that shares many of alexandria's values — local-first, MCP-first, Zettelkasten-inspired, zero-API-mandatory, explicitly not a chat client. We diverge on the load-bearing retrieval question (mempalace uses vector embeddings with serious benchmark numbers — 96.6% R@5 on LongMemEval raw; alexandria uses agentic navigation per invariant #13) and on the storage unit (mempalace stores verbatim drawers / chunks; alexandria compiles synthesized wiki pages). Neither bet is wrong; they target different failure modes and a sophisticated user could run both side-by-side.
 
-Three ideas from mempalace directly strengthen llmwiki and are adopted in the architecture:
+Three ideas from mempalace directly strengthen alexandria and are adopted in the architecture:
 
-1. **Tiered wake-up (`guide()` as L0/L1).** Mempalace's `layers.py` formalizes session start as L0 (identity, ~100 tok) + L1 (essential story, ~500-800 tok) = ~600-900 token wake-up with 95% of context left free. llmwiki's `guide()` is now formally tiered with hard budgets (L0 ≤ 500 tok, L1 ≤ 1500 tok, combined ≤ 2000). See `04_guardian_agent.md` — the tiering section.
-2. **Conversation transcript capture.** Mempalace's `convo_miner.py` ingests Claude Code / ChatGPT / Slack / markdown / plain-text conversation history. llmwiki adds a `conversation` adapter for the same formats plus Cursor and Codex. Conversations land as markdown documents in `raw/conversations/` AND as structured events in the `events` table (hybrid SOURCE + EVENT_STREAM). See `12_conversation_capture.md`.
-3. **Auto-save hooks.** Mempalace installs Claude Code `Stop` and `PreCompact` hooks that trigger `mempalace mine` in the background. llmwiki ships the same pattern for Claude Code, Cursor, and Codex: `llmwiki hooks install claude-code` writes the hook block, a tiny bash script kicks off `llmwiki mine conversations --detach`, and the user's own thinking-with-AI sessions accumulate in the engine automatically. See `12_conversation_capture.md` — "Auto-save hooks."
+1. **Tiered wake-up (`guide()` as L0/L1).** Mempalace's `layers.py` formalizes session start as L0 (identity, ~100 tok) + L1 (essential story, ~500-800 tok) = ~600-900 token wake-up with 95% of context left free. alexandria's `guide()` is now formally tiered with hard budgets (L0 ≤ 500 tok, L1 ≤ 1500 tok, combined ≤ 2000). See `04_guardian_agent.md` — the tiering section.
+2. **Conversation transcript capture.** Mempalace's `convo_miner.py` ingests Claude Code / ChatGPT / Slack / markdown / plain-text conversation history. alexandria adds a `conversation` adapter for the same formats plus Cursor and Codex. Conversations land as markdown documents in `raw/conversations/` AND as structured events in the `events` table (hybrid SOURCE + EVENT_STREAM). See `12_conversation_capture.md`.
+3. **Auto-save hooks.** Mempalace installs Claude Code `Stop` and `PreCompact` hooks that trigger `mempalace mine` in the background. alexandria ships the same pattern for Claude Code, Cursor, and Codex: `alexandria hooks install claude-code` writes the hook block, a tiny bash script kicks off `alexandria mine conversations --detach`, and the user's own thinking-with-AI sessions accumulate in the engine automatically. See `12_conversation_capture.md` — "Auto-save hooks."
 
 The full comparison, three more deferred ideas, and the explicit non-adoptions (vectors, verbatim-chunk storage, first-class knowledge graph with PPR retrieval, AAAK compression) live in `research/reference/14_mempalace.md`. Read it alongside `research/raw/36_mempalace.md` before making any decision that touches conversation capture, the wake-up tiering, or the sibling-project framing.
 

@@ -2,11 +2,11 @@
 
 **Sources:** `raw/15_ms_graphrag.md`, `raw/16_lightrag.md`, `raw/17_hipporag.md`
 
-**Note (revised):** An earlier version of this doc framed llmwiki as "personal-scale Graph RAG." That framing concedes too much. llmwiki is **not Graph RAG**. The retrieval model is *agentic navigation* — the agent composes primitives (`list`, `grep`, `search`, `read`, `follow`) in a multi-step reasoning loop. Graph RAG is a *contrasting* approach: a static index built from entity extraction + community summarization, consulted at query time. See `12_agentic_retrieval.md` for the authoritative statement of our retrieval model.
+**Note (revised):** An earlier version of this doc framed alexandria as "personal-scale Graph RAG." That framing concedes too much. alexandria is **not Graph RAG**. The retrieval model is *agentic navigation* — the agent composes primitives (`list`, `grep`, `search`, `read`, `follow`) in a multi-step reasoning loop. Graph RAG is a *contrasting* approach: a static index built from entity extraction + community summarization, consulted at query time. See `12_agentic_retrieval.md` for the authoritative statement of our retrieval model.
 
 What these three papers still contribute is the **failure analysis of naive chunk RAG** and the **structural ideas** (community summaries, hierarchical indexing) we borrow for orientation documents — but we execute those ideas through agent navigation, not through a pre-built retrieval pipeline.
 
-Three 2024 papers that represent one direction the field took to address naive RAG's failures. llmwiki takes a different direction — agentic navigation — but we read them to understand the problem and to borrow the structural insights.
+Three 2024 papers that represent one direction the field took to address naive RAG's failures. alexandria takes a different direction — agentic navigation — but we read them to understand the problem and to borrow the structural insights.
 
 ## What all three papers agree on
 
@@ -66,7 +66,7 @@ Every one of these observations is already in Karpathy's pattern. The difference
 
 ## The sharpened claim
 
-llmwiki is **agentic search over a compiled wiki**, not Graph RAG. The two approaches diverge on the core question: *who drives retrieval?* Graph RAG answers "a static multi-stage pipeline" and invests engineering in making the pipeline smart. llmwiki answers "the agent itself" and invests engineering in making the primitives and orientation documents sharp.
+alexandria is **agentic search over a compiled wiki**, not Graph RAG. The two approaches diverge on the core question: *who drives retrieval?* Graph RAG answers "a static multi-stage pipeline" and invests engineering in making the pipeline smart. alexandria answers "the agent itself" and invests engineering in making the primitives and orientation documents sharp.
 
 At enterprise scale (millions of tokens, automated ingest, no human per query) Graph RAG wins because human-in-the-loop doesn't scale. At personal scale (tens to a few thousand pages, supervised ingest, human-directed queries) agentic search wins because the agent can actually reach every relevant page through navigation, and supervision buys high trust (every claim cited, every update logged, every write validated).
 

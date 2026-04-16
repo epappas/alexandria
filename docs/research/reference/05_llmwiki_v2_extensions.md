@@ -13,7 +13,7 @@ A forward-looking extension gist. Most of it is not MVP material, but three idea
    - *Implication:* wiki pages are our unit of truth, but we can extract `(subject, predicate, object, citation)` tuples into a side table for lint and graph queries. MVP can live without this.
 
 3. **Hybrid search.** v2 proposes BM25 + vector + graph traversal once you cross ~100 pages.
-   - *Decision:* **rejected for llmwiki.** The v2 framing assumes a static retrieval pipeline; we have committed to agentic navigation instead (see `12_agentic_retrieval.md`). Scale problems past a few hundred pages are solved by sharper orientation documents and subagent patterns, not by adding a vector index. We keep FTS5 as the broad-keyword primitive and add `grep` for exact-match. No vectors.
+   - *Decision:* **rejected for alexandria.** The v2 framing assumes a static retrieval pipeline; we have committed to agentic navigation instead (see `12_agentic_retrieval.md`). Scale problems past a few hundred pages are solved by sharper orientation documents and subagent patterns, not by adding a vector index. We keep FTS5 as the broad-keyword primitive and add `grep` for exact-match. No vectors.
 
 ## Ideas we explicitly reject (for MVP)
 - **Multi-agent mesh sync.** Overkill for a single-user wiki.

@@ -2,7 +2,7 @@
 
 **Sources:** `raw/18_memgpt.md`, `raw/19_generative_agents.md`
 
-Two papers about LLMs with persistent memory. They are close cousins to llmwiki — close enough that we should know exactly why we are not them.
+Two papers about LLMs with persistent memory. They are close cousins to alexandria — close enough that we should know exactly why we are not them.
 
 ## MemGPT (Packer et al. 2023, UC Berkeley)
 
@@ -14,25 +14,25 @@ Abstract quote:
 
 **Why it matters to us:** MemGPT's core insight is that **the model should manage its own memory explicitly**. Tools for loading, writing, and editing memory are first-class. The model is not a passive consumer of retrieved context — it actively manages what lives in its working set.
 
-**What llmwiki borrows:**
+**What alexandria borrows:**
 - The guardian agent's tool surface (`guide`, `read`, `search`, `write`, `history`) is literally MemGPT's memory-management function set, specialized for a markdown knowledge base.
 - The `history()` tool — structured query over `wiki_log_entries` — plays the role MemGPT's memory functions play for conversation history.
 - The agent's `guide()` call at session start is the MemGPT "initial swap-in" — load the directory index, recent log, and current state into the working context.
 
-**What llmwiki does differently:**
-- MemGPT's slow memory is opaque (a structured buffer the model reads/writes through functions). llmwiki's slow memory is **human-readable markdown** the user can open in Obsidian, version in git, and edit directly. The transparency is the product.
-- MemGPT optimizes for long **conversations**. llmwiki optimizes for long **bodies of knowledge**. Different workloads, different retrieval patterns.
-- MemGPT has no schema for its external store. llmwiki enforces one (`SKILL.md`) and validates every write against it.
+**What alexandria does differently:**
+- MemGPT's slow memory is opaque (a structured buffer the model reads/writes through functions). alexandria's slow memory is **human-readable markdown** the user can open in Obsidian, version in git, and edit directly. The transparency is the product.
+- MemGPT optimizes for long **conversations**. alexandria optimizes for long **bodies of knowledge**. Different workloads, different retrieval patterns.
+- MemGPT has no schema for its external store. alexandria enforces one (`SKILL.md`) and validates every write against it.
 
 ## Generative Agents (Park et al. 2023, Stanford)
 
 **The move:** each agent has a memory stream (append-only natural-language record of experiences), a reflection mechanism (periodic synthesis of lower-level observations into higher-level insights), and a retrieval function that scores memories by **recency + importance + relevance**.
 
-**Why it matters to us:** this paper is the closest prior work to llmwiki's self-awareness story. Generative Agents show that a long natural-language log plus periodic synthesis plus a scored retrieval function is enough to produce plausible continuity over thousands of events.
+**Why it matters to us:** this paper is the closest prior work to alexandria's self-awareness story. Generative Agents show that a long natural-language log plus periodic synthesis plus a scored retrieval function is enough to produce plausible continuity over thousands of events.
 
-**What llmwiki borrows:**
+**What alexandria borrows:**
 
-| Generative Agents | llmwiki |
+| Generative Agents | alexandria |
 |---|---|
 | Memory stream | `wiki/log.md` + `wiki_log_entries` table |
 | Reflection | The lint pass + cascade updates during ingest |
@@ -42,8 +42,8 @@ Abstract quote:
 
 The guardian's self-awareness block — *"what did I write in the last N days, which pages did I touch, which ingests left cascade updates pending"* — is exactly Park et al.'s retrieval function restated for a knowledge base instead of a social simulacrum.
 
-**What llmwiki does differently:**
-- Generative Agents generate their own memories (observations of a simulated world). llmwiki's memories are **the user's sources** + **the agent's own writes**. The agent does not hallucinate observations.
+**What alexandria does differently:**
+- Generative Agents generate their own memories (observations of a simulated world). alexandria's memories are **the user's sources** + **the agent's own writes**. The agent does not hallucinate observations.
 - The reflection step runs **on demand** (lint) and **as part of ingest** (cascade updates), not on a timer. Trust considerations: automatic reflections would drift without human supervision.
 - Importance is **user-declared** via the `overview.md` "Key Findings" section, not machine-scored. We refuse to automate the value judgment.
 
@@ -61,4 +61,4 @@ The guardian's self-awareness block — *"what did I write in the last N days, w
 
 ## The sharpened claim
 
-llmwiki is **Generative Agents' memory architecture applied to personal research, with MemGPT's tool-based self-management, and the user as the arbiter of importance**. We keep the ideas the literature has validated and refuse the parts that require automated judgment the user has not authorized.
+alexandria is **Generative Agents' memory architecture applied to personal research, with MemGPT's tool-based self-management, and the user as the arbiter of importance**. We keep the ideas the literature has validated and refuse the parts that require automated judgment the user has not authorized.

@@ -19,7 +19,7 @@ A Phase 4 user has:
 - Real GitHub PATs and OAuth tokens stored in the vault (Phase 4 ships basic vault).
 - Real source adapters polling real APIs (GitHub, RSS at minimum).
 - A SQLite workspace with `documents`, `documents_fts`, `sources`, `sources_state`, `runs`, `provenance` tables populated.
-- A `llmwiki sync` CLI that runs sources manually.
+- A `alexandria sync` CLI that runs sources manually.
 - No daemon, no scheduler, no webhook receivers, no MCP server yet.
 
 They do **not** yet have:
@@ -29,20 +29,20 @@ They do **not** yet have:
 - FTS5 integrity verification (Phase 11).
 - Crash dump collection (Phase 11).
 - Structured logging with `run_id` correlation (Phase 6 with the daemon).
-- `llmwiki status --json` (Phase 6).
+- `alexandria status --json` (Phase 6).
 - Synthesis kill switches (they have nothing to synthesize yet, so this is fine).
 
 **What can go wrong in this window:**
 
-1. **Token leak with no rotation path.** A user's `.llmwiki/workspace.db` or the vault file ends up on a pastebin, in a screenshot, in a git repo committed by accident, or on a shared support channel. Before Phase 11, the remediation is manual: the user must go to GitHub, revoke the PAT out of band, generate a new one, `llmwiki secrets set github.pat=...` and hope the old one is fully gone from the system. There is no audit log to tell them *when* the token was last used, no way to query "which runs touched github.pat", no way to mark a token as revoked so the next adapter call fails fast instead of hitting the API with a stale credential. The worst-case is the usual worst-case: attacker uses the leaked PAT to read private repos or, if the scope was wider, to push. **This is not acceptable ops posture for real third-party credentials.** The mitigation is trivially cheap: ship `secrets rotate <name>` and an append-only `secrets_audit` table in Phase 4 alongside `secrets set`. The plan should not split these.
+1. **Token leak with no rotation path.** A user's `.alexandria/workspace.db` or the vault file ends up on a pastebin, in a screenshot, in a git repo committed by accident, or on a shared support channel. Before Phase 11, the remediation is manual: the user must go to GitHub, revoke the PAT out of band, generate a new one, `alexandria secrets set github.pat=...` and hope the old one is fully gone from the system. There is no audit log to tell them *when* the token was last used, no way to query "which runs touched github.pat", no way to mark a token as revoked so the next adapter call fails fast instead of hitting the API with a stale credential. The worst-case is the usual worst-case: attacker uses the leaked PAT to read private repos or, if the scope was wider, to push. **This is not acceptable ops posture for real third-party credentials.** The mitigation is trivially cheap: ship `secrets rotate <name>` and an append-only `secrets_audit` table in Phase 4 alongside `secrets set`. The plan should not split these.
 
-2. **Log redaction missing while secrets are logged.** Phase 4 ships adapters that will inevitably log request URLs, sometimes with query parameters, and will log exception stacks on HTTP errors. Without Phase 11's redaction middleware, a 401 from GitHub can trivially end up with the full `Authorization: token ghp_...` header in a stack trace, written to disk in `~/.llmwiki/logs/`. This is a log-hygiene issue that compounds problem #1. **Log redaction must ship with the first adapter, not in Phase 11.** It's a one-function regex pass; there's no justification for deferring it.
+2. **Log redaction missing while secrets are logged.** Phase 4 ships adapters that will inevitably log request URLs, sometimes with query parameters, and will log exception stacks on HTTP errors. Without Phase 11's redaction middleware, a 401 from GitHub can trivially end up with the full `Authorization: token ghp_...` header in a stack trace, written to disk in `~/.alexandria/logs/`. This is a log-hygiene issue that compounds problem #1. **Log redaction must ship with the first adapter, not in Phase 11.** It's a one-function regex pass; there's no justification for deferring it.
 
-3. **No backup means no recovery.** A user runs Phase 4 for six weeks, accumulates documents, runs, provenance, and then their disk dies or they `rm -rf` the wrong directory. They have nothing. SQLite's native `.backup` command works fine, but the user doesn't know to run it, and the plan doesn't tell them. Even a one-shot `llmwiki backup <path>` that does `VACUUM INTO` would cover 90% of this risk. **Backup is cheap to ship and expensive to miss. Phase 11 is too late.** Ship a minimum backup command in Phase 0 — it's 20 lines of code.
+3. **No backup means no recovery.** A user runs Phase 4 for six weeks, accumulates documents, runs, provenance, and then their disk dies or they `rm -rf` the wrong directory. They have nothing. SQLite's native `.backup` command works fine, but the user doesn't know to run it, and the plan doesn't tell them. Even a one-shot `alexandria backup <path>` that does `VACUUM INTO` would cover 90% of this risk. **Backup is cheap to ship and expensive to miss. Phase 11 is too late.** Ship a minimum backup command in Phase 0 — it's 20 lines of code.
 
 4. **FTS5 silent drift.** Phase 0 creates `documents_fts`. Phase 4 starts heavy writes through source adapters. If any adapter's ingestion path writes to `documents` but the FTS triggers are malformed, or if a batch INSERT bypasses triggers, or if a `REPLACE INTO` loses an FTS row, the user's search will silently return stale or missing hits. They won't notice until they specifically search for something they know should be there. Phase 11 ships integrity verification — but by then the drift has been accumulating for months. **This is exactly the failure mode my prior #2 warned about, and the plan's response is to ship the verification after the drift window, not before.** Mitigation: ship a `fts-integrity` check in Phase 0 alongside the table creation, even if it's just a row-count and content-hash comparison. It's trivial.
 
-5. **No crash dumps.** Pre-Phase 11, if the `llmwiki sync` command segfaults or hits an unhandled exception, the user gets a Python traceback on stderr and nothing else. No `.llmwiki/crashes/<ts>.json` with the run context, the config, the source state. When they file a bug report, they send a screenshot. **The plan should ship the exception-handler-to-crash-file path in Phase 0**; it's one `atexit` hook and one `sys.excepthook` override.
+5. **No crash dumps.** Pre-Phase 11, if the `alexandria sync` command segfaults or hits an unhandled exception, the user gets a Python traceback on stderr and nothing else. No `.alexandria/crashes/<ts>.json` with the run context, the config, the source state. When they file a bug report, they send a screenshot. **The plan should ship the exception-handler-to-crash-file path in Phase 0**; it's one `atexit` hook and one `sys.excepthook` override.
 
 ## 3. The Schema Migration Story
 
@@ -68,7 +68,7 @@ The plan puts log redaction in Phase 11. Phase 4 adapters will log HTTP request/
 
 ### Finding 3: Backup command must ship in Phase 0 — **IMPORTANT**
 
-The plan defers backup to Phase 11. This means ~4 months of user data is at risk with no export path. **Ship `llmwiki backup <path>` in Phase 0** — it is `VACUUM INTO` plus a file copy of the secrets vault. 30 lines of code, immediate user value, eliminates the largest recoverable-loss risk. Phase 11's full restore / point-in-time recovery story can still land where planned.
+The plan defers backup to Phase 11. This means ~4 months of user data is at risk with no export path. **Ship `alexandria backup <path>` in Phase 0** — it is `VACUUM INTO` plus a file copy of the secrets vault. 30 lines of code, immediate user value, eliminates the largest recoverable-loss risk. Phase 11's full restore / point-in-time recovery story can still land where planned.
 
 ### Finding 4: FTS5 integrity check must ship with the FTS table — **IMPORTANT**
 
@@ -76,19 +76,19 @@ Phase 0 creates `documents_fts`; Phase 11 checks it. That is the wrong order. **
 
 ### Finding 5: Phase 4 sources without a daemon is inconsistent — **IMPORTANT**
 
-The plan ships source adapters in Phase 4 but the daemon in Phase 6. Manually-invoked `llmwiki sync` can work for demo purposes, but the `sources_state` table will accumulate orphaned `running` rows whenever the user kills the process, and there is no sweeper to reconcile them until Phase 6. The plan should either: (a) move the sweeper logic into the `llmwiki sync` command itself so every invocation reconciles the previous crash, or (b) ship a minimal "run once and exit" scheduler in Phase 4 that owns the state machine even without the full daemon. **Option (a) is cheaper and adequate.** State this explicitly in Phase 4.
+The plan ships source adapters in Phase 4 but the daemon in Phase 6. Manually-invoked `alexandria sync` can work for demo purposes, but the `sources_state` table will accumulate orphaned `running` rows whenever the user kills the process, and there is no sweeper to reconcile them until Phase 6. The plan should either: (a) move the sweeper logic into the `alexandria sync` command itself so every invocation reconciles the previous crash, or (b) ship a minimal "run once and exit" scheduler in Phase 4 that owns the state machine even without the full daemon. **Option (a) is cheaper and adequate.** State this explicitly in Phase 4.
 
 ### Finding 6: Crash dumps must ship in Phase 0 — **IMPORTANT**
 
-Crash dumps in Phase 11 means 4 months of field debugging with no structured crash info. Ship a `sys.excepthook` that writes `~/.llmwiki/crashes/<iso8601>.json` with the command, args, config path, workspace path, traceback, and Python version, in Phase 0. This is ~40 lines. It pays for itself the first time a user files a Phase 4 bug report.
+Crash dumps in Phase 11 means 4 months of field debugging with no structured crash info. Ship a `sys.excepthook` that writes `~/.alexandria/crashes/<iso8601>.json` with the command, args, config path, workspace path, traceback, and Python version, in Phase 0. This is ~40 lines. It pays for itself the first time a user files a Phase 4 bug report.
 
 ### Finding 7: Observability split across Phase 0 and Phase 6 creates a debug gap — **IMPORTANT**
 
-Phases 0–5 have `llmwiki status`; Phase 6 adds `--json`, structured logging, and `run_id` correlation. A Phase 4 user whose sync fails has only the traceback and the `runs` table to go on. **The plan should mandate that every sync operation in Phase 4 writes a row to `runs` with its `run_id`, status, start/end timestamps, error class, and error message.** The `runs` table already exists (migration 0002). The structured logger can come in Phase 6, but the `runs` row is table stakes.
+Phases 0–5 have `alexandria status`; Phase 6 adds `--json`, structured logging, and `run_id` correlation. A Phase 4 user whose sync fails has only the traceback and the `runs` table to go on. **The plan should mandate that every sync operation in Phase 4 writes a row to `runs` with its `run_id`, status, start/end timestamps, error class, and error message.** The `runs` table already exists (migration 0002). The structured logger can come in Phase 6, but the `runs` row is table stakes.
 
 ### Finding 8: Hook version compatibility is undefined — **IMPORTANT**
 
-Phase 7 installs hooks. Phase 11 hardens rotation. A hook script installed against llmwiki 0.7 will still be on disk when the user upgrades to 0.11. The plan does not specify: (a) how hooks identify their target version, (b) what happens when a hook speaks an older protocol to a newer daemon, (c) how reinstall is triggered. **The plan should commit in Phase 7 to a hook protocol version in the hook script header, and a `hooks doctor` command that detects version skew.** Rotation in Phase 11 should include "rotate hook protocol version" as a first-class operation.
+Phase 7 installs hooks. Phase 11 hardens rotation. A hook script installed against alexandria 0.7 will still be on disk when the user upgrades to 0.11. The plan does not specify: (a) how hooks identify their target version, (b) what happens when a hook speaks an older protocol to a newer daemon, (c) how reinstall is triggered. **The plan should commit in Phase 7 to a hook protocol version in the hook script header, and a `hooks doctor` command that detects version skew.** Rotation in Phase 11 should include "rotate hook protocol version" as a first-class operation.
 
 ### Finding 9: Rate limit test policy is undefined — **IMPORTANT**
 
@@ -100,7 +100,7 @@ Phase 6 ships parent process + N children + Unix socket IPC + heartbeats + resta
 
 ### Finding 11: Freeze-clause gap is acknowledged but not mitigated — **IMPORTANT**
 
-Sources ship in Phase 4, eval (M1+M2) in Phase 9. For 4–5 months, sources run without the eval gate the freeze clause demands. The plan interprets "no new sources" as "no sources beyond the documented MVP set", which is a defensible reading, but it does not protect the user from source-quality drift in the gap. **The plan should ship a minimal weekly self-report in Phase 4** — something as simple as "count of docs ingested per source, count of errors per source, top 10 slowest runs" appended to `~/.llmwiki/reports/weekly.md`. That's not M1+M2, but it gives the user a minimum signal during the gap.
+Sources ship in Phase 4, eval (M1+M2) in Phase 9. For 4–5 months, sources run without the eval gate the freeze clause demands. The plan interprets "no new sources" as "no sources beyond the documented MVP set", which is a defensible reading, but it does not protect the user from source-quality drift in the gap. **The plan should ship a minimal weekly self-report in Phase 4** — something as simple as "count of docs ingested per source, count of errors per source, top 10 slowest runs" appended to `~/.alexandria/reports/weekly.md`. That's not M1+M2, but it gives the user a minimum signal during the gap.
 
 ### Finding 12: No documented disaster-recovery drill — **NICE-TO-HAVE**
 

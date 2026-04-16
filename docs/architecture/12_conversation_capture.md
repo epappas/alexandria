@@ -6,21 +6,21 @@
 
 The user's most important source of gathered knowledge is **their own conversations with AI**. Hours per day in Claude Code, Cursor, Codex, Claude Desktop, Claude.ai, and ChatGPT — thinking out loud, making design decisions, debugging code, reviewing PRs, writing plans. When a session ends, that context evaporates. The next session starts from zero.
 
-llmwiki's promise of retroactive query (invariant #15, `01_vision_and_principles.md`) is **hollow** if the user cannot ask *"what did I decide in yesterday's Claude Code session about the auth refactor"* and get a grounded answer. Closing this loop is the single highest-leverage addition to the knowledge engine.
+alexandria's promise of retroactive query (invariant #15, `01_vision_and_principles.md`) is **hollow** if the user cannot ask *"what did I decide in yesterday's Claude Code session about the auth refactor"* and get a grounded answer. Closing this loop is the single highest-leverage addition to the knowledge engine.
 
-MemPalace already ships the capture machinery (`research/reference/14_mempalace.md`, Adoption 2 + 3). llmwiki adopts the same pattern, adapted to our model: **conversation transcripts land as markdown documents in `raw/conversations/` and as structured events in the `events` table, with auto-save hooks in the common MCP clients so the loop closes with zero manual effort**.
+MemPalace already ships the capture machinery (`research/reference/14_mempalace.md`, Adoption 2 + 3). alexandria adopts the same pattern, adapted to our model: **conversation transcripts land as markdown documents in `raw/conversations/` and as structured events in the `events` table, with auto-save hooks in the common MCP clients so the loop closes with zero manual effort**.
 
 ## Two complementary capture paths
 
 Conversation capture has **two paths**, deliberately complementary so that no session escapes the engine regardless of how the user runs their agent:
 
-1. **File-based capture (post-hoc).** Hooks fire at `Stop` / `PreCompact` events in the connected client. The hook script invokes `llmwiki capture conversation --detach`, which mines the client's transcript file (Claude Code's `~/.claude/projects/*.jsonl`, Cursor's SQLite state DB, Codex's session log, ChatGPT export). This path captures the **full chat including user text and assistant text**, but **only works for clients that support hooks**.
-2. **MCP-side capture (real-time).** Whenever a connected MCP client (Claude Code, Cursor, Codex, Claude Desktop, Claude.ai web, Windsurf, Zed, Continue) invokes any of llmwiki's MCP tools, the MCP server **observes the call** and records it. This path captures the **agent's interaction with llmwiki specifically** — every tool call, args (redacted per `18_secrets_and_hooks.md`), result summary, latency — but **does not see the surrounding user/assistant text** because that text never traverses our process boundary. This path **always runs** regardless of client capabilities, including for hookless clients like Claude.ai web.
+1. **File-based capture (post-hoc).** Hooks fire at `Stop` / `PreCompact` events in the connected client. The hook script invokes `alexandria capture conversation --detach`, which mines the client's transcript file (Claude Code's `~/.claude/projects/*.jsonl`, Cursor's SQLite state DB, Codex's session log, ChatGPT export). This path captures the **full chat including user text and assistant text**, but **only works for clients that support hooks**.
+2. **MCP-side capture (real-time).** Whenever a connected MCP client (Claude Code, Cursor, Codex, Claude Desktop, Claude.ai web, Windsurf, Zed, Continue) invokes any of alexandria's MCP tools, the MCP server **observes the call** and records it. This path captures the **agent's interaction with alexandria specifically** — every tool call, args (redacted per `18_secrets_and_hooks.md`), result summary, latency — but **does not see the surrounding user/assistant text** because that text never traverses our process boundary. This path **always runs** regardless of client capabilities, including for hookless clients like Claude.ai web.
 
 **Combined**, the two paths give the user:
 
 - Full chat history (file-based, when available) — what was said and decided.
-- Tool-call audit trail (MCP-side, always) — what the agent actually did with llmwiki.
+- Tool-call audit trail (MCP-side, always) — what the agent actually did with alexandria.
 - Cross-correlation via session_id — the same session ID appears in both stores, so a `why` query (`19_belief_revision.md`) on a belief written from a Claude Code session can pull both the file-based transcript and the MCP-side audit trail.
 
 Neither path is sufficient alone. Together they close the loop on *"what happened in this session?"* for every supported client.
@@ -36,7 +36,7 @@ The duality matters: the **document** is what the guardian reads when it needs c
 
 ## MCP-side capture — the always-on observer
 
-The MCP server (`08_mcp_integration.md`) sees every tool call from every connected client. When a Claude Code session calls `read("/wiki/topics/auth.md")`, the MCP server logs the call with the requesting client's identifier, the session ID (from MCP transport), and the response metadata. This logging already exists in `~/.llmwiki/logs/mcp-YYYY-MM-DD.jsonl` per `17_observability.md` — the conversation-capture extension materializes the same data into a **structured SQLite view** that the guardian can query.
+The MCP server (`08_mcp_integration.md`) sees every tool call from every connected client. When a Claude Code session calls `read("/wiki/topics/auth.md")`, the MCP server logs the call with the requesting client's identifier, the session ID (from MCP transport), and the response metadata. This logging already exists in `~/.alexandria/logs/mcp-YYYY-MM-DD.jsonl` per `17_observability.md` — the conversation-capture extension materializes the same data into a **structured SQLite view** that the guardian can query.
 
 ### What the MCP server captures per call
 
@@ -59,12 +59,12 @@ This data goes into a new SQLite table `mcp_session_log` (defined in `06_data_mo
 
 ### What the MCP server does NOT capture
 
-- **User text messages.** Those go from the user's keyboard to the LLM directly. They do not traverse llmwiki.
-- **LLM text responses.** Same. The LLM responds to the user; only its tool calls are routed through llmwiki.
+- **User text messages.** Those go from the user's keyboard to the LLM directly. They do not traverse alexandria.
+- **LLM text responses.** Same. The LLM responds to the user; only its tool calls are routed through alexandria.
 - **Reasoning traces / thinking blocks.** Same.
 - **Other MCP servers' tool calls.** Each MCP server only sees its own surface.
 
-This is **why MCP-side capture is complementary, not a replacement.** For full transcript fidelity (including the user text), the file-based path is required. For an audit trail of the agent's interaction with llmwiki specifically, MCP-side capture is sufficient and always available.
+This is **why MCP-side capture is complementary, not a replacement.** For full transcript fidelity (including the user text), the file-based path is required. For an audit trail of the agent's interaction with alexandria specifically, MCP-side capture is sufficient and always available.
 
 ### How the two paths interact
 
@@ -82,7 +82,7 @@ For clients **without hook support** (Claude.ai web — no local transcript file
 - Every write the agent staged, via the `runs` table.
 - Every belief the agent asserted or superseded, via `wiki_beliefs.asserted_in_run`.
 
-The full chat text is missing, but the **agent's interaction with llmwiki** is fully captured. This is enough to answer *"what did this session do to my wiki?"* even without the surrounding chat.
+The full chat text is missing, but the **agent's interaction with alexandria** is fully captured. This is enough to answer *"what did this session do to my wiki?"* even without the surrounding chat.
 
 ### Querying MCP-side capture
 
@@ -98,7 +98,7 @@ Returns the recent tool calls from Claude.ai web sessions on the research worksp
 
 The MCP-side log is local-only, like every other log family in `17_observability.md`. Tool args are redacted for secrets via `SecretRedactor`. Result content is summarized to a single line, never stored verbatim — the verbatim content lives in the wiki/raw layers where it belongs, not duplicated in the audit log.
 
-The user can purge MCP-side captures with `llmwiki captures purge --source mcp_session --before <date>`.
+The user can purge MCP-side captures with `alexandria captures purge --source mcp_session --before <date>`.
 
 ## Format detectors
 
@@ -187,13 +187,13 @@ Mining a transcript directory is idempotent via content hashing (the same mechan
 2. Claude Code writes to its JSONL files **append-only** during a live session. Our parser handles partial reads by tracking the last-parsed line offset per session; on re-scan, we parse only the tail.
 3. Large files (> 10 MB, same default as mempalace's `MAX_FILE_SIZE`) are capped with a warning in the logs, not silently dropped.
 
-`llmwiki mine conversations --workspace <slug>` is the CLI entry point. Same verb as `mempalace mine`, different internals.
+`alexandria mine conversations --workspace <slug>` is the CLI entry point. Same verb as `mempalace mine`, different internals.
 
 ## Privacy — conversation data is the most sensitive class
 
 Two rules from invariant #1 (single user) and #9 (vault separation) apply with force:
 
-1. **Never leaves the machine.** Conversations contain the user's private thinking, private work, private discussions with clients and colleagues. llmwiki stores them locally in the user's workspace directory. Zero outbound network for conversation content. Zero telemetry.
+1. **Never leaves the machine.** Conversations contain the user's private thinking, private work, private discussions with clients and colleagues. alexandria stores them locally in the user's workspace directory. Zero outbound network for conversation content. Zero telemetry.
 2. **Per-workspace routing with explicit defaults.** Conversations do not land in the `global` workspace by default. The user configures which client sessions route to which workspace, typically by matching on the project directory name in the transcript's `cwd` field. For example:
 
 ```toml
@@ -229,11 +229,11 @@ When the user later asks the guardian to compile recent conversations into wiki 
 
 ## Auto-save hooks — the three common clients
 
-The hooks are small bash scripts that fire on client-specific events and kick off `llmwiki mine conversations` in the background. They never block the user's workflow and never produce chat-window output in silent mode. Three clients shipped at MVP:
+The hooks are small bash scripts that fire on client-specific events and kick off `alexandria mine conversations` in the background. They never block the user's workflow and never produce chat-window output in silent mode. Three clients shipped at MVP:
 
 ### Claude Code — Stop + PreCompact
 
-Installed by `llmwiki hooks install claude-code`. Writes to `~/.claude/settings.local.json`:
+Installed by `alexandria hooks install claude-code`. Writes to `~/.claude/settings.local.json`:
 
 ```json
 {
@@ -242,14 +242,14 @@ Installed by `llmwiki hooks install claude-code`. Writes to `~/.claude/settings.
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "~/.llmwiki/hooks/claude-code-stop.sh",
+        "command": "~/.alexandria/hooks/claude-code-stop.sh",
         "timeout": 30
       }]
     }],
     "PreCompact": [{
       "hooks": [{
         "type": "command",
-        "command": "~/.llmwiki/hooks/claude-code-precompact.sh",
+        "command": "~/.alexandria/hooks/claude-code-precompact.sh",
         "timeout": 30
       }]
     }]
@@ -260,14 +260,14 @@ Installed by `llmwiki hooks install claude-code`. Writes to `~/.claude/settings.
 The `stop.sh` script:
 1. Reads JSON on stdin (`session_id`, `stop_hook_active`, `transcript_path`).
 2. Honors `stop_hook_active` — returns `{}` immediately if set, preventing infinite loops.
-3. Counts human messages since last save in `~/.llmwiki/state/hooks/claude-code/<session_id>.last_save`.
-4. If the count is ≥ `LLMWIKI_SAVE_INTERVAL` (default 15), updates the state file and launches `llmwiki mine conversations --path "$(dirname $transcript_path)" --detach`.
+3. Counts human messages since last save in `~/.alexandria/state/hooks/claude-code/<session_id>.last_save`.
+4. If the count is ≥ `ALEXANDRIA_SAVE_INTERVAL` (default 15), updates the state file and launches `alexandria mine conversations --path "$(dirname $transcript_path)" --detach`.
 5. Returns `{}` (silent mode) — no blocking, no chat-window output.
-6. `LLMWIKI_VERBOSE=1` enables a blocking-with-reason mode for developers who want to see the save happen.
+6. `ALEXANDRIA_VERBOSE=1` enables a blocking-with-reason mode for developers who want to see the save happen.
 
 The `precompact.sh` script is simpler — it always triggers a mine regardless of counter state, because compaction is a one-shot emergency save opportunity.
 
-Both scripts are bounded at ~100 lines. They do no logic that can't be reproduced on the command line; the heavy lifting is `llmwiki mine conversations`.
+Both scripts are bounded at ~100 lines. They do no logic that can't be reproduced on the command line; the heavy lifting is `alexandria mine conversations`.
 
 ### Cursor — onSessionEnd + onContextLimit
 
@@ -279,20 +279,20 @@ Codex CLI supports hooks in `~/.codex/hooks.json` with the same `Stop` / `PreCom
 
 ### Install / uninstall commands
 
-The hook lifecycle (install, uninstall, verify, list, status), the concurrent-session serialization via the `capture_queue` table, the binary-existence safety check, the schema detection, and the non-blocking detached subprocess shape are all defined in detail in `18_secrets_and_hooks.md`. That doc is the canonical source for everything related to hook lifecycle and the trust boundary between llmwiki and the connected client.
+The hook lifecycle (install, uninstall, verify, list, status), the concurrent-session serialization via the `capture_queue` table, the binary-existence safety check, the schema detection, and the non-blocking detached subprocess shape are all defined in detail in `18_secrets_and_hooks.md`. That doc is the canonical source for everything related to hook lifecycle and the trust boundary between alexandria and the connected client.
 
 The summary:
 
 ```bash
-llmwiki hooks install claude-code [--workspace X]   # writes the settings block, marker-tagged for safe uninstall
-llmwiki hooks install cursor
-llmwiki hooks install codex
-llmwiki hooks install --all                          # installs everywhere detected
+alexandria hooks install claude-code [--workspace X]   # writes the settings block, marker-tagged for safe uninstall
+alexandria hooks install cursor
+alexandria hooks install codex
+alexandria hooks install --all                          # installs everywhere detected
 
-llmwiki hooks uninstall claude-code                  # removes ONLY blocks with the llmwiki-managed marker
-llmwiki hooks verify [<client>]                      # checks binary path, schema, exec bit
-llmwiki hooks list                                    # all installed hooks across clients
-llmwiki hooks status                                  # last invocation, errors in 24h, capture_queue depth
+alexandria hooks uninstall claude-code                  # removes ONLY blocks with the alexandria-managed marker
+alexandria hooks verify [<client>]                      # checks binary path, schema, exec bit
+alexandria hooks list                                    # all installed hooks across clients
+alexandria hooks status                                  # last invocation, errors in 24h, capture_queue depth
 ```
 
 Idempotent. Marker-tagged. Non-blocking via `--detach`. Concurrent sessions serialized by SQLite. See `18_secrets_and_hooks.md` for the full design.
@@ -301,7 +301,7 @@ Idempotent. Marker-tagged. Non-blocking via `--detach`. Concurrent sessions seri
 
 With conversation capture + auto-save hooks enabled on a workspace:
 
-1. **Day 1**: user installs llmwiki, creates a workspace, installs Claude Code hooks pointing at the workspace.
+1. **Day 1**: user installs alexandria, creates a workspace, installs Claude Code hooks pointing at the workspace.
 2. **Day 1 onward**: every Claude Code session the user runs gets captured to `raw/conversations/claude-code/<date>-<session>.md` and emits events into the `events` table. Zero manual action required. Zero chat-window clutter.
 3. **Day 7**: the daemon's scheduled weekly synthesis (`10_event_streams.md`) fires. The guardian reads the week's conversation events and GitHub events and Slack events and calendar events, compiles a `wiki/timeline/<week>.md` digest, updates `wiki/entities/<active-project>.md` with recent activity, and logs the operation. The user wakes up Monday and has a narrative of last week's work without touching anything.
 4. **Day 30**: the user (in Claude Code) asks *"we decided something about auth two weeks ago — what was it?"*. The guardian:
@@ -323,11 +323,11 @@ With conversation capture + auto-save hooks enabled on a workspace:
 
 ## Open questions specific to conversation capture
 
-1. **Claude.ai web sessions.** Browser-only sessions have no local transcript file to mine. Options: a browser extension that dumps the current conversation on user command, or manual "export and paste" via the `llmwiki paste conversation` CLI. Browser extension is the better UX but non-trivial; filed for v2.
-2. **Retention policy.** Do we delete old raw conversation files after the guardian has compiled them into wiki pages? No — the raw layer is immutable (invariant #2). Users who want to reclaim disk run `llmwiki raw archive --older-than 1y --source conversations` to compress into tarballs. Not an MVP feature.
+1. **Claude.ai web sessions.** Browser-only sessions have no local transcript file to mine. Options: a browser extension that dumps the current conversation on user command, or manual "export and paste" via the `alexandria paste conversation` CLI. Browser extension is the better UX but non-trivial; filed for v2.
+2. **Retention policy.** Do we delete old raw conversation files after the guardian has compiled them into wiki pages? No — the raw layer is immutable (invariant #2). Users who want to reclaim disk run `alexandria raw archive --older-than 1y --source conversations` to compress into tarballs. Not an MVP feature.
 3. **Pre-compile summarization.** Mempalace's hook blocks the AI and asks it to write a diary entry *inside the session* before the transcript is captured. Should we do the same? No — our compilation happens in the background during scheduled synthesis, so the session transcript is the source and the summary is derived from it. Blocking the AI in-session contradicts our "background everything" principle.
 4. **Tool-call redaction defaults.** Tool calls contain file paths, command arguments, sometimes API keys. Default redaction should strip obvious secrets (`sk-...`, `ghp_...`, `-----BEGIN PRIVATE KEY-----` blocks) but leave file paths and command output alone. Configurable per workspace. Ship with a conservative default pattern set.
 
 ## Summary
 
-Conversation capture is llmwiki's answer to "the user's own thinking-with-AI is the richest source in the knowledge engine, and it's being lost every time a session ends." A new `conversation` adapter mines Claude Code / Cursor / Codex / ChatGPT / markdown transcripts into both the document layer (one markdown file per session in `raw/conversations/`) and the event layer (structured turn/tool-call events with cross-stream `refs`). Auto-save hooks on Stop + PreCompact events in the three major clients close the loop without any manual user action. Privacy is handled by per-workspace routing rules (with an explicit default and skip patterns) and a pre-write redaction pass for secrets. The result is that day-180 retroactive queries actually find the thinking that led to today's state — which is the whole point of the engine.
+Conversation capture is alexandria's answer to "the user's own thinking-with-AI is the richest source in the knowledge engine, and it's being lost every time a session ends." A new `conversation` adapter mines Claude Code / Cursor / Codex / ChatGPT / markdown transcripts into both the document layer (one markdown file per session in `raw/conversations/`) and the event layer (structured turn/tool-call events with cross-stream `refs`). Auto-save hooks on Stop + PreCompact events in the three major clients close the loop without any manual user action. Privacy is handled by per-workspace routing rules (with an explicit default and skip patterns) and a pre-write redaction pass for secrets. The result is that day-180 retroactive queries actually find the thinking that led to today's state — which is the whole point of the engine.

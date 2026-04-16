@@ -1,6 +1,6 @@
-# Source: lucasastorian/llmwiki — Full Service Tour (cloned repo)
-URL: https://github.com/lucasastorian/llmwiki
-Local clone: /tmp/llmwiki-lucas
+# Source: lucasastorian/alexandria — Full Service Tour (cloned repo)
+URL: https://github.com/lucasastorian/alexandria
+Local clone: /tmp/alexandria-lucas
 Fetched: 2026-04-15
 
 This is the most relevant reference implementation for our Python service. It is a FastAPI + MCP + Supabase app that multi-tenants wikis and exposes them to Claude via MCP.

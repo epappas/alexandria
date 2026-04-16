@@ -31,10 +31,10 @@ Subagents are the answer to the "agent reads too much and fills its context" fai
 
 Through concurrent tool usage across agents.
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
 This is the single most important public statement from Anthropic aligned with our thesis. Three direct implications:
 
-1. **Reject "static retrieval" as the organizing principle.** llmwiki's `search` tool is not a retriever. It's a primitive the agent uses as one of several moves. The retrieval algorithm IS the agent's loop.
+1. **Reject "static retrieval" as the organizing principle.** alexandria's `search` tool is not a retriever. It's a primitive the agent uses as one of several moves. The retrieval algorithm IS the agent's loop.
 2. **Multi-step is the shape of good retrieval.** A query becomes a plan becomes a series of reads. This is already how the ingest workflow works — we just need to make it equally explicit for query.
 3. **Subagents for wide exploration.** When a user asks a cross-cutting question, the guardian should be able to spawn a subagent per topic, each with its own context window, and synthesize the summaries. This requires that our MCP tool surface be safely re-entrant per subagent — a design constraint we need to respect.

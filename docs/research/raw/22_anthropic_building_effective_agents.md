@@ -29,6 +29,6 @@ The core pattern: the model receives tool results, evaluates progress, determine
 
 These models can "actively use these capabilities — generating their own search queries, selecting appropriate tools, and determining what information to retain."
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
-Anthropic's definition makes "retrieval via agent tool use" first-class. The agent *generates its own search queries*, *selects appropriate tools*, and *determines what information to retain*. That is not a pipeline running before the model — it is the model itself, running in a loop. Exactly the pattern llmwiki must adopt: the guardian is the retrieval algorithm, and our job is to give it good primitives.
+Anthropic's definition makes "retrieval via agent tool use" first-class. The agent *generates its own search queries*, *selects appropriate tools*, and *determines what information to retain*. That is not a pipeline running before the model — it is the model itself, running in a loop. Exactly the pattern alexandria must adopt: the guardian is the retrieval algorithm, and our job is to give it good primitives.

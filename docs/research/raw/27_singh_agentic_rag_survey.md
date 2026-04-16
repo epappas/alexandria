@@ -25,9 +25,9 @@ Traditional RAG systems are *"constrained by static workflows and lack the adapt
 
 Evaluation, coordination, memory management, efficiency, governance.
 
-## Why this matters for llmwiki
+## Why this matters for alexandria
 
-Confirms the agentic-retrieval direction at the survey level. Four design axes (cardinality / control / autonomy / knowledge representation) are a useful lens for llmwiki:
+Confirms the agentic-retrieval direction at the survey level. Four design axes (cardinality / control / autonomy / knowledge representation) are a useful lens for alexandria:
 
 - **Cardinality:** single guardian per session, with optional subagents spawned by the MCP client.
 - **Control:** the agent drives; we expose tools, not pipelines.

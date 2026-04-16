@@ -14,7 +14,7 @@ The user's gathered knowledge is not static. As the project progresses, new sour
 
 The cascade workflow already updates the wiki page (`15_cascade_and_convergence.md`). The provenance chain already links footnotes to raw sources (`13_hostile_verifier.md`). The convergence policy already hedges contradicting claims with dated markers. **What is missing** is treating the belief itself — the structured assertion — as a first-class queryable unit with stable identity, supersession history, and a verified provenance trail back to the verbatim source quote.
 
-This doc adds that layer **without changing the source of truth**. The wiki page remains canonical. Beliefs are a materialized index over wiki pages, extracted at write time, verified by the same hostile verifier, queryable via SQLite + a new `why` MCP tool. Deleting `wiki_beliefs` and running `llmwiki reindex --rebuild-beliefs` reconstructs the table from the wiki pages on disk. Files-first invariant preserved.
+This doc adds that layer **without changing the source of truth**. The wiki page remains canonical. Beliefs are a materialized index over wiki pages, extracted at write time, verified by the same hostile verifier, queryable via SQLite + a new `why` MCP tool. Deleting `wiki_beliefs` and running `alexandria reindex --rebuild-beliefs` reconstructs the table from the wiki pages on disk. Files-first invariant preserved.
 
 ## What is a belief
 
@@ -139,7 +139,7 @@ The sidecar mirrors the rows in `wiki_beliefs` for that page:
 }
 ```
 
-Both the current belief and its superseded ancestor live in the sidecar. The sidecar is git-versioned alongside the page. `llmwiki reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` deterministically.
+Both the current belief and its superseded ancestor live in the sidecar. The sidecar is git-versioned alongside the page. `alexandria reindex --rebuild-beliefs` walks `wiki/**/*.beliefs.json` and rebuilds `wiki_beliefs` deterministically.
 
 **Why a sidecar instead of frontmatter:** belief metadata can grow large (10-30 beliefs per page), and embedding it in the markdown frontmatter would bloat the page and make diffs noisy. The sidecar is structured, machine-targeted, and never meant for human reading. The page itself stays clean.
 
@@ -291,20 +291,20 @@ This is the explainability surface the user asked for. **Every belief traces to 
 ## CLI
 
 ```
-llmwiki why "Acme OAuth refresh endpoint"
-llmwiki why --workspace customer-acme --since 2026-01-01 "auth"
-llmwiki beliefs list --topic auth [--current-only]
-llmwiki beliefs history <belief_id>
-llmwiki beliefs supersede <old_id> <new_id> --reason "manual_correction"
-llmwiki beliefs export [--workspace X] [--format json|csv]
-llmwiki beliefs verify [--workspace X]      # re-runs hash check on every supporting quote
+alexandria why "Acme OAuth refresh endpoint"
+alexandria why --workspace customer-acme --since 2026-01-01 "auth"
+alexandria beliefs list --topic auth [--current-only]
+alexandria beliefs history <belief_id>
+alexandria beliefs supersede <old_id> <new_id> --reason "manual_correction"
+alexandria beliefs export [--workspace X] [--format json|csv]
+alexandria beliefs verify [--workspace X]      # re-runs hash check on every supporting quote
 ```
 
-`llmwiki beliefs verify` is the manual equivalent of M1 (citation fidelity from `14_evaluation_scaffold.md`) at the belief level — it re-validates every belief's quote anchor against the live raw source and flags drifts.
+`alexandria beliefs verify` is the manual equivalent of M1 (citation fidelity from `14_evaluation_scaffold.md`) at the belief level — it re-validates every belief's quote anchor against the live raw source and flags drifts.
 
 ## Reindex semantics
 
-`llmwiki reindex --rebuild-beliefs` walks every workspace, reads every `*.beliefs.json` sidecar, and rebuilds `wiki_beliefs` + `wiki_beliefs_fts`. The sidecar is the source of truth for beliefs; the SQLite table is the queryable index. Filesystem-first invariant honoured.
+`alexandria reindex --rebuild-beliefs` walks every workspace, reads every `*.beliefs.json` sidecar, and rebuilds `wiki_beliefs` + `wiki_beliefs_fts`. The sidecar is the source of truth for beliefs; the SQLite table is the queryable index. Filesystem-first invariant honoured.
 
 If a sidecar is missing or unparseable, the reindex emits a warning and skips that page's beliefs. The page itself is unaffected; the user's next ingest of that page will regenerate the sidecar from scratch.
 
@@ -340,7 +340,7 @@ Adding to `01_vision_and_principles.md`:
 - **One provenance chain.** `wiki_claim_provenance` (from `06_data_model.md`) is the ground truth. Beliefs reference it via `provenance_ids`. The verbatim quote anchor lives in one place; beliefs are pointers.
 - **One verifier.** The hostile verifier from `13_hostile_verifier.md` checks beliefs alongside citations. No separate "belief verifier" agent.
 - **One supersession mechanism.** The cascade workflow's hedge marker (in the wiki page) and the belief's `superseded_by_belief_id` (in the sidecar) are two views of the same operation. The cascade workflow is the writer; both views are derived from the same plan.
-- **One reindex command.** `llmwiki reindex` rebuilds the document layer; `--rebuild-beliefs` extends it to walk sidecars. Same machinery, additional pass.
+- **One reindex command.** `alexandria reindex` rebuilds the document layer; `--rebuild-beliefs` extends it to walk sidecars. Same machinery, additional pass.
 - **One temporal model.** `asserted_at` / `superseded_at` mirror the existing `documents.created_at` / `documents.superseded_by` model from `06_data_model.md`. Same vocabulary.
 
 ## KISS application

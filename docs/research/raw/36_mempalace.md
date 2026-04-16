@@ -8,7 +8,7 @@
 - **Authors:** Milla Jovovich (creator, per MISSION.md), @bensig (engineering co-founder)
 - **Local clone:** /tmp/mempalace
 - **Fetched:** 2026-04-16
-- **Purpose:** a parallel local-first personal AI memory system. Worth deep reading because it is a sibling, not a competitor, and several of its design choices directly inform llmwiki even though we diverge on the load-bearing retrieval question.
+- **Purpose:** a parallel local-first personal AI memory system. Worth deep reading because it is a sibling, not a competitor, and several of its design choices directly inform alexandria even though we diverge on the load-bearing retrieval question.
 
 This file preserves the load-bearing excerpts verbatim so future architecture decisions can cite the primary material.
 

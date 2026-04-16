@@ -2,7 +2,7 @@
 
 > **Cites:** `research/reference/01_karpathy_pattern.md`, `research/reference/02_lucasastorian_impl.md`, `research/reference/03_astrohan_skill.md`
 
-The guardian is the only component that writes to a workspace's wiki. It is an LLM agent — running inside Claude.ai, Cursor, or `llmwiki chat` — that connects to the local MCP server and operates on one workspace.
+The guardian is the only component that writes to a workspace's wiki. It is an LLM agent — running inside Claude.ai, Cursor, or `alexandria chat` — that connects to the local MCP server and operates on one workspace.
 
 ## What the agent knows on session start — the tiered wake-up
 
@@ -106,8 +106,8 @@ The guiding principle, grounded in `research/reference/12_agentic_retrieval.md`:
 
 Every tool accepts a `workspace: str` argument and operates on exactly one workspace per call. Two launch modes:
 
-- **Open mode** (`llmwiki mcp serve`) — all workspaces accessible, `workspace` required on every call.
-- **Pinned mode** (`llmwiki mcp serve --workspace <slug>`) — locked to one workspace; `workspace` defaults to the pinned slug and any other value is rejected.
+- **Open mode** (`alexandria mcp serve`) — all workspaces accessible, `workspace` required on every call.
+- **Pinned mode** (`alexandria mcp serve --workspace <slug>`) — locked to one workspace; `workspace` defaults to the pinned slug and any other value is rejected.
 
 Transports:
 - **stdio** (Claude Code, Cursor, Codex, Claude Desktop, Windsurf) — client launches the subprocess. No daemon.
@@ -162,8 +162,8 @@ Anthropic's multi-agent research post (distilled in `research/reference/13_agent
 1. **Tool descriptions must be specific.** Vague descriptions make subagents pick the wrong tool. Every registered tool ships with usage examples in its description, not just a one-liner.
 2. **Scale effort to query complexity via prompt rules.** `guide()` includes explicit guidance on when a quick `read` is enough versus when to go deep across multiple pages.
 3. **External memory handles context limits.** `wiki/log.md` + `wiki_log_entries` **is** the external memory. Fresh subagents read recent log entries via `history()` to pick up where a previous session left off.
-4. **Subagents write directly, not via the coordinator.** Every MCP tool call hits llmwiki's filesystem and SQLite directly. No "telephone" relay through the lead agent. The MCP server is re-entrant so parallel subagents can write concurrently without corruption.
-5. **Production tracing is mandatory.** Every tool call is logged to `~/.llmwiki/logs/mcp-<date>.jsonl` with `{ts, workspace, tool, args_hash, latency_ms, result}`. This is not optional — non-determinism in agent sessions makes debugging impossible without it.
+4. **Subagents write directly, not via the coordinator.** Every MCP tool call hits alexandria's filesystem and SQLite directly. No "telephone" relay through the lead agent. The MCP server is re-entrant so parallel subagents can write concurrently without corruption.
+5. **Production tracing is mandatory.** Every tool call is logged to `~/.alexandria/logs/mcp-<date>.jsonl` with `{ts, workspace, tool, args_hash, latency_ms, result}`. This is not optional — non-determinism in agent sessions makes debugging impossible without it.
 
 See `08_mcp_integration.md` for transports, client configs, and auth.
 
@@ -227,7 +227,7 @@ The contract is versioned (`contract_version` in workspace config). Changing the
 
 ## What the agent does NOT do
 
-- **Does not auto-ingest.** The daemon pulls new content into `raw/`, but only the user (in chat) triggers ingest. Rationale: preserves user intent + bounds token spend. Exception: `llmwiki automation create --on "subscription" --run "ingest"` can opt a specific workspace into auto-ingest after the user sets it up explicitly.
+- **Does not auto-ingest.** The daemon pulls new content into `raw/`, but only the user (in chat) triggers ingest. Rationale: preserves user intent + bounds token spend. Exception: `alexandria automation create --on "subscription" --run "ingest"` can opt a specific workspace into auto-ingest after the user sets it up explicitly.
 - **Does not configure sources or subscriptions.** CLI/UI only.
 - **Does not share wikis.** Not a concept here.
 - **Does not run code or shell.** Read/write markdown only.
