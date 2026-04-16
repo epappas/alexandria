@@ -14,18 +14,24 @@ from llmwiki.db.connection import connect, db_path
 
 console = Console()
 
-VALID_TYPES = ("local", "git-local", "github")
+VALID_TYPES = ("local", "git-local", "github", "rss", "imap")
 
 
 def source_add_command(
-    adapter_type: str = typer.Argument(..., help="Adapter type: local | git-local | github"),
+    adapter_type: str = typer.Argument(..., help="Adapter type: local | git-local | github | rss | imap"),
     name: str = typer.Option(..., "--name", "-n", help="Human-readable name for this source."),
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
     path: Optional[str] = typer.Option(None, "--path", help="Local directory path (for 'local' adapter)."),
     repo_url: Optional[str] = typer.Option(None, "--repo-url", help="Git repo URL (for 'git-local' adapter)."),
     owner: Optional[str] = typer.Option(None, "--owner", help="GitHub owner (for 'github' adapter)."),
     repo: Optional[str] = typer.Option(None, "--repo", help="GitHub repo name (for 'github' adapter)."),
-    token_ref: Optional[str] = typer.Option(None, "--token-ref", help="Secret vault ref for GitHub token."),
+    token_ref: Optional[str] = typer.Option(None, "--token-ref", help="Secret vault ref for token."),
+    feed_url: Optional[str] = typer.Option(None, "--feed-url", help="RSS/Atom feed URL (for 'rss' adapter)."),
+    imap_host: Optional[str] = typer.Option(None, "--imap-host", help="IMAP server host (for 'imap' adapter)."),
+    imap_user: Optional[str] = typer.Option(None, "--imap-user", help="IMAP username (for 'imap' adapter)."),
+    imap_pass_ref: Optional[str] = typer.Option(None, "--imap-pass-ref", help="Vault ref for IMAP password."),
+    imap_folder: Optional[str] = typer.Option("INBOX", "--imap-folder", help="IMAP folder to monitor."),
+    from_allowlist: Optional[str] = typer.Option(None, "--from-allowlist", help="Comma-separated sender filter."),
 ) -> None:
     """Configure a new source adapter."""
     if adapter_type not in VALID_TYPES:
@@ -42,8 +48,12 @@ def source_add_command(
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    adapter_config = _build_config(adapter_type, path=path, repo_url=repo_url,
-                                    owner=owner, repo=repo, token_ref=token_ref)
+    adapter_config = _build_config(
+        adapter_type, path=path, repo_url=repo_url, owner=owner, repo=repo,
+        token_ref=token_ref, feed_url=feed_url, imap_host=imap_host,
+        imap_user=imap_user, imap_pass_ref=imap_pass_ref,
+        imap_folder=imap_folder, from_allowlist=from_allowlist,
+    )
     if isinstance(adapter_config, str):
         console.print(f"[red]error:[/red] {adapter_config}")
         raise typer.Exit(code=1)
@@ -128,6 +138,12 @@ def _build_config(
     owner: str | None = None,
     repo: str | None = None,
     token_ref: str | None = None,
+    feed_url: str | None = None,
+    imap_host: str | None = None,
+    imap_user: str | None = None,
+    imap_pass_ref: str | None = None,
+    imap_folder: str | None = None,
+    from_allowlist: str | None = None,
 ) -> dict | str:
     """Build adapter config dict or return error message."""
     if adapter_type == "local":
@@ -146,6 +162,21 @@ def _build_config(
         cfg: dict = {"owner": owner, "repo": repo}
         if token_ref:
             cfg["token_ref"] = token_ref
+        return cfg
+
+    if adapter_type == "rss":
+        if not feed_url:
+            return "'--feed-url' is required for rss adapter"
+        return {"feed_url": feed_url}
+
+    if adapter_type == "imap":
+        if not imap_host or not imap_user:
+            return "'--imap-host' and '--imap-user' are required for imap adapter"
+        cfg = {"host": imap_host, "username": imap_user, "folder": imap_folder or "INBOX"}
+        if imap_pass_ref:
+            cfg["password_ref"] = imap_pass_ref
+        if from_allowlist:
+            cfg["from_allowlist"] = [a.strip() for a in from_allowlist.split(",")]
         return cfg
 
     return f"unknown adapter type: {adapter_type}"

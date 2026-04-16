@@ -27,6 +27,7 @@ from llmwiki.cli import (
     secrets_cmd,
     source_cmd,
     status_cmd,
+    subscriptions_cmd,
     sync_cmd,
     why_cmd,
     workspace_cmd,
@@ -187,16 +188,19 @@ source_app.command("remove", help="Remove a source adapter.")(source_cmd.source_
 app.add_typer(source_app, name="source")
 
 
-subscriptions_app = typer.Typer(
-    help="Subscription inbox (Phase 5).", no_args_is_help=True
+subscriptions_app = typer.Typer(help="Subscription inbox.", no_args_is_help=True)
+subscriptions_app.command("list", help="Show pending subscription items.")(
+    subscriptions_cmd.subs_list_command
 )
-
-
-@subscriptions_app.command("list")
-def _subs_list_stub() -> None:
-    stub_command(5, "llmwiki subscriptions list", "list pending subscription items")
-
-
+subscriptions_app.command("show", help="Show a single subscription item.")(
+    subscriptions_cmd.subs_show_command
+)
+subscriptions_app.command("dismiss", help="Dismiss a subscription item.")(
+    subscriptions_cmd.subs_dismiss_command
+)
+subscriptions_app.command("poll", help="Poll subscription sources (RSS + IMAP).")(
+    subscriptions_cmd.subs_poll_command
+)
 app.add_typer(subscriptions_app, name="subscriptions")
 
 

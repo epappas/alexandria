@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS source_adapters (
   enabled      INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
-  CHECK (adapter_type IN ('local', 'git-local', 'github'))
+  CHECK (adapter_type IN ('local', 'git-local', 'github', 'rss', 'imap'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_sources_workspace
