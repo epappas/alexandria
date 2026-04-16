@@ -65,7 +65,7 @@ class SecretVault:
         """Store or overwrite an encrypted secret."""
         self._validate_ref(ref)
         key, salt = self._derive_key()
-        encrypted = self._encrypt(plaintext.encode("utf-8"), key)
+        encrypted = self._encrypt(plaintext.encode("utf-8"), key, aad=ref.encode("utf-8"))
         payload = {
             "salt": base64.b64encode(salt).decode(),
             "ciphertext": base64.b64encode(encrypted).decode(),
@@ -90,7 +90,7 @@ class SecretVault:
         salt = base64.b64decode(payload["salt"])
         ciphertext = base64.b64decode(payload["ciphertext"])
         key = self._derive_key_from_salt(salt)
-        plaintext = self._decrypt(ciphertext, key)
+        plaintext = self._decrypt(ciphertext, key, aad=ref.encode("utf-8"))
 
         # Update last_used_at
         payload["last_used_at"] = _now_iso()
@@ -205,22 +205,22 @@ class SecretVault:
             "sha256", passphrase.encode("utf-8"), salt, self.KEY_ITERATIONS
         )
 
-    def _encrypt(self, plaintext: bytes, key: bytes) -> bytes:
+    def _encrypt(self, plaintext: bytes, key: bytes, aad: bytes | None = None) -> bytes:
         """AES-256-GCM encrypt. Returns nonce + ciphertext + tag."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         nonce = os.urandom(self.NONCE_SIZE)
         aesgcm = AESGCM(key)
-        ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+        ciphertext = aesgcm.encrypt(nonce, plaintext, aad)
         return nonce + ciphertext
 
-    def _decrypt(self, data: bytes, key: bytes) -> bytes:
+    def _decrypt(self, data: bytes, key: bytes, aad: bytes | None = None) -> bytes:
         """AES-256-GCM decrypt. Input is nonce + ciphertext + tag."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         nonce = data[:self.NONCE_SIZE]
         ciphertext = data[self.NONCE_SIZE:]
         aesgcm = AESGCM(key)
         try:
-            return aesgcm.decrypt(nonce, ciphertext, None)
+            return aesgcm.decrypt(nonce, ciphertext, aad)
         except Exception as exc:
             raise VaultError("decryption failed — wrong passphrase or corrupted data") from exc
 
