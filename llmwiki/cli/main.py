@@ -16,10 +16,12 @@ from llmwiki import __version__
 from llmwiki.cli import (
     backup_cmd,
     beliefs_cmd,
+    daemon_cmd,
     db_cmd,
     doctor_cmd,
     ingest_cmd,
     init_cmd,
+    logs_cmd,
     mcp_cmd,
     paste_cmd,
     project_cmd,
@@ -248,25 +250,15 @@ def _hooks_install_stub(
 app.add_typer(hooks_app, name="hooks")
 
 
-daemon_app = typer.Typer(help="Daemon (Phase 6).", no_args_is_help=True)
-
-
-@daemon_app.command("start")
-def _daemon_start_stub() -> None:
-    stub_command(6, "llmwiki daemon start", "start the supervised-subprocess daemon")
-
-
-@daemon_app.command("stop")
-def _daemon_stop_stub() -> None:
-    stub_command(6, "llmwiki daemon stop", "stop the daemon")
-
-
-@daemon_app.command("status")
-def _daemon_status_stub() -> None:
-    stub_command(6, "llmwiki daemon status", "show daemon process state")
-
-
+daemon_app = typer.Typer(help="Daemon management.", no_args_is_help=True)
+daemon_app.command("start", help="Start the supervised-subprocess daemon.")(daemon_cmd.daemon_start_command)
+daemon_app.command("stop", help="Stop the running daemon.")(daemon_cmd.daemon_stop_command)
+daemon_app.command("status", help="Show daemon process state.")(daemon_cmd.daemon_status_command)
 app.add_typer(daemon_app, name="daemon")
+
+logs_app = typer.Typer(help="Structured log viewer.", no_args_is_help=True)
+logs_app.command("show", help="Show structured logs.")(logs_cmd.logs_show_command)
+app.add_typer(logs_app, name="logs")
 
 
 def main() -> None:
