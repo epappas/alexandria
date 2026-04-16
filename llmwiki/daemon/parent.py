@@ -229,7 +229,7 @@ class DaemonParent:
         self._logger.info("daemon_stopped")
 
     def _handle_sigterm(self, signum: int, frame: Any) -> None:
-        self._logger.info("daemon_signal", data={"signal": signum})
+        # No logging here — signal handlers must not acquire locks (deadlock risk)
         self.stop()
 
 

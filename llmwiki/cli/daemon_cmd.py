@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -54,6 +55,19 @@ def daemon_stop_command() -> None:
         raise typer.Exit(code=1)
 
     pid = int(parent.pid_path.read_text().strip())
+
+    # Verify the PID belongs to an llmwiki process before sending signal
+    try:
+        cmdline_path = Path(f"/proc/{pid}/cmdline")
+        if cmdline_path.exists():
+            cmdline = cmdline_path.read_bytes().decode("utf-8", errors="replace")
+            if "llmwiki" not in cmdline:
+                console.print(f"[red]PID {pid} is not an llmwiki process. Stale PID file?[/red]")
+                parent.pid_path.unlink(missing_ok=True)
+                raise typer.Exit(code=1)
+    except (OSError, PermissionError):
+        pass  # non-Linux or no /proc access — proceed with caution
+
     os.kill(pid, signal.SIGTERM)
     console.print(f"[green]Sent SIGTERM to daemon[/green] (pid {pid})")
 
