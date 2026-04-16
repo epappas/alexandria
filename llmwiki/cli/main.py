@@ -20,6 +20,7 @@ from llmwiki.cli import (
     daemon_cmd,
     db_cmd,
     doctor_cmd,
+    eval_cmd,
     hooks_cmd,
     ingest_cmd,
     init_cmd,
@@ -33,6 +34,7 @@ from llmwiki.cli import (
     status_cmd,
     subscriptions_cmd,
     sync_cmd,
+    synthesize_cmd,
     why_cmd,
     workspace_cmd,
 )
@@ -173,9 +175,9 @@ beliefs_app.command("export", help="Export beliefs to JSON or CSV.")(beliefs_cmd
 app.add_typer(beliefs_app, name="beliefs")
 
 
-@app.command("synthesize", help="Trigger temporal synthesis (Phase 8).")
-def _synthesize_stub() -> None:
-    stub_command(8, "llmwiki synthesize", "run scheduled temporal synthesis from event streams")
+app.command("synthesize", help="Generate temporal synthesis digest.")(
+    synthesize_cmd.synthesize_command
+)
 
 
 app.command("sync", help="Pull from configured sources.")(
@@ -218,16 +220,9 @@ mcp_app.command("status", help="Show MCP server registration status.")(mcp_cmd.s
 app.add_typer(mcp_app, name="mcp")
 
 
-eval_app = typer.Typer(help="Evaluation metrics (Phase 9).", no_args_is_help=True)
-
-
-@eval_app.command("run")
-def _eval_run_stub(
-    metric: str = typer.Option("all", "--metric", help="Metric name (M1..M5 or all)."),
-) -> None:
-    stub_command(9, "llmwiki eval run", "compute one or all of the M1-M5 metrics")
-
-
+eval_app = typer.Typer(help="Evaluation metrics.", no_args_is_help=True)
+eval_app.command("run", help="Run evaluation metrics.")(eval_cmd.eval_run_command)
+eval_app.command("report", help="Show evaluation history.")(eval_cmd.eval_report_command)
 app.add_typer(eval_app, name="eval")
 
 

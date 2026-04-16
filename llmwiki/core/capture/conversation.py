@@ -79,6 +79,7 @@ def capture_conversation(
 
     if not session_id:
         session_id = _derive_session_id(transcript_path)
+    session_id = _validate_session_id(session_id)
 
     # Build markdown document
     content = _build_markdown(messages, client, session_id)
@@ -167,6 +168,17 @@ def _extract_text_content(message: dict[str, Any]) -> str:
                     parts.append(f"[tool: {block.get('name', '')}]")
         return "\n".join(parts)
     return str(content)
+
+
+def _validate_session_id(session_id: str) -> str:
+    """Validate session_id is safe for use in file paths."""
+    if not session_id or "/" in session_id or "\\" in session_id or ".." in session_id:
+        raise CaptureError(f"invalid session_id: {session_id!r}")
+    # Strip to alphanumeric + dash + underscore
+    clean = re.sub(r"[^a-zA-Z0-9_-]", "", session_id)
+    if not clean:
+        raise CaptureError(f"session_id contains no valid characters: {session_id!r}")
+    return clean
 
 
 def _derive_session_id(path: Path) -> str:
