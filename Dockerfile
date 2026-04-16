@@ -22,7 +22,7 @@ COPY README.md LICENSE ./
 RUN uv pip install --system --no-cache -e .
 
 # Verify install
-RUN alexandria --version || alxia --version
+RUN alxia --help > /dev/null
 
 # Runtime
 FROM python:3.12-slim
