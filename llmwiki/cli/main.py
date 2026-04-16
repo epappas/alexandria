@@ -16,9 +16,11 @@ from llmwiki import __version__
 from llmwiki.cli import (
     backup_cmd,
     beliefs_cmd,
+    capture_cmd,
     daemon_cmd,
     db_cmd,
     doctor_cmd,
+    hooks_cmd,
     ingest_cmd,
     init_cmd,
     logs_cmd,
@@ -208,6 +210,7 @@ app.add_typer(subscriptions_app, name="subscriptions")
 
 mcp_app = typer.Typer(help="MCP integration.", no_args_is_help=True)
 mcp_app.command("serve", help="Start the stdio MCP server.")(mcp_cmd.serve_command)
+mcp_app.command("serve-http", help="Start the HTTP+SSE MCP server.")(mcp_cmd.serve_http_command)
 mcp_app.command("install", help="Register llmwiki as an MCP server in a client.")(
     mcp_cmd.install_command
 )
@@ -237,17 +240,18 @@ secrets_app.command("reveal", help="Reveal a secret (audit-logged).")(secrets_cm
 app.add_typer(secrets_app, name="secrets")
 
 
-hooks_app = typer.Typer(help="Auto-save hooks (Phase 7).", no_args_is_help=True)
-
-
-@hooks_app.command("install")
-def _hooks_install_stub(
-    client: str = typer.Argument(..., help="Client to install hooks into."),
-) -> None:
-    stub_command(7, "llmwiki hooks install", "install Stop + PreCompact hooks")
-
-
+hooks_app = typer.Typer(help="Auto-save hooks.", no_args_is_help=True)
+hooks_app.command("install", help="Install hooks into a client.")(hooks_cmd.hooks_install_command)
+hooks_app.command("uninstall", help="Remove hooks from a client.")(hooks_cmd.hooks_uninstall_command)
+hooks_app.command("verify", help="Verify hook installation.")(hooks_cmd.hooks_verify_command)
 app.add_typer(hooks_app, name="hooks")
+
+capture_app = typer.Typer(help="Conversation capture.", no_args_is_help=True)
+capture_app.command("conversation", help="Capture a conversation transcript.")(
+    capture_cmd.capture_conversation_command
+)
+app.command("captures", help="List captured conversations.")(capture_cmd.captures_list_command)
+app.add_typer(capture_app, name="capture")
 
 
 daemon_app = typer.Typer(help="Daemon management.", no_args_is_help=True)

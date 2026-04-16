@@ -42,6 +42,22 @@ def serve_command(
     run_stdio(pinned_workspace=workspace)
 
 
+def serve_http_command(
+    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(7219, "--port"),
+) -> None:
+    """Start the MCP server over HTTP+SSE (Phase 6b transport)."""
+    from llmwiki.mcp.server import run_http
+
+    stderr_console = Console(stderr=True)
+    stderr_console.print(
+        f"[dim]llmwiki MCP HTTP server starting on {host}:{port}"
+        f"{' (pinned: ' + workspace + ')' if workspace else ' (open mode)'}[/dim]"
+    )
+    run_http(pinned_workspace=workspace, host=host, port=port)
+
+
 def install_command(
     client: str = typer.Argument(
         ...,

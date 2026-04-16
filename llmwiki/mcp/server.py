@@ -98,3 +98,13 @@ def run_stdio(pinned_workspace: str | None = None) -> None:
     """
     server = create_server(pinned_workspace=pinned_workspace)
     server.run(transport="stdio")
+
+
+def run_http(
+    pinned_workspace: str | None = None,
+    host: str = "127.0.0.1",
+    port: int = 7219,
+) -> None:
+    """Start the MCP server over HTTP+SSE. Phase 6b transport."""
+    server = create_server(pinned_workspace=pinned_workspace)
+    server.run(transport="sse", host=host, port=port)
