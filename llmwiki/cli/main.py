@@ -1,9 +1,7 @@
 """Top-level Typer application for the ``llmwiki`` CLI.
 
-Implements the surface defined in ``docs/architecture/20_cli_surface.md``.
-Phase 0 ships the commands enumerated in ``docs/IMPLEMENTATION_PLAN.md``
-Phase 0; every other command is registered as a phase stub so the user can
-discover the surface via ``llmwiki -h`` while honouring the no-fakes rule.
+Implements the full CLI surface defined in ``docs/architecture/20_cli_surface.md``.
+All commands have real implementations — no stubs.
 """
 
 from __future__ import annotations
@@ -81,7 +79,7 @@ def root(
     install_crash_handler(resolve_home())
 
 
-# -- Phase 0 commands (real implementations) --------------------------------
+# -- Core commands -----------------------------------------------------------
 
 app.command("init", help="Initialize ~/.llmwiki/ and the global workspace.")(
     init_cmd.init_command
@@ -129,7 +127,7 @@ db_app.command("status", help="Show schema version and pending migrations.")(
 )
 app.add_typer(db_app, name="db")
 
-# -- Backup group (mlops F3 — moved to Phase 0) -----------------------------
+# -- Backup group ------------------------------------------------------------
 
 backup_app = typer.Typer(help="Backup and restore.", no_args_is_help=True)
 backup_app.command("create", help="Create a backup tarball of ~/.llmwiki/.")(
@@ -137,13 +135,13 @@ backup_app.command("create", help="Create a backup tarball of ~/.llmwiki/.")(
 )
 app.add_typer(backup_app, name="backup")
 
-# -- Reindex group (mlops F4 — fts-verify in Phase 0) -----------------------
+# -- Reindex group -----------------------------------------------------------
 
 reindex_app = typer.Typer(help="Rebuild SQLite indexes from filesystem.", no_args_is_help=True)
 reindex_app.callback(invoke_without_command=True)(reindex_cmd.reindex_callback)
 app.add_typer(reindex_app, name="reindex")
 
-# -- Stubs for commands shipped in later phases -----------------------------
+# -- Knowledge commands ------------------------------------------------------
 
 
 app.command("ingest", help="Compile a source into the wiki (staged + verified).")(
@@ -183,7 +181,7 @@ app.command("sync", help="Pull from configured sources.")(
 )
 
 
-# -- Stub command groups for later phases -----------------------------------
+# -- Source and subscription groups ------------------------------------------
 
 source_app = typer.Typer(help="Source adapters.", no_args_is_help=True)
 source_app.command("add", help="Configure a new source adapter.")(source_cmd.source_add_command)
