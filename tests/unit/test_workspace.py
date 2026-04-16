@@ -1,4 +1,4 @@
-"""Tests for ``llmwiki.core.workspace`` against real filesystem + SQLite."""
+"""Tests for ``alexandria.core.workspace`` against real filesystem + SQLite."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.workspace import (
+from alexandria.core.workspace import (
     GLOBAL_SLUG,
     InvalidSlugError,
     WorkspaceError,

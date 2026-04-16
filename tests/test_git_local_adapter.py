@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.adapters.git_local import GitLocalAdapter, GitLocalError
+from alexandria.core.adapters.git_local import GitLocalAdapter, GitLocalError
 
 
 @pytest.fixture

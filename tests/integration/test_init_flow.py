@@ -1,6 +1,6 @@
 """End-to-end integration test: init → status → project create → paste → status.
 
-Runs the real CLI in a subprocess against a real temporary llmwiki home.
+Runs the real CLI in a subprocess against a real temporary alexandria home.
 No mocks. Hits real SQLite, real filesystem, real Typer.
 """
 
@@ -9,20 +9,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tests.conftest import run_llmwiki
+from tests.conftest import run_alexandria
 
 
 def test_full_init_and_status_flow(tmp_home: Path) -> None:
     """The canonical Phase 0 demo script must complete cleanly."""
     # 1. status before init reports "not initialized"
-    result = run_llmwiki(tmp_home, "status", "--json")
+    result = run_alexandria(tmp_home, "status", "--json")
     payload = json.loads(result.stdout)
     assert payload["initialized"] is False
     assert payload["schema_version"] == 0
     assert payload["workspaces"] == []
 
     # 2. init creates the home + global workspace + applies migrations
-    run_llmwiki(tmp_home, "init")
+    run_alexandria(tmp_home, "init")
     assert (tmp_home / "config.toml").exists()
     assert (tmp_home / "state.db").exists()
     assert (tmp_home / "workspaces" / "global").is_dir()
@@ -31,7 +31,7 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
     assert (tmp_home / "workspaces" / "global" / "SKILL.md").exists()
 
     # 3. status after init reports the global workspace
-    result = run_llmwiki(tmp_home, "status", "--json")
+    result = run_alexandria(tmp_home, "status", "--json")
     payload = json.loads(result.stdout)
     assert payload["initialized"] is True
     assert payload["schema_version"] >= 1
@@ -40,20 +40,20 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
     assert payload["fts_integrity"]["status"] == "ok"
 
     # 4. workspace list shows the global workspace
-    result = run_llmwiki(tmp_home, "workspace", "list", "--json")
+    result = run_alexandria(tmp_home, "workspace", "list", "--json")
     workspaces = json.loads(result.stdout)
     assert any(w["slug"] == "global" for w in workspaces)
 
     # 5. project create makes a new workspace
-    run_llmwiki(tmp_home, "project", "create", "Research", "--description", "ML papers")
+    run_alexandria(tmp_home, "project", "create", "Research", "--description", "ML papers")
     assert (tmp_home / "workspaces" / "research").is_dir()
 
-    result = run_llmwiki(tmp_home, "project", "list", "--json")
+    result = run_alexandria(tmp_home, "project", "list", "--json")
     project_payload = json.loads(result.stdout)
     assert any(p["slug"] == "research" for p in project_payload)
 
     # 6. paste captures into raw/local/
-    run_llmwiki(
+    run_alexandria(
         tmp_home,
         "paste",
         "--workspace",
@@ -69,7 +69,7 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
     assert "test note" in body.lower()
 
     # 7. paste with the same content is deduped (no second file)
-    run_llmwiki(
+    run_alexandria(
         tmp_home,
         "paste",
         "--workspace",
@@ -83,33 +83,33 @@ def test_full_init_and_status_flow(tmp_home: Path) -> None:
     assert len(notes_after) == 1  # unchanged
 
     # 8. doctor passes
-    run_llmwiki(tmp_home, "doctor")
+    run_alexandria(tmp_home, "doctor")
 
     # 9. db status shows current version
-    result = run_llmwiki(tmp_home, "db", "status")
+    result = run_alexandria(tmp_home, "db", "status")
     assert "Schema version:" in result.stdout
 
     # 10. workspace use switches the current workspace
-    run_llmwiki(tmp_home, "workspace", "use", "research")
-    result = run_llmwiki(tmp_home, "workspace", "current")
+    run_alexandria(tmp_home, "workspace", "use", "research")
+    result = run_alexandria(tmp_home, "workspace", "current")
     assert result.stdout.strip() == "research"
 
 
 def test_lint_on_fresh_workspace_finds_no_issues(tmp_home: Path) -> None:
     """lint on a fresh workspace with no wiki pages exits cleanly."""
-    run_llmwiki(tmp_home, "init")
-    result = run_llmwiki(tmp_home, "lint", expect_exit=0)
+    run_alexandria(tmp_home, "init")
+    result = run_alexandria(tmp_home, "lint", expect_exit=0)
     assert "No wiki directory" in result.stdout or "No issues" in result.stdout
 
 
 def test_init_is_idempotent_with_force(tmp_home: Path) -> None:
-    """``llmwiki init --force`` does not error on an existing home."""
-    run_llmwiki(tmp_home, "init")
-    run_llmwiki(tmp_home, "init", "--force")
+    """``alexandria init --force`` does not error on an existing home."""
+    run_alexandria(tmp_home, "init")
+    run_alexandria(tmp_home, "init", "--force")
     # Workspace and config still exist and migration table is unchanged.
     assert (tmp_home / "workspaces" / "global").is_dir()
 
 
 def test_init_without_force_refuses_overwrite(tmp_home: Path) -> None:
-    run_llmwiki(tmp_home, "init")
-    run_llmwiki(tmp_home, "init", expect_exit=1)
+    run_alexandria(tmp_home, "init")
+    run_alexandria(tmp_home, "init", expect_exit=1)

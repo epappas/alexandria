@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmwiki.core.fts_integrity import check_fts_integrity, rebuild_fts
-from llmwiki.db.connection import connect, db_path
+from alexandria.core.fts_integrity import check_fts_integrity, rebuild_fts
+from alexandria.db.connection import connect, db_path
 
 
 def test_fts_integrity_ok_on_empty_database(initialized_home: Path) -> None:

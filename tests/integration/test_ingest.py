@@ -1,4 +1,4 @@
-"""Integration tests for ``llmwiki ingest`` — the complete write pipeline.
+"""Integration tests for ``alexandria ingest`` — the complete write pipeline.
 
 Tests the full flow: source file → raw copy → staged wiki page →
 deterministic verifier → commit or reject. All against real filesystem
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.ingest import IngestError, IngestResult, ingest_file
-from llmwiki.core.workspace import init_workspace
-from llmwiki.db.connection import connect, db_path
-from llmwiki.db.migrator import Migrator
+from alexandria.core.ingest import IngestError, IngestResult, ingest_file
+from alexandria.core.workspace import init_workspace
+from alexandria.db.connection import connect, db_path
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture
@@ -153,11 +153,11 @@ def test_ingest_cli_dry_run(
     source_with_content: Path,
 ) -> None:
     """The --dry-run flag produces a cost estimate without ingesting."""
-    from tests.conftest import run_llmwiki
+    from tests.conftest import run_alexandria
 
     home, ws_path, slug = ingest_workspace
 
-    result = run_llmwiki(
+    result = run_alexandria(
         home,
         "ingest",
         str(source_with_content),
@@ -171,12 +171,12 @@ def test_ingest_cli_end_to_end(
     ingest_workspace: tuple[Path, Path, str],
     source_with_content: Path,
 ) -> None:
-    """Full CLI e2e: llmwiki ingest <file> commits to the wiki."""
-    from tests.conftest import run_llmwiki
+    """Full CLI e2e: alexandria ingest <file> commits to the wiki."""
+    from tests.conftest import run_alexandria
 
     home, ws_path, slug = ingest_workspace
 
-    result = run_llmwiki(
+    result = run_alexandria(
         home,
         "ingest",
         str(source_with_content),

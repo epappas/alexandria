@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llmwiki.llm.base import Usage
-from llmwiki.llm.budget import BudgetConfig, BudgetEnforcer, BudgetExhausted
+from alexandria.llm.base import Usage
+from alexandria.llm.budget import BudgetConfig, BudgetEnforcer, BudgetExhausted
 
 
 def test_budget_allows_within_limits() -> None:

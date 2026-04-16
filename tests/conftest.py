@@ -16,23 +16,23 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.config import Config, GeneralConfig, StateConfig, save_config
-from llmwiki.core.workspace import GLOBAL_SLUG, init_workspace
-from llmwiki.db.connection import connect, db_path
-from llmwiki.db.migrator import Migrator
+from alexandria.config import Config, GeneralConfig, StateConfig, save_config
+from alexandria.core.workspace import GLOBAL_SLUG, init_workspace
+from alexandria.db.connection import connect, db_path
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture
 def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Provide an isolated llmwiki home rooted in a tempdir.
+    """Provide an isolated alexandria home rooted in a tempdir.
 
-    Yields the home path. Sets ``LLMWIKI_HOME`` so any code that reads the env
+    Yields the home path. Sets ``ALEXANDRIA_HOME`` so any code that reads the env
     var resolves the same directory.
     """
-    home = tmp_path / "llmwiki"
+    home = tmp_path / "alexandria"
     home.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("LLMWIKI_HOME", str(home))
-    monkeypatch.delenv("LLMWIKI_WORKSPACE", raising=False)
+    monkeypatch.setenv("ALEXANDRIA_HOME", str(home))
+    monkeypatch.delenv("ALEXANDRIA_WORKSPACE", raising=False)
     yield home
 
 
@@ -61,24 +61,24 @@ def initialized_home(tmp_home: Path) -> Path:
 
 
 @pytest.fixture
-def llmwiki_bin(tmp_home: Path) -> list[str]:
-    """Return the argv prefix for invoking the llmwiki CLI as a subprocess.
+def alexandria_bin(tmp_home: Path) -> list[str]:
+    """Return the argv prefix for invoking the alexandria CLI as a subprocess.
 
-    Uses ``python -m llmwiki`` rather than the installed entry point so the
+    Uses ``python -m alexandria`` rather than the installed entry point so the
     test does not depend on ``pip install -e .`` having been run before pytest.
     """
     env = os.environ.copy()
-    env["LLMWIKI_HOME"] = str(tmp_home)
-    return [sys.executable, "-m", "llmwiki"]
+    env["ALEXANDRIA_HOME"] = str(tmp_home)
+    return [sys.executable, "-m", "alexandria"]
 
 
-def run_llmwiki(home: Path, *args: str, expect_exit: int = 0) -> subprocess.CompletedProcess[str]:
+def run_alexandria(home: Path, *args: str, expect_exit: int = 0) -> subprocess.CompletedProcess[str]:
     """Helper for running the CLI as a subprocess against an isolated home."""
     env = os.environ.copy()
-    env["LLMWIKI_HOME"] = str(home)
-    env.pop("LLMWIKI_WORKSPACE", None)
+    env["ALEXANDRIA_HOME"] = str(home)
+    env.pop("ALEXANDRIA_WORKSPACE", None)
     result = subprocess.run(
-        [sys.executable, "-m", "llmwiki", *args],
+        [sys.executable, "-m", "alexandria", *args],
         capture_output=True,
         text=True,
         env=env,
@@ -86,7 +86,7 @@ def run_llmwiki(home: Path, *args: str, expect_exit: int = 0) -> subprocess.Comp
     )
     if result.returncode != expect_exit:
         raise AssertionError(
-            f"llmwiki {' '.join(args)}\n"
+            f"alexandria {' '.join(args)}\n"
             f"exit={result.returncode} (expected {expect_exit})\n"
             f"stdout: {result.stdout}\n"
             f"stderr: {result.stderr}"

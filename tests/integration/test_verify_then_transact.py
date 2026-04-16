@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.runs import (
+from alexandria.core.runs import (
     RunStatus,
     commit_run,
     create_run,
@@ -18,7 +18,7 @@ from llmwiki.core.runs import (
     read_run_status,
     reject_run,
 )
-from llmwiki.core.verifier import DeterministicVerifier
+from alexandria.core.verifier import DeterministicVerifier
 
 
 @pytest.fixture

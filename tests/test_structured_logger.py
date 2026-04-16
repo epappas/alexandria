@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.observability.logger import StructuredLogger, get_logger, init_logging
+from alexandria.observability.logger import StructuredLogger, get_logger, init_logging
 
 
 class TestStructuredLogger:

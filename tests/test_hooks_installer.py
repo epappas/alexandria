@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.hooks.installer.claude_code import (
+from alexandria.hooks.installer.claude_code import (
     HOOK_PROTOCOL_VERSION,
     install_claude_code_hooks,
     uninstall_claude_code_hooks,
@@ -17,7 +17,7 @@ class TestClaudeCodeHooks:
     def test_install(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         result = install_claude_code_hooks()
         assert "Stop" in result["hooks_installed"]
@@ -26,12 +26,12 @@ class TestClaudeCodeHooks:
 
         config = json.loads(settings.read_text())
         assert "Stop" in config["hooks"]
-        assert config["hooks"]["Stop"]["_llmwiki_managed"] is True
+        assert config["hooks"]["Stop"]["_alexandria_managed"] is True
 
     def test_install_with_workspace(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         result = install_claude_code_hooks(workspace="myproject")
         config = json.loads(settings.read_text())
@@ -40,7 +40,7 @@ class TestClaudeCodeHooks:
     def test_uninstall(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         install_claude_code_hooks()
         removed = uninstall_claude_code_hooks()
@@ -52,7 +52,7 @@ class TestClaudeCodeHooks:
     def test_uninstall_no_hooks(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         removed = uninstall_claude_code_hooks()
         assert removed is False
@@ -60,7 +60,7 @@ class TestClaudeCodeHooks:
     def test_verify_installed(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         install_claude_code_hooks()
         result = verify_claude_code_hooks()
@@ -70,7 +70,7 @@ class TestClaudeCodeHooks:
     def test_verify_not_installed(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         result = verify_claude_code_hooks()
         assert result["installed"] is False
@@ -79,7 +79,7 @@ class TestClaudeCodeHooks:
     def test_verify_version_mismatch(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         install_claude_code_hooks()
         # Tamper with version
@@ -94,7 +94,7 @@ class TestClaudeCodeHooks:
     def test_preserves_existing_settings(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
-            "llmwiki.hooks.installer.claude_code.SETTINGS_PATH", settings
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
         # Pre-existing settings
         settings.parent.mkdir(parents=True, exist_ok=True)

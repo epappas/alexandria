@@ -6,20 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.daemon.scheduler import SchedulerChild
-from llmwiki.db.connection import connect, db_path
-from llmwiki.db.migrator import Migrator
-from llmwiki.observability.logger import StructuredLogger
+from alexandria.daemon.scheduler import SchedulerChild
+from alexandria.db.connection import connect, db_path
+from alexandria.db.migrator import Migrator
+from alexandria.observability.logger import StructuredLogger
 
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
-    h = tmp_path / "llmwiki"
+    h = tmp_path / "alexandria"
     h.mkdir()
     with connect(db_path(h)) as conn:
         Migrator().apply_pending(conn)
     # Create a workspace so sync jobs have something to work with
-    from llmwiki.core.workspace import init_workspace
+    from alexandria.core.workspace import init_workspace
     init_workspace(h, "global", "Global", "Global workspace")
     return h
 
@@ -56,7 +56,7 @@ class TestSchedulerChild:
         child.stop()
         thread.join(timeout=10)
 
-        from llmwiki.daemon.heartbeat import get_heartbeats
+        from alexandria.daemon.heartbeat import get_heartbeats
         with connect(db_path(home)) as conn:
             beats = get_heartbeats(conn)
             # May or may not have a beat depending on timing

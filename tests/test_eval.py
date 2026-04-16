@@ -2,10 +2,10 @@
 
 import pytest
 
-from llmwiki.eval.metrics import M1CitationFidelity, M2CascadeCoverage, M4Cost, M5SelfConsistency, MetricResult
-from llmwiki.eval.runner import check_synthesis_gate, run_all_metrics, run_metric
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.eval.metrics import M1CitationFidelity, M2CascadeCoverage, M4Cost, M5SelfConsistency, MetricResult
+from alexandria.eval.runner import check_synthesis_gate, run_all_metrics, run_metric
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

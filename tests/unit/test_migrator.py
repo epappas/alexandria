@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migration, Migrator, MigratorError
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migration, Migrator, MigratorError
 
 
 def test_discover_returns_migrations_in_order() -> None:

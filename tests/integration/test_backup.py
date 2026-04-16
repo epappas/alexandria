@@ -1,12 +1,12 @@
-"""Integration test for ``llmwiki backup create`` against real SQLite + tar."""
+"""Integration test for ``alexandria backup create`` against real SQLite + tar."""
 
 from __future__ import annotations
 
 import tarfile
 from pathlib import Path
 
-from llmwiki.core.backup import create_backup
-from llmwiki.core.workspace import init_workspace
+from alexandria.core.backup import create_backup
+from alexandria.core.workspace import init_workspace
 
 
 def test_backup_includes_db_snapshot_and_workspace_files(initialized_home: Path) -> None:

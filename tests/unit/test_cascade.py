@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.cascade import (
+from alexandria.core.cascade import (
     CascadeError,
     stage_hedge,
     stage_merge,

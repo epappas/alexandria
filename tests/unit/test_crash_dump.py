@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.crash_dump import crashes_dir, install_crash_handler, write_crash_dump
+from alexandria.core.crash_dump import crashes_dir, install_crash_handler, write_crash_dump
 
 
 def test_write_crash_dump_creates_file(tmp_path: Path) -> None:
-    home = tmp_path / "llmwiki"
+    home = tmp_path / "alexandria"
     try:
         raise ValueError("oh no")
     except ValueError:
@@ -29,7 +29,7 @@ def test_write_crash_dump_creates_file(tmp_path: Path) -> None:
 
 def test_install_crash_handler_replaces_excepthook(tmp_path: Path) -> None:
     """Installing the handler should change ``sys.excepthook`` and dump on call."""
-    home = tmp_path / "llmwiki"
+    home = tmp_path / "alexandria"
     original = sys.excepthook
     try:
         install_crash_handler(home)

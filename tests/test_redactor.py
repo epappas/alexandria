@@ -1,6 +1,6 @@
 """Tests for log redaction patterns."""
 
-from llmwiki.core.secrets.redactor import REDACTED, Redactor
+from alexandria.core.secrets.redactor import REDACTED, Redactor
 
 
 class TestRedactor:

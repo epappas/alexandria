@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.runs import (
+from alexandria.core.runs import (
     Run,
     RunError,
     RunStatus,

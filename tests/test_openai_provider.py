@@ -5,8 +5,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from llmwiki.llm.base import CompletionRequest, Message
-from llmwiki.llm.openai_provider import OpenAIProvider, OpenAICompatProvider
+from alexandria.llm.base import CompletionRequest, Message
+from alexandria.llm.openai_provider import OpenAIProvider, OpenAICompatProvider
 
 
 class TestOpenAIProvider:

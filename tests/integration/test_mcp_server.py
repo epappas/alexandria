@@ -1,6 +1,6 @@
 """Integration test for the MCP server via subprocess.
 
-Spawns the llmwiki MCP server as a subprocess and communicates with it via
+Spawns the alexandria MCP server as a subprocess and communicates with it via
 the MCP protocol over stdio. This is the real end-to-end test — the same
 path a connected Claude Code session would take.
 """
@@ -15,15 +15,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import run_llmwiki
+from tests.conftest import run_alexandria
 
 
 def test_mcp_serve_starts_and_responds(initialized_home: Path) -> None:
     """The MCP server starts on stdio and responds to an initialize request."""
     # Start the MCP server as a subprocess in pinned mode
-    env = {"LLMWIKI_HOME": str(initialized_home), "PATH": "/usr/bin:/bin"}
+    env = {"ALEXANDRIA_HOME": str(initialized_home), "PATH": "/usr/bin:/bin"}
     proc = subprocess.Popen(
-        [sys.executable, "-m", "llmwiki", "mcp", "serve", "--workspace", "global"],
+        [sys.executable, "-m", "alexandria", "mcp", "serve", "--workspace", "global"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -65,15 +65,15 @@ def test_mcp_serve_starts_and_responds(initialized_home: Path) -> None:
 
 
 def test_mcp_install_creates_config_file(initialized_home: Path, tmp_path: Path) -> None:
-    """``llmwiki mcp install claude-code --workspace global`` creates a .mcp.json."""
+    """``alexandria mcp install claude-code --workspace global`` creates a .mcp.json."""
     import os
 
     env = os.environ.copy()
-    env["LLMWIKI_HOME"] = str(initialized_home)
+    env["ALEXANDRIA_HOME"] = str(initialized_home)
 
     # Run install from tmp_path so .mcp.json lands there (pinned mode = project scope)
     result = subprocess.run(
-        [sys.executable, "-m", "llmwiki", "mcp", "install", "claude-code", "--workspace", "global"],
+        [sys.executable, "-m", "alexandria", "mcp", "install", "claude-code", "--workspace", "global"],
         capture_output=True,
         text=True,
         env=env,
@@ -87,14 +87,14 @@ def test_mcp_install_creates_config_file(initialized_home: Path, tmp_path: Path)
 
     config = json.loads(mcp_json.read_text(encoding="utf-8"))
     assert "mcpServers" in config
-    assert "llmwiki" in config["mcpServers"]
-    server_config = config["mcpServers"]["llmwiki"]
-    assert server_config.get("_llmwiki_managed") is True
+    assert "alexandria" in config["mcpServers"]
+    server_config = config["mcpServers"]["alexandria"]
+    assert server_config.get("_alexandria_managed") is True
     assert "--workspace" in server_config.get("args", [])
     assert "global" in server_config.get("args", [])
 
 
 def test_mcp_status_works_without_registrations(initialized_home: Path) -> None:
-    """``llmwiki mcp status`` completes cleanly even with no registrations."""
-    result = run_llmwiki(initialized_home, "mcp", "status")
-    assert "No llmwiki MCP registrations detected" in result.stdout or result.returncode == 0
+    """``alexandria mcp status`` completes cleanly even with no registrations."""
+    result = run_alexandria(initialized_home, "mcp", "status")
+    assert "No alexandria MCP registrations detected" in result.stdout or result.returncode == 0

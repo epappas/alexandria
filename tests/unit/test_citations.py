@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.citations import (
+from alexandria.core.citations import (
     AnchorVerifyResult,
     Footnote,
     QuoteAnchor,
@@ -14,7 +14,7 @@ from llmwiki.core.citations import (
     extract_footnotes,
     verify_quote_anchor,
 )
-from llmwiki.core.citations.anchors import create_anchor
+from alexandria.core.citations.anchors import create_anchor
 
 
 SAMPLE_PAGE = """\

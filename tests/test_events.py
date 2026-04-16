@@ -4,10 +4,10 @@ import sqlite3
 
 import pytest
 
-from llmwiki.core.adapters.base import FetchedItem
-from llmwiki.core.adapters.events import Event, EventQuery, insert_event, query_events
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.core.adapters.base import FetchedItem
+from alexandria.core.adapters.events import Event, EventQuery, insert_event, query_events
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

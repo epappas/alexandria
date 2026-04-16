@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.citations.anchors import create_anchor, verify_quote_anchor
-from llmwiki.core.runs import RunError, commit_run, create_run, get_staged_dir
+from alexandria.core.citations.anchors import create_anchor, verify_quote_anchor
+from alexandria.core.runs import RunError, commit_run, create_run, get_staged_dir
 
 
 def test_verify_anchor_rejects_path_traversal(tmp_path: Path) -> None:
@@ -52,7 +52,7 @@ def test_commit_run_boundary_check_exists(tmp_path: Path) -> None:
     symlinks or future code paths that could produce an escaping relative
     path. This test verifies the boundary function itself works.
     """
-    from llmwiki.core.runs import _is_within_boundary
+    from alexandria.core.runs import _is_within_boundary
 
     wiki = tmp_path / "wiki"
     wiki.mkdir()

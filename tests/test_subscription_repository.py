@@ -2,7 +2,7 @@
 
 import pytest
 
-from llmwiki.core.adapters.subscription_repository import (
+from alexandria.core.adapters.subscription_repository import (
     get_subscription_item,
     insert_subscription_item,
     is_duplicate,
@@ -10,8 +10,8 @@ from llmwiki.core.adapters.subscription_repository import (
     mark_dismissed,
     mark_ingested,
 )
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

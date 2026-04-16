@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.adapters.rss import (
+from alexandria.core.adapters.rss import (
     RSSAdapter,
     _detect_paywall,
     _html_to_markdown,
@@ -143,7 +143,7 @@ class TestRSSAdapter:
         workspace.mkdir()
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 
@@ -165,7 +165,7 @@ class TestRSSAdapter:
         workspace.mkdir()
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: RSS_FEED,
         )
 
@@ -180,7 +180,7 @@ class TestRSSAdapter:
         workspace.mkdir()
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 
@@ -202,7 +202,7 @@ class TestRSSAdapter:
         workspace.mkdir()
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 

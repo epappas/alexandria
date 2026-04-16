@@ -2,11 +2,11 @@
 
 import pytest
 
-from llmwiki.core.adapters.subscription_poll import poll_subscriptions
-from llmwiki.core.adapters.subscription_repository import list_subscription_items
-from llmwiki.core.adapters.source_repository import insert_source
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.core.adapters.subscription_poll import poll_subscriptions
+from alexandria.core.adapters.subscription_repository import list_subscription_items
+from alexandria.core.adapters.source_repository import insert_source
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 # Minimal Atom feed for integration testing
@@ -56,7 +56,7 @@ class TestSubscriptionPoll:
         conn.execute("COMMIT")
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 
@@ -76,7 +76,7 @@ class TestSubscriptionPoll:
         conn.execute("COMMIT")
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 
@@ -105,7 +105,7 @@ class TestSubscriptionPoll:
         conn.execute("COMMIT")
 
         monkeypatch.setattr(
-            "llmwiki.core.adapters.rss._fetch_feed",
+            "alexandria.core.adapters.rss._fetch_feed",
             lambda url, timeout=30: ATOM_FEED,
         )
 

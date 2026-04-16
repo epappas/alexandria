@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.adapters.local import LocalAdapter
+from alexandria.core.adapters.local import LocalAdapter
 
 
 @pytest.fixture

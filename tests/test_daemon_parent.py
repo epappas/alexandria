@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.daemon.parent import DaemonParent
-from llmwiki.db.connection import connect, db_path
-from llmwiki.db.migrator import Migrator
+from alexandria.daemon.parent import DaemonParent
+from alexandria.db.connection import connect, db_path
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
-    """Set up a minimal llmwiki home for daemon tests."""
-    h = tmp_path / "llmwiki"
+    """Set up a minimal alexandria home for daemon tests."""
+    h = tmp_path / "alexandria"
     h.mkdir()
     # Initialize DB
     with connect(db_path(h)) as conn:
@@ -47,7 +47,7 @@ class TestDaemonParent:
 
     def test_startup_cleanup(self, home: Path) -> None:
         # Insert orphaned runs
-        from llmwiki.core.runs import create_run
+        from alexandria.core.runs import create_run
 
         run = create_run(home, "global", "cli:test", "ingest")
         # The run is in pending state
@@ -56,12 +56,12 @@ class TestDaemonParent:
         parent._startup_cleanup()
 
         # Run should be swept to abandoned
-        from llmwiki.core.runs import read_run_status, RunStatus
+        from alexandria.core.runs import read_run_status, RunStatus
         status = read_run_status(home, run.run_id)
         assert status == RunStatus.ABANDONED
 
     def test_startup_clears_heartbeats(self, home: Path) -> None:
-        from llmwiki.daemon.heartbeat import record_heartbeat, get_heartbeats
+        from alexandria.daemon.heartbeat import record_heartbeat, get_heartbeats
 
         with connect(db_path(home)) as conn:
             record_heartbeat(conn, "stale-child", 999)

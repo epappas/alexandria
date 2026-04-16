@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.workspace import init_workspace
-from llmwiki.mcp.server import WorkspaceAccessError, create_server
+from alexandria.core.workspace import init_workspace
+from alexandria.mcp.server import WorkspaceAccessError, create_server
 
 
 @pytest.fixture
@@ -139,7 +139,7 @@ def test_search_via_fts5(workspace_with_content: tuple[Path, str]) -> None:
     # We need to insert a document into the DB for FTS5 to find it.
     # The workspace_with_content fixture wrote files to disk but didn't
     # insert into the DB. Let's use paste_cmd's logic or insert directly.
-    from llmwiki.db.connection import connect, db_path
+    from alexandria.db.connection import connect, db_path
     from datetime import datetime, timezone
     import hashlib
 

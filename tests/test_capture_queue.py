@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.capture.queue import enqueue_capture, process_capture_queue
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.core.capture.queue import enqueue_capture, process_capture_queue
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

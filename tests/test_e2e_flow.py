@@ -6,20 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.config import resolve_home
-from llmwiki.db.connection import connect, db_path
-from llmwiki.db.migrator import Migrator
+from alexandria.config import resolve_home
+from alexandria.db.connection import connect, db_path
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
-    """Set up a complete llmwiki home for E2E testing."""
-    h = tmp_path / "llmwiki_home"
-    os.environ["LLMWIKI_HOME"] = str(h)
+    """Set up a complete alexandria home for E2E testing."""
+    h = tmp_path / "alexandria_home"
+    os.environ["ALEXANDRIA_HOME"] = str(h)
 
     # Initialize
-    from llmwiki.core.workspace import init_workspace
-    from llmwiki.config import write_default_config
+    from alexandria.core.workspace import init_workspace
+    from alexandria.config import write_default_config
 
     h.mkdir(parents=True)
     write_default_config(h)
@@ -32,7 +32,7 @@ def home(tmp_path: Path) -> Path:
     yield h
 
     # Cleanup
-    os.environ.pop("LLMWIKI_HOME", None)
+    os.environ.pop("ALEXANDRIA_HOME", None)
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ class TestEndToEndFlow:
         wiki_page = wiki_dir / "architecture.md"
         wiki_page.write_text(
             "# Architecture\n\n"
-            "llmwiki uses SQLite with WAL mode [^1].\n"
+            "alexandria uses SQLite with WAL mode [^1].\n"
             "Every wiki write goes through the hostile verifier [^2].\n\n"
             "[^1]: raw/local/architecture_notes.md — \"SQLite with WAL mode\"\n"
             "[^2]: raw/local/architecture_notes.md — \"hostile verifier checks every wiki write\"\n",
@@ -106,8 +106,8 @@ class TestEndToEndFlow:
             conn.execute("COMMIT")
 
         # Step 4: Extract beliefs from the wiki page
-        from llmwiki.core.beliefs.extractor import extract_beliefs_from_page
-        from llmwiki.core.beliefs.repository import insert_belief
+        from alexandria.core.beliefs.extractor import extract_beliefs_from_page
+        from alexandria.core.beliefs.repository import insert_belief
 
         beliefs = extract_beliefs_from_page(
             wiki_content, "wiki/architecture.md", "test-project", "architecture"
@@ -135,20 +135,20 @@ class TestEndToEndFlow:
             assert len(fts_rows) >= 1, f"FTS should find SQLite, beliefs: {[r['statement'] for r in belief_rows]}"
 
         # Step 6: Lint should find no errors (sources exist, citations valid)
-        from llmwiki.cli.lint_cmd import _scan_workspace
+        from alexandria.cli.lint_cmd import _scan_workspace
         issues = _scan_workspace(workspace_path, home, "test-project", verbose=False)
         errors = [i for i in issues if i["severity"] == "error"]
         assert len(errors) == 0, f"Lint should find no errors, got: {errors}"
 
         # Step 7: Synthesis should produce a digest (or skip if no events)
-        from llmwiki.core.synthesis import run_synthesis
+        from alexandria.core.synthesis import run_synthesis
         with connect(db_path(home)) as conn:
             synth_result = run_synthesis(conn, "test-project", workspace_path)
         # May be "skipped" (no events) or "completed" — both are valid
         assert synth_result["status"] in ("skipped", "completed")
 
         # Step 8: Eval metrics should run without error
-        from llmwiki.eval.runner import run_all_metrics
+        from alexandria.eval.runner import run_all_metrics
         with connect(db_path(home)) as conn:
             eval_results = run_all_metrics(conn, "test-project")
         assert len(eval_results) >= 4, "Should run M1, M2, M4, M5"
@@ -157,7 +157,7 @@ class TestEndToEndFlow:
 
     def test_workspace_lifecycle(self, home: Path) -> None:
         """Test workspace create, list, rename, delete."""
-        from llmwiki.core.workspace import (
+        from alexandria.core.workspace import (
             get_workspace,
             list_workspaces,
             rename_workspace,

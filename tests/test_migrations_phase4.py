@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

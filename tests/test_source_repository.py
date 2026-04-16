@@ -2,7 +2,7 @@
 
 import pytest
 
-from llmwiki.core.adapters.source_repository import (
+from alexandria.core.adapters.source_repository import (
     SourceConfig,
     complete_source_run,
     create_source_run,
@@ -14,8 +14,8 @@ from llmwiki.core.adapters.source_repository import (
     sweep_orphaned_source_runs,
     toggle_source,
 )
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

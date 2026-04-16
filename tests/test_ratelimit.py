@@ -2,7 +2,7 @@
 
 import time
 
-from llmwiki.core.ratelimit import RateLimitConfig, RateLimiter, TokenBucket
+from alexandria.core.ratelimit import RateLimitConfig, RateLimiter, TokenBucket
 
 
 class TestTokenBucket:

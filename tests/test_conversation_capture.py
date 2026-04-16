@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.capture.conversation import (
+from alexandria.core.capture.conversation import (
     CaptureError,
     capture_conversation,
     detect_format,
@@ -16,8 +16,8 @@ from llmwiki.core.capture.conversation import (
 def claude_code_transcript(tmp_path: Path) -> Path:
     """Create a Claude Code JSONL transcript fixture."""
     lines = [
-        json.dumps({"type": "human", "message": {"content": "What is llmwiki?"}, "timestamp": "2025-01-15T10:00:00Z"}),
-        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "llmwiki is a knowledge engine."}]}, "timestamp": "2025-01-15T10:00:05Z"}),
+        json.dumps({"type": "human", "message": {"content": "What is alexandria?"}, "timestamp": "2025-01-15T10:00:00Z"}),
+        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "alexandria is a knowledge engine."}]}, "timestamp": "2025-01-15T10:00:05Z"}),
         json.dumps({"type": "human", "message": {"content": "How does it work?"}, "timestamp": "2025-01-15T10:01:00Z"}),
         json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "It accumulates knowledge from sources."}]}, "timestamp": "2025-01-15T10:01:10Z"}),
     ]
@@ -85,7 +85,7 @@ class TestCaptureConversation:
         out_path = workspace_path / result["output_path"]
         assert out_path.exists()
         content = out_path.read_text()
-        assert "llmwiki is a knowledge engine" in content
+        assert "alexandria is a knowledge engine" in content
 
     def test_capture_codex(self, codex_transcript, workspace_path) -> None:
         result = capture_conversation(

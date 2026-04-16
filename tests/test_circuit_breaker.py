@@ -2,7 +2,7 @@
 
 import time
 
-from llmwiki.core.circuit_breaker import (
+from alexandria.core.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerRegistry,

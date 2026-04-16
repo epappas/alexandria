@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.secrets.vault import SecretVault, VaultError
+from alexandria.core.secrets.vault import SecretVault, VaultError
 
 
 @pytest.fixture(autouse=True)
 def vault_passphrase(monkeypatch) -> None:
-    monkeypatch.setenv("LLMWIKI_VAULT_PASSPHRASE", "test-passphrase-12345")
+    monkeypatch.setenv("ALEXANDRIA_VAULT_PASSPHRASE", "test-passphrase-12345")
 
 
 @pytest.fixture
@@ -82,6 +82,6 @@ class TestSecretVault:
 
     def test_wrong_passphrase_fails(self, vault: SecretVault, monkeypatch) -> None:
         vault.set("key", "secret")
-        monkeypatch.setenv("LLMWIKI_VAULT_PASSPHRASE", "wrong-passphrase")
+        monkeypatch.setenv("ALEXANDRIA_VAULT_PASSPHRASE", "wrong-passphrase")
         with pytest.raises(VaultError, match="decryption failed"):
             vault.get("key")

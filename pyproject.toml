@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "llmwiki"
+name = "alexandria"
 dynamic = ["version"]
 description = "Local-first single-user knowledge engine — accumulates gathered knowledge and exposes it via MCP to connected agents like Claude Code."
 readme = "README.md"
@@ -43,20 +43,21 @@ dev = [
 ]
 
 [project.scripts]
-llmwiki = "llmwiki.cli.main:app"
+alexandria = "alexandria.cli.main:app"
+alxia = "alexandria.cli.main:app"
 
 [project.urls]
-Repository = "https://github.com/epappas/llmwiki"
-Documentation = "https://github.com/epappas/llmwiki/tree/main/docs"
+Repository = "https://github.com/epappas/alexandria"
+Documentation = "https://github.com/epappas/alexandria/tree/main/docs"
 
 [tool.hatch.version]
-path = "llmwiki/version.py"
+path = "alexandria/version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llmwiki"]
+packages = ["alexandria"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"llmwiki/db/migrations" = "llmwiki/db/migrations"
+"alexandria/db/migrations" = "alexandria/db/migrations"
 
 [tool.ruff]
 line-length = 100

@@ -2,14 +2,14 @@
 
 import pytest
 
-from llmwiki.daemon.heartbeat import (
+from alexandria.daemon.heartbeat import (
     check_heartbeats,
     clear_heartbeats,
     get_heartbeats,
     record_heartbeat,
 )
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture

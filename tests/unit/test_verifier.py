@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.verifier import DeterministicVerifier, VerifierVerdict
+from alexandria.core.verifier import DeterministicVerifier, VerifierVerdict
 
 
 @pytest.fixture

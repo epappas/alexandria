@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.beliefs.model import Belief
-from llmwiki.core.beliefs.extractor import extract_beliefs_from_page
-from llmwiki.core.beliefs.sidecar import read_sidecar, sidecar_path, write_sidecar
-from llmwiki.core.beliefs.repository import (
+from alexandria.core.beliefs.model import Belief
+from alexandria.core.beliefs.extractor import extract_beliefs_from_page
+from alexandria.core.beliefs.sidecar import read_sidecar, sidecar_path, write_sidecar
+from alexandria.core.beliefs.repository import (
     BeliefQuery,
     get_belief,
     insert_belief,
@@ -18,8 +18,8 @@ from llmwiki.core.beliefs.repository import (
     query_beliefs,
     supersede_belief,
 )
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 WIKI_PAGE = """\

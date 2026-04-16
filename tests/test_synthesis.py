@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki.core.synthesis import run_synthesis
-from llmwiki.db.connection import connect
-from llmwiki.db.migrator import Migrator
+from alexandria.core.synthesis import run_synthesis
+from alexandria.db.connection import connect
+from alexandria.db.migrator import Migrator
 
 
 @pytest.fixture
