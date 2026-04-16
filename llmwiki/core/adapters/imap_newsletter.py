@@ -260,17 +260,28 @@ def _strip_email_chrome(html_content: str) -> str:
     return html_content
 
 
+_DANGEROUS_URI_RE = re.compile(
+    r"\[([^\]]*)\]\((javascript|data|vbscript):[^)]*\)", re.IGNORECASE
+)
+
+
 def _html_to_markdown(html_content: str) -> str:
     """Convert HTML to markdown."""
     if not html_content:
         return ""
     try:
         from markdownify import markdownify
-        return markdownify(html_content, heading_style="ATX", strip=["script", "style"]).strip()
+        md = markdownify(
+            html_content, heading_style="ATX",
+            strip=["script", "style", "iframe", "object", "embed", "form", "input"],
+        ).strip()
     except ImportError:
         import html as html_mod
         clean = re.sub(r"<[^>]+>", "", html_content)
-        return html_mod.unescape(clean).strip()
+        md = html_mod.unescape(clean).strip()
+    # Strip dangerous URI schemes from markdown links
+    md = _DANGEROUS_URI_RE.sub(r"\1", md)
+    return md
 
 
 def _slugify(text: str) -> str:

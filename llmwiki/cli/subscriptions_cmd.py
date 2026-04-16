@@ -129,9 +129,18 @@ def subs_poll_command(
 
     from llmwiki.core.adapters.subscription_poll import poll_subscriptions
 
+    secret_resolver = None
+    try:
+        from llmwiki.core.secrets.resolver import SecretResolver
+        secret_resolver = SecretResolver(home)
+    except Exception:
+        pass
+
     with connect(db_path(home)) as conn:
         console.print("[dim]Polling subscriptions...[/dim]")
-        report = poll_subscriptions(conn, slug, ws.path, source_id=source_id)
+        report = poll_subscriptions(
+            conn, slug, ws.path, source_id=source_id, secret_resolver=secret_resolver,
+        )
 
     console.print(
         f"\n[bold]Poll complete:[/bold] {report.sources_polled} sources, "

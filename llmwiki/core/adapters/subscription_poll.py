@@ -41,6 +41,7 @@ def poll_subscriptions(
     workspace: str,
     workspace_path: Path,
     source_id: str | None = None,
+    secret_resolver: Any = None,
 ) -> PollReport:
     """Poll all subscription sources (RSS + IMAP) or a specific one."""
     report = PollReport()
@@ -55,7 +56,7 @@ def poll_subscriptions(
 
     for src in sources:
         report.sources_polled += 1
-        _poll_one(conn, src, workspace, workspace_path, report)
+        _poll_one(conn, src, workspace, workspace_path, report, secret_resolver)
 
     return report
 
@@ -66,6 +67,7 @@ def _poll_one(
     workspace: str,
     workspace_path: Path,
     report: PollReport,
+    secret_resolver: Any = None,
 ) -> None:
     """Poll a single subscription source."""
     from llmwiki.core.adapters.rss import RSSAdapter
@@ -80,6 +82,11 @@ def _poll_one(
         report.errors.append(f"unknown subscription adapter: {src.adapter_type}")
         return
 
+    # Resolve vault references in config (e.g., password_ref -> password)
+    config = dict(src.config_json)
+    if secret_resolver and "password_ref" in config:
+        config["password"] = secret_resolver.resolve(config["password_ref"])
+
     # Create source run tracking
     conn.execute("BEGIN IMMEDIATE")
     try:
@@ -91,7 +98,7 @@ def _poll_one(
 
     adapter = adapter_cls()
     try:
-        items, sync_result = adapter.sync(workspace_path, dict(src.config_json))
+        items, sync_result = adapter.sync(workspace_path, config)
     except Exception as exc:
         report.errors.append(f"{src.name}: {exc}")
         conn.execute("BEGIN IMMEDIATE")

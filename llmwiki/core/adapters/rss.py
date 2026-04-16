@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import html
+import ipaddress
 import json
 import re
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -92,8 +95,29 @@ class RSSAdapter:
         return errors
 
 
+def _validate_feed_url(url: str) -> None:
+    """Reject URLs that target private/internal networks (SSRF protection)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise RSSAdapterError(f"only http/https feed URLs allowed, got: {parsed.scheme!r}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise RSSAdapterError("feed URL has no hostname")
+    try:
+        resolved = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise RSSAdapterError(f"cannot resolve hostname {hostname}: {exc}") from exc
+    for _, _, _, _, sockaddr in resolved:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise RSSAdapterError(
+                f"feed URL resolves to private/internal address {ip} — blocked for SSRF protection"
+            )
+
+
 def _fetch_feed(url: str, timeout: int = 30) -> str:
     """Fetch raw feed XML/text from URL."""
+    _validate_feed_url(url)
     headers = {
         "User-Agent": "llmwiki/1.0 (feed reader)",
         "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
@@ -178,17 +202,27 @@ def _detect_paywall(content: str, url: str) -> bool:
     return any(m in lower for m in markers)
 
 
+_DANGEROUS_URI_RE = re.compile(
+    r"\[([^\]]*)\]\((javascript|data|vbscript):[^)]*\)", re.IGNORECASE
+)
+
+
 def _html_to_markdown(html_content: str) -> str:
     """Convert HTML to markdown. Falls back to stripped text."""
     if not html_content:
         return ""
     try:
         from markdownify import markdownify
-        return markdownify(html_content, heading_style="ATX", strip=["script", "style"]).strip()
+        md = markdownify(
+            html_content, heading_style="ATX",
+            strip=["script", "style", "iframe", "object", "embed", "form", "input"],
+        ).strip()
     except ImportError:
-        # Fallback: strip HTML tags
         clean = re.sub(r"<[^>]+>", "", html_content)
-        return html.unescape(clean).strip()
+        md = html.unescape(clean).strip()
+    # Strip dangerous URI schemes from markdown links
+    md = _DANGEROUS_URI_RE.sub(r"\1", md)
+    return md
 
 
 def _slugify(text: str) -> str:
