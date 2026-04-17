@@ -1,30 +1,28 @@
 # AGENTS.md
 
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, Copilot) when working with code in this repository.
+
 ## Project Overview
 
 Alexandria (`alexandria-wiki` on PyPI) is a local-first single-user knowledge engine. It accumulates gathered knowledge from 14+ source types (files, PDFs, URLs, git repos, GitHub, RSS, YouTube, Notion, HuggingFace, IMAP, Obsidian vaults, archives) and exposes it via MCP to connected AI agents.
 
 The package name is `alexandria`, the CLI entry points are `alexandria` and `alxia` (shortcut). The Python module is `alexandria/`.
 
-## Build and Test
+## Build & Test Commands
 
 ```bash
-# Install dependencies
-uv sync --dev
-
-# Run tests (352 tests, ~90 seconds)
-uv run pytest tests/ -q
-
-# Build wheel + sdist
-./scripts/build.sh
-
-# Publish to PyPI
-./scripts/publish.sh
+uv sync --dev                              # install dependencies
+uv run pytest tests/ -q                    # full suite (352 tests, ~90s)
+uv run pytest tests/test_pdf.py -v         # single file
+uv run pytest tests/ -k "test_ingest"      # by name pattern
+uv run pytest tests/integration/ -v        # integration tests (subprocess CLI)
+./scripts/build.sh                          # test + build sdist + wheel + twine check
+./scripts/publish.sh                        # test + build + upload PyPI + git tag
 ```
 
 ## Code Style
 
-- Python 3.11+, typed throughout
+- Python 3.11+, typed throughout, strict mypy
 - Favour simple code with little to no abstractions, always typed
 - Functions should be under 50 lines
 - Never use too many if..else cases — assert early, fail/return fast
@@ -35,17 +33,68 @@ uv run pytest tests/ -q
 
 ## Testing
 
-```bash
-uv run pytest tests/                    # full suite
-uv run pytest tests/test_pdf.py -v      # single file
-uv run pytest tests/ -k "test_ingest"   # by name pattern
-```
-
 - Tests use real SQLite, real filesystem, real git repos — no fakes
-- Zero tolerance for mocks of production functionality in tests
+- Zero tolerance for mocks of production functionality
 - Test fixtures use `tmp_path` for isolation
 - Integration tests in `tests/integration/` run the CLI as a subprocess
 - PDF tests require `pymupdf` (skip with `pytest.importorskip`)
+
+## Architecture
+
+Alexandria is a local-first knowledge engine with three entry points: CLI (`alxia`), MCP server (stdio + HTTP), and background daemon. All three share the same SQLite database and filesystem.
+
+### The Write Path (ingest pipeline)
+
+Every wiki write follows this exact sequence through `alexandria/core/ingest.py`:
+
+1. Read source (text, PDF via `core/pdf.py`, or URL via `core/web.py`)
+2. Copy to `raw/local/` with SHA-256 dedup (collision appends `-2`, `-3`, etc.)
+3. Create a **Run** (5-state machine: pending, verifying, committed, rejected, abandoned)
+4. Stage wiki page in `~/.alexandria/runs/<run_id>/staged/` with citations
+5. Run `DeterministicVerifier` — checks footnotes, quote anchors (SHA-256 hashes), source existence
+6. Verdict must be exactly `"commit"` to proceed; anything else triggers rejection
+7. `commit_run()` validates every staged path stays within `wiki/` boundary (path traversal protection), then copies to live wiki
+
+Runs persist on disk as `{meta.json, staged/, verifier/, status}`. The status file is a plain text enum value.
+
+### Database Pattern
+
+SQLite with `isolation_level=None` (autocommit mode). All transactions are explicit:
+
+```python
+conn.execute("BEGIN IMMEDIATE")
+try:
+    conn.execute(...)
+    conn.execute("COMMIT")
+except Exception:
+    conn.execute("ROLLBACK")
+    raise
+```
+
+The migrator (`db/migrator.py`) uses `executescript()` for DDL (which auto-commits), then records metadata in a separate `BEGIN IMMEDIATE`/`COMMIT` block. All DDL uses `IF NOT EXISTS` for idempotency. Migrator checksums every applied migration with SHA-256 and refuses to proceed on tampering.
+
+- SQLite at `~/.alexandria/state.db`
+- 8 migrations in `alexandria/db/migrations/` (applied automatically)
+- Key tables: `workspaces`, `documents`, `documents_fts`, `runs`, `wiki_beliefs`, `wiki_beliefs_fts`, `source_adapters`, `source_runs`, `events`, `events_fts`, `subscription_items`, `capture_queue`, `eval_runs`
+
+### MCP Server
+
+Two binding modes in `mcp/server.py`:
+- **Open mode** (`alxia mcp serve`): all workspaces accessible, every tool requires explicit `workspace` argument
+- **Pinned mode** (`alxia mcp serve --workspace <slug>`): locked to one workspace, other values rejected
+
+16 tools registered in `mcp/tools/`. Each tool is a module with a `register(mcp, resolve_workspace)` function.
+
+### Source Adapters
+
+All adapters in `core/adapters/` implement the same sync pattern: `sync(workspace_path, config) -> tuple[list[FetchedItem], SyncResult]`. The sync orchestrator (`core/adapters/sync.py`) coordinates rate limiter, circuit breaker, event storage, and run tracking.
+
+### Key Architecture Decisions
+
+1. **No vectors, no RAG** — the agent IS the retriever. Alexandria provides FTS5 search primitives; the connected agent composes them.
+2. **Filesystem is source of truth** for documents. SQLite is a materialized view for search/metadata/events.
+3. **Every wiki write goes through the verifier** — citations must link to real source quotes with SHA-256 hash anchors.
+4. **Beliefs are structured claims** with supersession chains, not just text. `alxia why <topic>` traces provenance.
 
 ## Project Structure
 
@@ -60,12 +109,6 @@ alexandria/
     citations/    # Footnote parsing and quote anchor verification
     secrets/      # AES-256-GCM vault with PBKDF2
     verifier/     # Deterministic + hostile verifier
-    ingest.py     # Core ingest pipeline (file, PDF, URL)
-    pdf.py        # PDF text extraction via pymupdf
-    web.py        # URL fetching and HTML-to-markdown
-    runs.py       # Staged-write transaction state machine
-    synthesis.py  # Temporal digest generation
-    workspace.py  # Workspace CRUD
   daemon/         # Background scheduler with heartbeat
   db/             # SQLite connection, migrator, migrations/
   eval/           # M1-M5 quality metrics
@@ -77,26 +120,31 @@ tests/            # 352 tests, no mocks of production code
 scripts/          # build.sh, push.sh, publish.sh
 ```
 
-## Key Architecture Decisions
+## Key Constraints
 
-1. **No vectors, no RAG** — the agent IS the retriever. Alexandria provides FTS5 search primitives; the connected agent composes them.
-2. **Filesystem is source of truth** for documents. SQLite is a materialized view for search/metadata/events.
-3. **Every wiki write goes through the verifier** — citations must link to real source quotes with SHA-256 hash anchors.
-4. **Beliefs are structured claims** with supersession chains, not just text. `alxia why <topic>` traces provenance.
-5. **SQLite WAL mode** with `isolation_level=None` (manual transactions via `BEGIN IMMEDIATE`/`COMMIT`).
+- **Zero tolerance for stubs/fakes/mocks/TODOs/placeholders** in production code. Tests use real SQLite, real filesystem, real git repos.
+- **Every function under 50 lines.** Assert early, return fast. No deep if/else nesting.
+- **Typed throughout.** Every module starts with `from __future__ import annotations`.
+- **No emojis** in code, comments, or commit messages.
+- **Never `git add -A`** — stage specific files.
+- **Never add AI assistant branding** in commit messages.
+- Conventional commits: `feat(component):`, `fix(component):`, `chore:`, `refactor:`
 
-## Database
+## Non-obvious Gotchas
 
-- SQLite at `~/.alexandria/state.db`
-- 8 migrations in `alexandria/db/migrations/` (applied automatically)
-- Migrator uses SHA-256 checksum tamper detection
-- Key tables: `workspaces`, `documents`, `documents_fts`, `runs`, `wiki_beliefs`, `wiki_beliefs_fts`, `source_adapters`, `source_runs`, `events`, `events_fts`, `subscription_items`, `capture_queue`, `eval_runs`
+- `executescript()` auto-commits any pending transaction. The migrator handles this by separating DDL execution from metadata INSERT.
+- `connect()` returns a context manager that sets `row_factory = sqlite3.Row`. Queries return Row objects, not tuples.
+- PDF citations reference the extracted `.md` file (not the binary `.pdf`) so the verifier can read and validate quote anchors.
+- Workspace slugs are strictly validated: `^[a-z0-9][a-z0-9_-]{0,62}$`. Invalid input raises immediately.
+- The `source_adapters` table has a CHECK constraint listing valid adapter types. Adding a new adapter type requires updating this constraint in `0004_sources.sql`.
+- FTS5 queries must use the full table name in `WHERE table MATCH ?` — aliases don't work reliably.
+- Integration tests run `python -m alexandria` as a subprocess, not the entry point, to avoid pip install dependency.
 
 ## Environment Variables
 
 - `ALEXANDRIA_HOME` — data directory (default: `~/.alexandria/`)
-- `ALEXANDRIA_WORKSPACE` — override current workspace
-- `ALEXANDRIA_VAULT_PASSPHRASE` — vault encryption passphrase
+- `ALEXANDRIA_WORKSPACE` — override current workspace slug
+- `ALEXANDRIA_VAULT_PASSPHRASE` — vault encryption key (required for secrets commands)
 
 ## Security
 
@@ -104,16 +152,8 @@ scripts/          # build.sh, push.sh, publish.sh
 - Path traversal protection on all file operations
 - SSRF protection on RSS/URL fetching (blocks private IPs)
 - Git ref validation prevents flag injection
-- Session ID validation prevents path traversal in captures
 - Dangerous URI schemes (javascript:, data:) stripped from markdown
 - Settings files written atomically via tmp + rename
-
-## Commit Guidelines
-
-- Use conventional commits: `feat(component):`, `fix(component):`, `chore:`, `refactor:`
-- Never add AI assistant names in commit messages
-- Never use `git add -A` — stage specific files
-- Commit messages should explain the why, not the what
 
 ## Deployment
 
