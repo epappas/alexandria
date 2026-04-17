@@ -1,9 +1,11 @@
-"""LLM-powered query — understands natural language questions.
+"""LLM-powered query — the LLM drives everything.
 
-1. Extracts search keywords from the question using the LLM
-2. Searches across all knowledge sources using those keywords
-3. Sends the retrieved context + original question to the LLM
-4. Returns a grounded answer with citations to sources
+1. LLM extracts structured search terms from the question
+2. Searches across all knowledge sources using those terms
+3. LLM reads the retrieved context + original question
+4. LLM produces a grounded answer with citations
+
+No regex, no stop words, no keyword hacks. The LLM understands the question.
 """
 
 from __future__ import annotations
@@ -15,20 +17,36 @@ from typing import Any
 from alexandria.llm.base import CompletionRequest, CompletionResult, Message
 
 
-KEYWORD_PROMPT = """Extract 3-5 search keywords from this question. Return ONLY a JSON array of strings, nothing else.
+KEYWORD_PROMPT = """You are a search query planner for a knowledge base. Given a user question, extract the key search terms that would find relevant documents.
 
-Question: {question}"""
+Rules:
+- Return 3-6 search terms as a JSON array of strings
+- Fix obvious typos (e.g., "forr" -> "for")
+- Use the root/canonical form of words (e.g., "memories" -> "memory")
+- Include both specific terms and broader related terms
+- Do NOT include stop words or filler words
 
-ANSWER_PROMPT = """You are a knowledge assistant. Answer the user's question using ONLY the provided context.
-If the context doesn't contain enough information, say so honestly.
-Cite your sources using [Source: title] format.
+Example:
+Question: "what do we know forr agentic memory?"
+Output: ["agentic", "memory", "episodic", "context", "LLM"]
+
+Question: "{question}"
+Output:"""
+
+ANSWER_PROMPT = """You are a knowledge assistant. Answer the user's question using ONLY the provided context from the knowledge base.
+
+Rules:
+- Be concise and factual
+- Cite sources using [Source: title] format
+- If the context doesn't contain enough information, say what you found and what's missing
+- Do not make up information beyond what's in the context
 
 Context:
 {context}
 
 Question: {question}
 
-Answer concisely and factually, citing sources."""
+Answer:"""
 
 
 def llm_query(
@@ -39,17 +57,16 @@ def llm_query(
 ) -> dict[str, Any] | None:
     """Answer a question using LLM-powered retrieval and synthesis.
 
-    Returns dict with: answer, sources, keywords. Returns None if no LLM available.
+    Returns None if no LLM is available — the caller should tell the user
+    to configure a provider.
     """
     from alexandria.core.llm_ingest import _get_provider
     provider = _get_provider()
     if provider is None:
         return None
 
-    # Step 1: Extract search keywords from the question
+    # Step 1: LLM extracts search terms
     keywords = _extract_keywords(provider, question)
-    if not keywords:
-        keywords = question.split()[:5]
 
     # Step 2: Search with each keyword and merge results
     all_docs: list[dict] = []
@@ -70,13 +87,15 @@ def llm_query(
     context = _build_context(all_docs[:limit], all_beliefs[:limit])
 
     if not context.strip():
-        return {"answer": "No relevant information found in the knowledge base.", "sources": [], "keywords": keywords}
+        return {
+            "answer": "No relevant information found in the knowledge base for this question.",
+            "sources": [],
+            "beliefs": [],
+            "keywords": keywords,
+        }
 
-    # Step 4: Ask the LLM to answer using the context
+    # Step 4: LLM synthesizes answer from context
     answer = _generate_answer(provider, question, context)
-    if answer is None:
-        # LLM failed — return None so caller falls back to raw FTS
-        return None
 
     return {
         "answer": answer,
@@ -87,48 +106,39 @@ def llm_query(
 
 
 def _extract_keywords(provider: Any, question: str) -> list[str]:
-    """Use the LLM to extract search keywords from a natural language question."""
+    """LLM extracts search terms from the question."""
     request = CompletionRequest(
         model="",
         system=[],
         tools=[],
         messages=[
-            Message(role="user", content=[{"type": "text", "text": KEYWORD_PROMPT.format(question=question)}]),
+            Message(role="user", content=[{
+                "type": "text",
+                "text": KEYWORD_PROMPT.format(question=question),
+            }]),
         ],
         max_output_tokens=100,
         temperature=0.0,
     )
+    result = provider.complete(request)
+    text = result.text.strip()
+
+    # Parse JSON array from response
+    if text.startswith("```"):
+        text = "\n".join(l for l in text.split("\n") if not l.startswith("```"))
     try:
-        result = provider.complete(request)
-        text = result.text.strip()
-        if text.startswith("```"):
-            text = "\n".join(l for l in text.split("\n") if not l.startswith("```"))
         keywords = json.loads(text)
         if isinstance(keywords, list):
-            return [str(k) for k in keywords[:5]]
-    except Exception:
-        # LLM failed — extract meaningful words from the question
+            return [str(k).strip() for k in keywords if str(k).strip()][:6]
+    except json.JSONDecodeError:
         pass
 
-    # Fallback: strip punctuation and stop words, return clean keywords
-    import re
-    stop_words = {"what", "do", "we", "know", "about", "how", "does", "is", "are",
-                  "the", "a", "an", "for", "in", "on", "to", "of", "and", "or",
-                  "can", "could", "would", "should", "it", "this", "that", "with",
-                  "from", "by", "at", "was", "were", "been", "be", "have", "has",
-                  "had", "will", "my", "our", "their", "its", "i", "me", "you",
-                  "there", "here", "when", "where", "why", "which", "who", "whom"}
-    cleaned = [re.sub(r"[^a-z0-9]", "", w) for w in question.lower().split()]
-    words = [w for w in cleaned if w and w not in stop_words and len(w) > 2]
-    return words[:5] if words else ["*"]
+    # If JSON parsing fails, the LLM returned plain text — split it
+    return [w.strip().strip('"[],') for w in text.split() if len(w.strip('"[],')) > 2][:6]
 
 
-def _generate_answer(provider: Any, question: str, context: str) -> str | None:
-    """Use the LLM to synthesize an answer from retrieved context.
-
-    Returns None if the LLM call fails (auth, rate limit, etc.)
-    so the caller can fall back to raw FTS.
-    """
+def _generate_answer(provider: Any, question: str, context: str) -> str:
+    """LLM synthesizes an answer from retrieved context."""
     request = CompletionRequest(
         model="",
         system=[],
@@ -142,11 +152,8 @@ def _generate_answer(provider: Any, question: str, context: str) -> str | None:
         max_output_tokens=2048,
         temperature=0.2,
     )
-    try:
-        result = provider.complete(request)
-        return result.text.strip()
-    except Exception:
-        return None
+    result = provider.complete(request)
+    return result.text.strip()
 
 
 def _build_context(docs: list[dict], beliefs: list[dict]) -> str:
@@ -165,7 +172,6 @@ def _build_context(docs: list[dict], beliefs: list[dict]) -> str:
 
 
 def _fts_search_documents(conn: sqlite3.Connection, workspace: str, keyword: str, limit: int) -> list[dict]:
-    """FTS search on documents, returning full content for context building."""
     try:
         rows = conn.execute(
             """SELECT documents.title, documents.path, documents.content
@@ -181,7 +187,6 @@ def _fts_search_documents(conn: sqlite3.Connection, workspace: str, keyword: str
 
 
 def _fts_search_beliefs(conn: sqlite3.Connection, workspace: str, keyword: str, limit: int) -> list[dict]:
-    """FTS search on beliefs."""
     try:
         rows = conn.execute(
             """SELECT wiki_beliefs.statement, wiki_beliefs.topic, wiki_beliefs.wiki_document_path

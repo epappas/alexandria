@@ -19,13 +19,12 @@ def query_command(
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max results per source."),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
-    raw: bool = typer.Option(False, "--raw", help="Skip LLM, use raw FTS search only."),
 ) -> None:
     """Answer a question by searching your knowledge base.
 
-    Uses the LLM to understand your question, search for relevant content,
-    and synthesize an answer with citations. Falls back to keyword search
-    if no LLM is configured (or with --raw).
+    Uses the LLM to understand your question, extract search terms,
+    retrieve relevant content, and synthesize an answer with citations.
+    Requires a configured LLM provider.
     """
     home = resolve_home()
     config = load_config(home)
@@ -41,169 +40,40 @@ def query_command(
         console.print("[yellow]No database. Run alexandria init first.[/yellow]")
         raise typer.Exit(code=1)
 
-    # Try LLM-powered query first
-    if not raw:
-        with connect(db_path(home)) as conn:
-            from alexandria.core.llm_query import llm_query
-            result = llm_query(conn, slug, question, limit)
+    with connect(db_path(home)) as conn:
+        from alexandria.core.llm_query import llm_query
+        result = llm_query(conn, slug, question, limit)
 
-        if result is not None:
-            if json_output:
-                import json
-                console.print_json(json.dumps(result, default=str))
-                return
-
-            console.print(f"\n[bold]Answer:[/bold]\n")
-            console.print(result["answer"])
-
-            if result.get("sources"):
-                console.print(f"\n[bold]Sources ({len(result['sources'])}):[/bold]")
-                for s in result["sources"]:
-                    console.print(f"  [dim]{s['title']}[/dim] — {s['path']}")
-
-            if result.get("beliefs"):
-                console.print(f"\n[bold]Related beliefs ({len(result['beliefs'])}):[/bold]")
-                for b in result["beliefs"]:
-                    console.print(f"  {b['statement']}")
-                    console.print(f"    [dim]topic: {b['topic']}[/dim]")
-
-            if result.get("keywords"):
-                console.print(f"\n[dim]Search keywords: {', '.join(result['keywords'])}[/dim]")
-            return
-
-    # Fall back to raw FTS search — convert question to meaningful keywords
-    fts_query = _question_to_fts(question)
-    results = _search_all(home, slug, fts_query, limit)
+    if result is None:
+        console.print("[red]No LLM provider configured.[/red]")
+        console.print("Alexandria requires an LLM to understand and answer questions.\n")
+        console.print("Configure one of:")
+        console.print("  export ANTHROPIC_API_KEY=sk-ant-...")
+        console.print("  export OPENAI_API_KEY=sk-...")
+        console.print("  export OPENROUTER_API_KEY=sk-or-...")
+        console.print("  export GOOGLE_API_KEY=AIza...")
+        console.print("  pip install 'alexandria-wiki[claude]'  # uses Max/Pro subscription")
+        console.print("\nOr set [llm] in ~/.alexandria/config.toml for local models (Ollama, vLLM).")
+        raise typer.Exit(code=1)
 
     if json_output:
         import json
-        console.print_json(json.dumps(results, default=str))
+        console.print_json(json.dumps(result, default=str))
         return
 
-    if not any(results.values()):
-        console.print(f"[yellow]No results for[/yellow] [bold]{question}[/bold] in {slug}")
-        console.print("[dim]Try broader terms, or ingest more content first.[/dim]")
-        return
+    console.print(f"\n[bold]Answer:[/bold]\n")
+    console.print(result["answer"])
 
-    console.print(f"\n[bold]Results for[/bold] [cyan]{question}[/cyan] in {slug}:\n")
+    if result.get("sources"):
+        console.print(f"\n[bold]Sources ({len(result['sources'])}):[/bold]")
+        for s in result["sources"]:
+            console.print(f"  [dim]{s['title']}[/dim] — {s['path']}")
 
-    docs = results.get("documents", [])
-    if docs:
-        console.print(f"[bold]Documents ({len(docs)}):[/bold]")
-        for doc in docs:
-            title = doc.get("title") or doc.get("path", "")
-            console.print(f"  {title}")
-            snippet = doc.get("snippet", "")
-            if snippet:
-                console.print(f"    [dim]{snippet[:120]}[/dim]")
-        console.print()
-
-    beliefs = results.get("beliefs", [])
-    if beliefs:
-        console.print(f"[bold]Beliefs ({len(beliefs)}):[/bold]")
-        for b in beliefs:
+    if result.get("beliefs"):
+        console.print(f"\n[bold]Related beliefs ({len(result['beliefs'])}):[/bold]")
+        for b in result["beliefs"]:
             console.print(f"  {b['statement']}")
-            console.print(f"    [dim]topic: {b['topic']} | page: {b['page']}[/dim]")
-        console.print()
+            console.print(f"    [dim]topic: {b['topic']}[/dim]")
 
-    events = results.get("events", [])
-    if events:
-        console.print(f"[bold]Events ({len(events)}):[/bold]")
-        for ev in events:
-            console.print(f"  [{ev.get('source_type', '')}] {ev.get('title', '')}")
-            console.print(f"    [dim]{ev.get('occurred_at', '')[:10]}[/dim]")
-        console.print()
-
-    subs = results.get("subscriptions", [])
-    if subs:
-        console.print(f"[bold]Subscriptions ({len(subs)}):[/bold]")
-        for s in subs:
-            console.print(f"  {s.get('title', '')}")
-            console.print(f"    [dim]{s.get('adapter_type', '')} | {s.get('published_at', '')[:10]}[/dim]")
-
-
-def _question_to_fts(question: str) -> str:
-    """Convert a natural language question to an FTS5 OR query."""
-    stop_words = {"what", "do", "we", "know", "about", "how", "does", "is", "are",
-                  "the", "a", "an", "for", "in", "on", "to", "of", "and", "or",
-                  "can", "could", "would", "should", "it", "this", "that", "with",
-                  "from", "by", "at", "was", "were", "been", "be", "have", "has",
-                  "had", "will", "my", "our", "their", "its", "i", "me", "you",
-                  "there", "here", "when", "where", "why", "which", "who", "whom"}
-    words = [w.strip("?.,!\"'") for w in question.lower().split()
-             if w.strip("?.,!\"'") not in stop_words and len(w.strip("?.,!\"'")) > 2]
-    if not words:
-        return question
-    return " OR ".join(words)
-
-
-def _search_all(home, slug: str, question: str, limit: int) -> dict:
-    """Raw FTS keyword search across all knowledge sources."""
-    results: dict = {"documents": [], "beliefs": [], "events": [], "subscriptions": []}
-
-    with connect(db_path(home)) as conn:
-        try:
-            rows = conn.execute(
-                """SELECT documents.title, documents.path, documents.content
-                FROM documents_fts
-                JOIN documents ON documents.rowid = documents_fts.rowid
-                WHERE documents_fts MATCH ? AND documents.workspace = ?
-                ORDER BY rank LIMIT ?""",
-                (question, slug, limit),
-            ).fetchall()
-            results["documents"] = [
-                {"title": r["title"], "path": r["path"], "snippet": (r["content"] or "")[:150]}
-                for r in rows
-            ]
-        except Exception:
-            pass
-
-        try:
-            rows = conn.execute(
-                """SELECT wiki_beliefs.statement, wiki_beliefs.topic, wiki_beliefs.wiki_document_path
-                FROM wiki_beliefs_fts
-                JOIN wiki_beliefs ON wiki_beliefs.rowid = wiki_beliefs_fts.rowid
-                WHERE wiki_beliefs_fts MATCH ? AND wiki_beliefs.workspace = ?
-                AND wiki_beliefs.superseded_at IS NULL
-                ORDER BY rank LIMIT ?""",
-                (question, slug, limit),
-            ).fetchall()
-            results["beliefs"] = [
-                {"statement": r["statement"], "topic": r["topic"], "page": r["wiki_document_path"]}
-                for r in rows
-            ]
-        except Exception:
-            pass
-
-        try:
-            rows = conn.execute(
-                """SELECT e.title, e.source_type, e.occurred_at FROM events_fts
-                JOIN events e ON e.rowid = events_fts.rowid
-                WHERE events_fts MATCH ? AND e.workspace = ?
-                ORDER BY e.occurred_at DESC LIMIT ?""",
-                (question, slug, limit),
-            ).fetchall()
-            results["events"] = [
-                {"title": r["title"], "source_type": r["source_type"], "occurred_at": r["occurred_at"]}
-                for r in rows
-            ]
-        except Exception:
-            pass
-
-        try:
-            rows = conn.execute(
-                """SELECT si.title, si.adapter_type, si.published_at
-                FROM subscription_items_fts
-                JOIN subscription_items si ON si.rowid = subscription_items_fts.rowid
-                WHERE subscription_items_fts MATCH ? AND si.workspace = ?
-                ORDER BY si.published_at DESC LIMIT ?""",
-                (question, slug, limit),
-            ).fetchall()
-            results["subscriptions"] = [
-                {"title": r["title"], "adapter_type": r["adapter_type"], "published_at": r["published_at"]}
-                for r in rows
-            ]
-        except Exception:
-            pass
-
-    return results
+    if result.get("keywords"):
+        console.print(f"\n[dim]Search terms: {', '.join(result['keywords'])}[/dim]")
