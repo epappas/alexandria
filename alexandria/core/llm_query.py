@@ -110,14 +110,17 @@ def _extract_keywords(provider: Any, question: str) -> list[str]:
         # LLM failed — extract meaningful words from the question
         pass
 
-    # Fallback: strip common stop words and use remaining terms
+    # Fallback: strip punctuation and stop words, return clean keywords
+    import re
     stop_words = {"what", "do", "we", "know", "about", "how", "does", "is", "are",
                   "the", "a", "an", "for", "in", "on", "to", "of", "and", "or",
                   "can", "could", "would", "should", "it", "this", "that", "with",
                   "from", "by", "at", "was", "were", "been", "be", "have", "has",
-                  "had", "will", "my", "our", "their", "its", "i", "me", "you"}
-    words = [w for w in question.lower().split() if w.strip("?.,!") not in stop_words and len(w) > 2]
-    return words[:5] if words else question.split()[:3]
+                  "had", "will", "my", "our", "their", "its", "i", "me", "you",
+                  "there", "here", "when", "where", "why", "which", "who", "whom"}
+    cleaned = [re.sub(r"[^a-z0-9]", "", w) for w in question.lower().split()]
+    words = [w for w in cleaned if w and w not in stop_words and len(w) > 2]
+    return words[:5] if words else ["*"]
 
 
 def _generate_answer(provider: Any, question: str, context: str) -> str | None:
