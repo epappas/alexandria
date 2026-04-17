@@ -114,7 +114,10 @@ def ingest_file(
     # Stage a new wiki page
     staged = get_staged_dir(home, run.run_id)
     slug = source_file.stem.lower().replace(" ", "-")
-    title = source_file.stem.replace("-", " ").replace("_", " ").title()
+
+    # Extract title from content (first # heading) or fall back to filename
+    title = _extract_title_from_content(source_content) or \
+            source_file.stem.replace("-", " ").replace("_", " ").title()
 
     # Extract any existing footnotes from the source for pass-through
     footnotes = extract_footnotes(source_content)
@@ -296,20 +299,61 @@ def _infer_topic(source_file: Path) -> str:
     return "concepts"
 
 
+def _extract_title_from_content(content: str) -> str | None:
+    """Extract the best title from the content.
+
+    Prefers a heading that looks like a document title (longer, descriptive)
+    over navigation headings (short, generic).
+    """
+    headings: list[str] = []
+    for line in content.strip().split("\n")[:50]:
+        line = line.strip()
+        if line.startswith("# ") and len(line) > 3:
+            title = line.lstrip("#").strip()
+            # Skip titles that start with navigation artifacts
+            if title and not title.startswith("-") and not title.startswith("["):
+                headings.append(title)
+
+    if not headings:
+        return None
+
+    # Prefer headings that contain "Title:" (arxiv pattern)
+    for h in headings:
+        if h.lower().startswith("title:"):
+            return h[6:].strip()
+
+    # Prefer the longest heading (likely the actual title, not a section name)
+    return max(headings, key=len)
+
+
 def _extract_body(content: str) -> str:
     """Extract a body summary from the source content."""
     lines = content.strip().split("\n")
-    # Skip the title line if present
+
+    # Skip title, metadata block (- key: value), and --- separator
     start = 0
+    in_meta = False
     for i, line in enumerate(lines):
-        if line.startswith("#"):
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            in_meta = True
             start = i + 1
+            continue
+        if in_meta and (stripped.startswith("- ") or stripped == "" or stripped == "---"):
+            start = i + 1
+            if stripped == "---":
+                in_meta = False
+            continue
+        if in_meta:
+            in_meta = False
+        if stripped:
+            start = i
             break
 
     body_lines = [l for l in lines[start:] if not l.startswith("[^")]
     body = "\n".join(body_lines).strip()
-    if len(body) > 2000:
-        body = body[:2000] + "\n\n... (content continues in raw source)"
+    if len(body) > 3000:
+        body = body[:3000] + "\n\n... (content continues in raw source)"
     return body
 
 

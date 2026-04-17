@@ -131,21 +131,67 @@ def _handle_pdf(url: str, data: bytes) -> dict[str, Any]:
 
 
 def _html_to_markdown(html: str) -> str:
-    """Convert HTML to readable markdown."""
-    # Remove script/style blocks entirely (content + tags)
+    """Convert HTML to readable markdown, extracting main content."""
+    # Remove script/style blocks entirely
     html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
     html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
+
+    # Extract main content area if possible
+    main_html = _extract_main_content(html) or html
+
     try:
         from markdownify import markdownify
         md = markdownify(
-            html, heading_style="ATX",
-            strip=["nav", "footer", "iframe", "form", "object", "embed"],
+            main_html, heading_style="ATX",
+            strip=["nav", "footer", "header", "iframe", "form",
+                   "object", "embed", "aside", "select", "input", "button"],
         )
-        return re.sub(r"\n{3,}", "\n\n", md).strip()
+        # Clean up
+        md = re.sub(r"\n{3,}", "\n\n", md)
+        # Remove lines that are just links/brackets with no prose
+        lines = md.split("\n")
+        cleaned = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip lines that are just navigation artifacts
+            if stripped in ("", "Search", "GO", "Help", "Login", "About"):
+                if not stripped:
+                    cleaned.append(line)
+                continue
+            # Skip lines that are just a bare link or image
+            if re.match(r"^\[.*\]\(.*\)$", stripped) and len(stripped) < 60:
+                continue
+            # Skip lines that are just "[![" image links
+            if stripped.startswith("[!["):
+                continue
+            cleaned.append(line)
+        return "\n".join(cleaned).strip()
     except ImportError:
-        clean = re.sub(r"<[^>]+>", "", html)
+        clean = re.sub(r"<[^>]+>", "", main_html)
         import html as html_mod
         return html_mod.unescape(clean).strip()
+
+
+def _extract_main_content(html: str) -> str | None:
+    """Extract the main content area from HTML, stripping nav/sidebar/footer."""
+    # Try common content containers in priority order
+    patterns = [
+        # article tag
+        (r"<article[^>]*>(.*?)</article>", re.DOTALL | re.IGNORECASE),
+        # main tag
+        (r"<main[^>]*>(.*?)</main>", re.DOTALL | re.IGNORECASE),
+        # role=main
+        (r'<[^>]+role=["\']main["\'][^>]*>(.*?)</\w+>', re.DOTALL | re.IGNORECASE),
+        # id=content or id=main-content
+        (r'<[^>]+id=["\'](?:content|main-content|bodyContent|mw-content-text)["\'][^>]*>(.*?)</\w+>', re.DOTALL | re.IGNORECASE),
+        # class containing "content" or "article" (broad fallback)
+        (r'<div[^>]+class=["\'][^"\']*(?:article-body|post-content|entry-content|paper-content)[^"\']*["\'][^>]*>(.*?)</div>', re.DOTALL | re.IGNORECASE),
+    ]
+    for pattern, flags in patterns:
+        match = re.search(pattern, html, flags)
+        if match and len(match.group(1).strip()) > 200:
+            return match.group(1)
+    return None
 
 
 def _extract_title(html: str) -> str:
