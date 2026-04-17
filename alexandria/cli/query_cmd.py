@@ -71,8 +71,9 @@ def query_command(
                 console.print(f"\n[dim]Search keywords: {', '.join(result['keywords'])}[/dim]")
             return
 
-    # Fall back to raw FTS search
-    results = _search_all(home, slug, question, limit)
+    # Fall back to raw FTS search — convert question to meaningful keywords
+    fts_query = _question_to_fts(question)
+    results = _search_all(home, slug, fts_query, limit)
 
     if json_output:
         import json
@@ -119,6 +120,21 @@ def query_command(
         for s in subs:
             console.print(f"  {s.get('title', '')}")
             console.print(f"    [dim]{s.get('adapter_type', '')} | {s.get('published_at', '')[:10]}[/dim]")
+
+
+def _question_to_fts(question: str) -> str:
+    """Convert a natural language question to an FTS5 OR query."""
+    stop_words = {"what", "do", "we", "know", "about", "how", "does", "is", "are",
+                  "the", "a", "an", "for", "in", "on", "to", "of", "and", "or",
+                  "can", "could", "would", "should", "it", "this", "that", "with",
+                  "from", "by", "at", "was", "were", "been", "be", "have", "has",
+                  "had", "will", "my", "our", "their", "its", "i", "me", "you",
+                  "there", "here", "when", "where", "why", "which", "who", "whom"}
+    words = [w.strip("?.,!\"'") for w in question.lower().split()
+             if w.strip("?.,!\"'") not in stop_words and len(w.strip("?.,!\"'")) > 2]
+    if not words:
+        return question
+    return " OR ".join(words)
 
 
 def _search_all(home, slug: str, question: str, limit: int) -> dict:
