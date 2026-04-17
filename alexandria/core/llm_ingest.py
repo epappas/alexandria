@@ -89,10 +89,11 @@ def _get_provider() -> Any | None:
 
     Detection order:
     1. [llm] section in config.toml (most explicit)
-    2. ANTHROPIC_API_KEY env var -> Anthropic
-    3. OPENAI_API_KEY env var -> OpenAI
-    4. OPENROUTER_API_KEY env var -> OpenRouter (OpenAI-compat)
-    5. GOOGLE_API_KEY env var -> Google/Gemini (OpenAI-compat)
+    2. Claude Code SDK (uses Max/Pro subscription, no API key needed)
+    3. ANTHROPIC_API_KEY env var -> Anthropic
+    4. OPENAI_API_KEY env var -> OpenAI
+    5. OPENROUTER_API_KEY env var -> OpenRouter (OpenAI-compat)
+    6. GOOGLE_API_KEY env var -> Google/Gemini (OpenAI-compat)
     """
     # 1. Config file takes priority — user explicitly configured it
     try:
@@ -110,7 +111,11 @@ def _get_provider() -> Any | None:
     except Exception:
         pass
 
-    # 2. Environment variable auto-detection
+    # 2. Claude Code SDK — uses Max/Pro subscription directly, no API key
+    if _has_claude_code_sdk():
+        return _ClaudeCodeSDKProvider()
+
+    # 3. Environment variable auto-detection
     for env_var, provider_name, base_url, default_model in [
         ("ANTHROPIC_API_KEY", "anthropic", "", ""),
         ("OPENAI_API_KEY", "openai", "", "gpt-4o"),
@@ -141,6 +146,87 @@ def _build_provider(provider: str, api_key: str, model: str, base_url: str) -> A
                                     base_url=base_url or "http://localhost:11434/v1")
 
     raise ValueError(f"unknown LLM provider: {provider}")
+
+
+def _has_claude_code_sdk() -> bool:
+    """Check if the Claude Code SDK is available and usable.
+
+    Returns False if we're inside an active Claude Code session (CLAUDECODE=1)
+    because the SDK would conflict with the running session's rate limits.
+    """
+    # Don't use SDK inside an active Claude Code session
+    if os.environ.get("CLAUDECODE") == "1":
+        return False
+    try:
+        import claude_code_sdk  # noqa: F401
+        from pathlib import Path
+        creds = Path.home() / ".claude" / ".credentials.json"
+        return creds.exists()
+    except ImportError:
+        return False
+
+
+class _ClaudeCodeSDKProvider:
+    """LLM provider using the Claude Code SDK with Max/Pro subscription.
+
+    Uses your Claude subscription directly — no API key needed.
+    Calls the Claude Code binary under the hood via the SDK.
+    """
+
+    name = "claude-code-sdk"
+
+    def complete(self, request: CompletionRequest) -> CompletionResult:
+        import asyncio
+        from claude_code_sdk import query, ClaudeCodeOptions
+
+        # Build the prompt from the request
+        system_text = "\n".join(
+            b.get("text", "") for b in request.system
+        ) if request.system else ""
+
+        user_text = ""
+        for msg in request.messages:
+            if msg.role == "user":
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        user_text += block.get("text", "")
+
+        full_prompt = f"{system_text}\n\n{user_text}" if system_text else user_text
+
+        # Call the SDK
+        async def _run() -> str:
+            response_text = ""
+            try:
+                async for msg in query(
+                    prompt=full_prompt,
+                    options=ClaudeCodeOptions(max_turns=1),
+                ):
+                    if hasattr(msg, "content"):
+                        for block in msg.content:
+                            if hasattr(block, "text"):
+                                response_text += block.text
+            except Exception as exc:
+                if "rate_limit" in str(exc).lower():
+                    raise RuntimeError(
+                        "Rate limited — this happens when Alexandria runs inside "
+                        "an active Claude Code session. Run alxia ingest from a "
+                        "regular terminal instead."
+                    ) from exc
+                raise
+            return response_text
+
+        text = asyncio.run(_run())
+
+        from alexandria.llm.base import Usage
+        return CompletionResult(
+            content=[{"type": "text", "text": text}],
+            stop_reason="end_turn",
+            usage=Usage(),  # SDK doesn't expose token counts
+            model="claude-code-sdk",
+        )
+
+    def estimate_cost(self, request: CompletionRequest) -> float:
+        return 0.0  # subscription — no per-call cost
 
 
 def _parse_llm_response(result: CompletionResult, raw_path: str) -> dict[str, Any] | None:
