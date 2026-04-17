@@ -85,37 +85,62 @@ def llm_process_content(
 
 
 def _get_provider() -> Any | None:
-    """Get the configured LLM provider, or None if not configured."""
-    # Check for API keys in environment
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        from alexandria.llm.anthropic_provider import AnthropicProvider
-        return AnthropicProvider()
+    """Get the configured LLM provider, or None if not configured.
 
-    if os.environ.get("OPENAI_API_KEY"):
-        from alexandria.llm.openai_provider import OpenAIProvider
-        return OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"])
-
-    # Check config
+    Detection order:
+    1. [llm] section in config.toml (most explicit)
+    2. ANTHROPIC_API_KEY env var -> Anthropic
+    3. OPENAI_API_KEY env var -> OpenAI
+    4. OPENROUTER_API_KEY env var -> OpenRouter (OpenAI-compat)
+    5. GOOGLE_API_KEY env var -> Google/Gemini (OpenAI-compat)
+    """
+    # 1. Config file takes priority — user explicitly configured it
     try:
         from alexandria.config import load_config, resolve_home
         config = load_config(resolve_home())
         llm_cfg = config.llm
 
-        if llm_cfg.api_key_env and os.environ.get(llm_cfg.api_key_env):
-            key = os.environ[llm_cfg.api_key_env]
-            if llm_cfg.provider == "anthropic":
-                from alexandria.llm.anthropic_provider import AnthropicProvider
-                return AnthropicProvider(api_key=key, default_model=llm_cfg.model or "claude-sonnet-4-20250514")
-            if llm_cfg.provider in ("openai", "openai-compat"):
-                from alexandria.llm.openai_provider import OpenAIProvider, OpenAICompatProvider
-                if llm_cfg.base_url:
-                    return OpenAICompatProvider(base_url=llm_cfg.base_url, api_key=key,
-                                                default_model=llm_cfg.model or "llama3")
-                return OpenAIProvider(api_key=key, default_model=llm_cfg.model or "gpt-4o")
+        if llm_cfg.provider and llm_cfg.provider != "none":
+            key = ""
+            if llm_cfg.api_key_env:
+                key = os.environ.get(llm_cfg.api_key_env, "")
+            # Allow keyless for local providers (ollama, vllm)
+            if key or llm_cfg.base_url:
+                return _build_provider(llm_cfg.provider, key, llm_cfg.model, llm_cfg.base_url)
     except Exception:
         pass
 
+    # 2. Environment variable auto-detection
+    for env_var, provider_name, base_url, default_model in [
+        ("ANTHROPIC_API_KEY", "anthropic", "", ""),
+        ("OPENAI_API_KEY", "openai", "", "gpt-4o"),
+        ("OPENROUTER_API_KEY", "openai-compat", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4"),
+        ("GOOGLE_API_KEY", "openai-compat", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"),
+    ]:
+        key = os.environ.get(env_var, "")
+        if key:
+            return _build_provider(provider_name, key, default_model, base_url)
+
     return None
+
+
+def _build_provider(provider: str, api_key: str, model: str, base_url: str) -> Any:
+    """Instantiate the right provider class."""
+    if provider == "anthropic":
+        from alexandria.llm.anthropic_provider import AnthropicProvider
+        return AnthropicProvider(api_key=api_key, default_model=model or "claude-sonnet-4-20250514")
+
+    if provider == "openai":
+        from alexandria.llm.openai_provider import OpenAIProvider
+        return OpenAIProvider(api_key=api_key, default_model=model or "gpt-4o",
+                              base_url=base_url or "https://api.openai.com/v1")
+
+    if provider == "openai-compat":
+        from alexandria.llm.openai_provider import OpenAICompatProvider
+        return OpenAICompatProvider(api_key=api_key, default_model=model or "llama3",
+                                    base_url=base_url or "http://localhost:11434/v1")
+
+    raise ValueError(f"unknown LLM provider: {provider}")
 
 
 def _parse_llm_response(result: CompletionResult, raw_path: str) -> dict[str, Any] | None:
