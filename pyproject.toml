@@ -38,6 +38,13 @@ dependencies = [
 pdf = [
   "pymupdf>=1.24.0",
 ]
+youtube = [
+  "youtube-transcript-api>=0.6.0",
+]
+all = [
+  "pymupdf>=1.24.0",
+  "youtube-transcript-api>=0.6.0",
+]
 dev = [
   "pytest>=8.0.0",
   "pytest-asyncio>=0.23.0",

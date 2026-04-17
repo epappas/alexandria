@@ -14,23 +14,27 @@ from alexandria.db.connection import connect, db_path
 
 console = Console()
 
-VALID_TYPES = ("local", "git-local", "github", "rss", "imap")
+VALID_TYPES = ("local", "git-local", "github", "rss", "imap", "youtube", "notion", "huggingface", "folder", "archive")
 
 
 def source_add_command(
-    adapter_type: str = typer.Argument(..., help="Adapter type: local | git-local | github | rss | imap"),
+    adapter_type: str = typer.Argument(..., help="Adapter type: local|git-local|github|rss|imap|youtube|notion|huggingface|folder|archive"),
     name: str = typer.Option(..., "--name", "-n", help="Human-readable name for this source."),
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    path: Optional[str] = typer.Option(None, "--path", help="Local directory path (for 'local' adapter)."),
-    repo_url: Optional[str] = typer.Option(None, "--repo-url", help="Git repo URL (for 'git-local' adapter)."),
-    owner: Optional[str] = typer.Option(None, "--owner", help="GitHub owner (for 'github' adapter)."),
-    repo: Optional[str] = typer.Option(None, "--repo", help="GitHub repo name (for 'github' adapter)."),
+    path: Optional[str] = typer.Option(None, "--path", help="Path (for local/folder/archive adapters)."),
+    repo_url: Optional[str] = typer.Option(None, "--repo-url", help="Git repo URL."),
+    owner: Optional[str] = typer.Option(None, "--owner", help="GitHub owner."),
+    repo: Optional[str] = typer.Option(None, "--repo", help="GitHub repo name."),
     token_ref: Optional[str] = typer.Option(None, "--token-ref", help="Secret vault ref for token."),
-    feed_url: Optional[str] = typer.Option(None, "--feed-url", help="RSS/Atom feed URL (for 'rss' adapter)."),
-    imap_host: Optional[str] = typer.Option(None, "--imap-host", help="IMAP server host (for 'imap' adapter)."),
-    imap_user: Optional[str] = typer.Option(None, "--imap-user", help="IMAP username (for 'imap' adapter)."),
+    feed_url: Optional[str] = typer.Option(None, "--feed-url", help="RSS/Atom feed URL."),
+    urls: Optional[str] = typer.Option(None, "--urls", help="Comma-separated URLs (youtube)."),
+    repos: Optional[str] = typer.Option(None, "--repos", help="Comma-separated repo IDs (huggingface)."),
+    page_ids: Optional[str] = typer.Option(None, "--page-ids", help="Comma-separated Notion page IDs."),
+    database_ids: Optional[str] = typer.Option(None, "--database-ids", help="Comma-separated Notion DB IDs."),
+    imap_host: Optional[str] = typer.Option(None, "--imap-host", help="IMAP server host."),
+    imap_user: Optional[str] = typer.Option(None, "--imap-user", help="IMAP username."),
     imap_pass_ref: Optional[str] = typer.Option(None, "--imap-pass-ref", help="Vault ref for IMAP password."),
-    imap_folder: Optional[str] = typer.Option("INBOX", "--imap-folder", help="IMAP folder to monitor."),
+    imap_folder: Optional[str] = typer.Option("INBOX", "--imap-folder", help="IMAP folder."),
     from_allowlist: Optional[str] = typer.Option(None, "--from-allowlist", help="Comma-separated sender filter."),
 ) -> None:
     """Configure a new source adapter."""
@@ -50,8 +54,9 @@ def source_add_command(
 
     adapter_config = _build_config(
         adapter_type, path=path, repo_url=repo_url, owner=owner, repo=repo,
-        token_ref=token_ref, feed_url=feed_url, imap_host=imap_host,
-        imap_user=imap_user, imap_pass_ref=imap_pass_ref,
+        token_ref=token_ref, feed_url=feed_url, urls=urls, repos=repos,
+        page_ids=page_ids, database_ids=database_ids,
+        imap_host=imap_host, imap_user=imap_user, imap_pass_ref=imap_pass_ref,
         imap_folder=imap_folder, from_allowlist=from_allowlist,
     )
     if isinstance(adapter_config, str):
@@ -139,6 +144,10 @@ def _build_config(
     repo: str | None = None,
     token_ref: str | None = None,
     feed_url: str | None = None,
+    urls: str | None = None,
+    repos: str | None = None,
+    page_ids: str | None = None,
+    database_ids: str | None = None,
     imap_host: str | None = None,
     imap_user: str | None = None,
     imap_pass_ref: str | None = None,
@@ -149,6 +158,16 @@ def _build_config(
     if adapter_type == "local":
         if not path:
             return "'--path' is required for local adapter"
+        return {"path": path}
+
+    if adapter_type == "folder":
+        if not path:
+            return "'--path' is required for folder adapter"
+        return {"path": path}
+
+    if adapter_type == "archive":
+        if not path:
+            return "'--path' is required for archive adapter"
         return {"path": path}
 
     if adapter_type == "git-local":
@@ -168,6 +187,28 @@ def _build_config(
         if not feed_url:
             return "'--feed-url' is required for rss adapter"
         return {"feed_url": feed_url}
+
+    if adapter_type == "youtube":
+        if not urls:
+            return "'--urls' required (comma-separated YouTube URLs)"
+        return {"urls": [u.strip() for u in urls.split(",")]}
+
+    if adapter_type == "notion":
+        cfg = {}
+        if token_ref:
+            cfg["token_ref"] = token_ref
+        if page_ids:
+            cfg["page_ids"] = [p.strip() for p in page_ids.split(",")]
+        if database_ids:
+            cfg["database_ids"] = [d.strip() for d in database_ids.split(",")]
+        if not cfg.get("page_ids") and not cfg.get("database_ids"):
+            return "'--page-ids' or '--database-ids' required for notion adapter"
+        return cfg
+
+    if adapter_type == "huggingface":
+        if not repos:
+            return "'--repos' required (comma-separated repo IDs like 'meta-llama/Llama-3-8b')"
+        return {"repos": [r.strip() for r in repos.split(",")]}
 
     if adapter_type == "imap":
         if not imap_host or not imap_user:
