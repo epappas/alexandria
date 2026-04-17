@@ -28,7 +28,7 @@ class LocalAdapter:
         if not source_dir.is_dir():
             return [], SyncResult(errors=[f"source path not found: {source_dir}"])
 
-        globs = config.get("globs", ["*.md", "*.txt"])
+        globs = config.get("globs", ["*.md", "*.txt", "*.pdf"])
         raw_dir = workspace_path / "raw" / "local"
         raw_dir.mkdir(parents=True, exist_ok=True)
 

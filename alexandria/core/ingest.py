@@ -77,7 +77,12 @@ def ingest_file(
     if not source_file.exists():
         raise IngestError(f"Source file not found: {source_file}")
 
-    source_content = source_file.read_text(encoding="utf-8")
+    # PDF extraction
+    if source_file.suffix.lower() == ".pdf":
+        source_content = _extract_pdf_content(source_file)
+    else:
+        source_content = source_file.read_text(encoding="utf-8")
+
     if not source_content.strip():
         raise IngestError(f"Source file is empty: {source_file}")
 
@@ -120,12 +125,13 @@ def ingest_file(
     # generate this; for now, use the first ~2000 chars as the body)
     body = _extract_body(source_content)
 
-    # If no footnotes exist in source, create one citing the source itself
+    # If no footnotes exist in source, create one citing the raw destination
+    # (for PDFs, this is the extracted .md file, not the binary .pdf)
+    cite_name = raw_dest.name
     if not footnote_lines:
-        # Find a representative quote from the source
         quote = _extract_representative_quote(source_content)
         if quote:
-            footnote_lines = f'[^1]: {source_file.name} — "{quote}"'
+            footnote_lines = f'[^1]: {cite_name} — "{quote}"'
             body += "[^1]"
 
     staged_path = stage_new_page(
@@ -203,20 +209,33 @@ def ingest_file(
 
 
 def _ensure_in_raw(workspace_path: Path, source_file: Path, content: str) -> Path:
-    """Copy a source file to raw/local/ if not already there."""
+    """Copy a source file to raw/local/ if not already there.
+
+    For PDFs, copies the original binary and saves extracted markdown alongside.
+    """
     raw_local = workspace_path / "raw" / "local"
     raw_local.mkdir(parents=True, exist_ok=True)
 
-    dest = raw_local / source_file.name
+    is_pdf = source_file.suffix.lower() == ".pdf"
+
+    if is_pdf:
+        # Copy the original PDF binary
+        pdf_dest = raw_local / source_file.name
+        if not pdf_dest.exists():
+            import shutil
+            shutil.copy2(str(source_file), str(pdf_dest))
+        # Save extracted markdown with .md extension
+        dest = raw_local / (source_file.stem + ".md")
+    else:
+        dest = raw_local / source_file.name
+
     if dest.exists():
-        # Check if content matches
         existing_hash = hashlib.sha256(dest.read_bytes()).hexdigest()
         new_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         if existing_hash == new_hash:
             return dest
-        # Different content — add a suffix
-        stem = source_file.stem
-        suffix = source_file.suffix
+        stem = dest.stem
+        suffix = dest.suffix
         counter = 2
         while dest.exists():
             dest = raw_local / f"{stem}-{counter}{suffix}"
@@ -273,3 +292,12 @@ def _extract_representative_quote(content: str) -> str | None:
                 return line[:100]
             return line
     return None
+
+
+def _extract_pdf_content(source_file: Path) -> str:
+    """Extract text from a PDF file and return as markdown."""
+    from alexandria.core.pdf import pdf_to_markdown, PDFExtractionError
+    try:
+        return pdf_to_markdown(source_file)
+    except PDFExtractionError as exc:
+        raise IngestError(str(exc)) from exc
