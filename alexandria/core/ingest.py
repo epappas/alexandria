@@ -154,7 +154,7 @@ def ingest_file(
     if verdict.verdict in ("commit",):
         committed_paths = commit_run(home, run.run_id, workspace_path)
 
-        # Update run row in SQLite
+        # Update run row + insert committed documents into SQLite
         if db_path(home).exists():
             with connect(db_path(home)) as conn:
                 from alexandria.core.runs import update_run_row
@@ -166,6 +166,45 @@ def ingest_file(
                         verdict="commit",
                         ended_at=datetime.now(timezone.utc).isoformat(),
                     )
+
+                    # Register committed wiki pages in documents table (populates FTS)
+                    for rel_path in committed_paths:
+                        wiki_file = workspace_path / "wiki" / rel_path
+                        if wiki_file.exists():
+                            wiki_content = wiki_file.read_text(encoding="utf-8")
+                            wiki_hash = hashlib.sha256(wiki_content.encode()).hexdigest()
+                            doc_id = f"doc-{hashlib.sha256(rel_path.encode()).hexdigest()[:12]}"
+                            conn.execute(
+                                """INSERT OR REPLACE INTO documents
+                                  (id, workspace, layer, path, filename, file_type, content,
+                                   content_hash, size_bytes, title, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                        datetime('now'), datetime('now'))""",
+                                (
+                                    doc_id, workspace_slug, "wiki",
+                                    f"wiki/{rel_path}", Path(rel_path).name, "md",
+                                    wiki_content, wiki_hash, len(wiki_content), title,
+                                ),
+                            )
+
+                    # Also register the raw source
+                    raw_rel = raw_dest.relative_to(workspace_path)
+                    raw_doc_id = f"doc-{hashlib.sha256(str(raw_rel).encode()).hexdigest()[:12]}"
+                    conn.execute(
+                        """INSERT OR REPLACE INTO documents
+                          (id, workspace, layer, path, filename, file_type, content,
+                           content_hash, size_bytes, title, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                datetime('now'), datetime('now'))""",
+                        (
+                            raw_doc_id, workspace_slug, "raw",
+                            str(raw_rel), raw_dest.name,
+                            source_file.suffix.lstrip(".") or "md",
+                            source_content, hashlib.sha256(source_content.encode()).hexdigest(),
+                            len(source_content), title,
+                        ),
+                    )
+
                     conn.execute("COMMIT")
                 except Exception:
                     conn.execute("ROLLBACK")

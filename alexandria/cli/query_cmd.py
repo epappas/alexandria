@@ -96,7 +96,8 @@ def _search_all(home, slug: str, question: str, limit: int) -> dict:
         # FTS search on documents
         try:
             rows = conn.execute(
-                """SELECT title, path, content FROM documents_fts
+                """SELECT documents.title, documents.path, documents.content
+                FROM documents_fts
                 JOIN documents ON documents.rowid = documents_fts.rowid
                 WHERE documents_fts MATCH ? AND documents.workspace = ?
                 ORDER BY rank LIMIT ?""",
