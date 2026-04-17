@@ -15,7 +15,7 @@ console = Console()
 
 
 def ingest_command(
-    source: str = typer.Argument(..., help="Path to the source file to ingest."),
+    source: str = typer.Argument(..., help="File path or URL to ingest."),
     workspace: Optional[str] = typer.Option(
         None, "--workspace", "-w", help="Override the current workspace."
     ),
@@ -26,12 +26,11 @@ def ingest_command(
         False, "--dry-run", help="Preview the estimated cost without running."
     ),
 ) -> None:
-    """Compile a raw source file into the wiki via staged writes + verification.
+    """Compile a source into the wiki via staged writes + verification.
 
-    The source is copied to ``raw/local/``, a wiki page is staged with
-    citations, the deterministic verifier checks every footnote's verbatim
-    quote against the live raw source, and on success the staged page is
-    committed to ``wiki/``. A fabricated citation is always rejected.
+    Accepts a local file path or a URL (http/https). URLs are fetched,
+    converted to markdown, and saved to raw/web/ before ingesting.
+    Supports HTML pages, PDFs, and arxiv URLs.
     """
     home = resolve_home()
     config = load_config(home)
@@ -43,10 +42,21 @@ def ingest_command(
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    source_path = Path(source).expanduser().resolve()
-    if not source_path.exists():
-        console.print(f"[red]error:[/red] source file not found: {source}")
-        raise typer.Exit(code=1)
+    # URL detection
+    if source.startswith("http://") or source.startswith("https://"):
+        console.print(f"[dim]Fetching {source}...[/dim]")
+        from alexandria.core.web import fetch_and_save, WebFetchError
+        try:
+            source_path = fetch_and_save(source, ws.path)
+            console.print(f"[dim]Saved to {source_path.relative_to(ws.path)}[/dim]")
+        except WebFetchError as exc:
+            console.print(f"[red]Fetch failed:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+    else:
+        source_path = Path(source).expanduser().resolve()
+        if not source_path.exists():
+            console.print(f"[red]error:[/red] source file not found: {source}")
+            raise typer.Exit(code=1)
 
     if dry_run:
         from alexandria.llm.budget import BudgetConfig, BudgetEnforcer
