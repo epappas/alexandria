@@ -99,6 +99,7 @@ def list_beliefs(
     workspace: str,
     *,
     topic: str | None = None,
+    subject: str | None = None,
     current_only: bool = True,
     limit: int = 50,
 ) -> list[Belief]:
@@ -109,6 +110,9 @@ def list_beliefs(
     if topic:
         sql += " AND topic = ?"
         params.append(topic)
+    if subject:
+        sql += " AND subject = ?"
+        params.append(subject)
     if current_only:
         sql += " AND superseded_at IS NULL"
 

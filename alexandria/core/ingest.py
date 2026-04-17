@@ -218,10 +218,12 @@ def ingest_file(
                         ),
                     )
 
-                    # Insert LLM-extracted beliefs
+                    # Insert LLM-extracted beliefs, superseding contradictions
                     if llm_beliefs:
                         from alexandria.core.beliefs.model import Belief
-                        from alexandria.core.beliefs.repository import insert_belief
+                        from alexandria.core.beliefs.repository import (
+                            insert_belief, list_beliefs, supersede_belief,
+                        )
                         wiki_rel = f"wiki/{committed_paths[0]}" if committed_paths else ""
                         for b in llm_beliefs:
                             belief = Belief(
@@ -235,6 +237,24 @@ def ingest_file(
                                 object=b.get("object"),
                                 asserted_in_run=run.run_id,
                             )
+
+                            # Check for existing beliefs with same subject
+                            # that this new belief may supersede
+                            if belief.subject:
+                                existing = list_beliefs(
+                                    conn, workspace_slug,
+                                    subject=belief.subject,
+                                    current_only=True,
+                                )
+                                for old in existing:
+                                    if (old.predicate == belief.predicate
+                                            and old.object != belief.object):
+                                        supersede_belief(
+                                            conn, old.belief_id,
+                                            belief.statement,
+                                            f"Updated by new source: {source_file.name}",
+                                        )
+
                             insert_belief(conn, belief)
 
                     conn.execute("COMMIT")

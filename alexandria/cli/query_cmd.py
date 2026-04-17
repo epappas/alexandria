@@ -17,14 +17,13 @@ console = Console()
 def query_command(
     question: str = typer.Argument(..., help="The question to answer."),
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    limit: int = typer.Option(10, "--limit", "-n", help="Max results per source."),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
-    """Answer a question by searching your knowledge base.
+    """Answer a question by navigating your knowledge base.
 
-    Uses the LLM to understand your question, extract search terms,
-    retrieve relevant content, and synthesize an answer with citations.
-    Requires a configured LLM provider.
+    Spawns an agent loop that uses Alexandria's navigation primitives
+    (search, grep, read, beliefs) to find relevant content and
+    synthesize an answer with citations.
     """
     home = resolve_home()
     config = load_config(home)
@@ -41,12 +40,12 @@ def query_command(
         raise typer.Exit(code=1)
 
     with connect(db_path(home)) as conn:
-        from alexandria.core.llm_query import llm_query
-        result = llm_query(conn, slug, question, limit)
+        from alexandria.core.agent_loop import run_agent_query
+        result = run_agent_query(conn, slug, ws.path, question)
 
     if result is None:
         console.print("[red]No LLM provider configured.[/red]")
-        console.print("Alexandria requires an LLM to understand and answer questions.\n")
+        console.print("Alexandria requires an LLM to answer questions.\n")
         console.print("Configure one of:")
         console.print("  export ANTHROPIC_API_KEY=sk-ant-...")
         console.print("  export OPENAI_API_KEY=sk-...")
@@ -65,15 +64,9 @@ def query_command(
     console.print(result["answer"])
 
     if result.get("sources"):
-        console.print(f"\n[bold]Sources ({len(result['sources'])}):[/bold]")
+        console.print(f"\n[bold]Sources:[/bold]")
         for s in result["sources"]:
-            console.print(f"  [dim]{s['title']}[/dim] — {s['path']}")
+            console.print(f"  {s.get('title', '')} — {s.get('path', '')}")
 
-    if result.get("beliefs"):
-        console.print(f"\n[bold]Related beliefs ({len(result['beliefs'])}):[/bold]")
-        for b in result["beliefs"]:
-            console.print(f"  {b['statement']}")
-            console.print(f"    [dim]topic: {b['topic']}[/dim]")
-
-    if result.get("keywords"):
-        console.print(f"\n[dim]Search terms: {', '.join(result['keywords'])}[/dim]")
+    if result.get("tool_calls"):
+        console.print(f"\n[dim]Agent used {len(result['tool_calls'])} tool call(s)[/dim]")

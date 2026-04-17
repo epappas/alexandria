@@ -138,3 +138,37 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
                 f"Run: {result.run_id}"
             )
         return f"Rejected: {result.verdict_reasoning}"
+
+    @mcp.tool()
+    def query(
+        question: str,
+        workspace: str | None = None,
+    ) -> str:
+        """Answer a question by navigating the knowledge base.
+
+        Spawns Alexandria's internal agent loop which uses search, grep,
+        read, and beliefs to find relevant content and synthesize an
+        answer with citations. Use this for complex questions that
+        require exploring multiple sources.
+        """
+        from alexandria.config import resolve_home
+        from alexandria.db.connection import connect, db_path
+        from alexandria.core.agent_loop import run_agent_query
+
+        ws_path, slug = resolve(workspace)
+        home = resolve_home()
+
+        with connect(db_path(home)) as conn:
+            result = run_agent_query(conn, slug, ws_path, question)
+
+        if result is None:
+            return "No LLM provider configured. Cannot run agent query."
+
+        answer = result.get("answer", "No answer produced.")
+        sources = result.get("sources", [])
+        source_text = ""
+        if sources:
+            source_text = "\n\nSources:\n" + "\n".join(
+                f"- {s.get('title', '')} ({s.get('path', '')})" for s in sources
+            )
+        return answer + source_text
