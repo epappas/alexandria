@@ -33,6 +33,7 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         git_tool,
         sources_tool,
         subscriptions_tool,
+        write_tool,
     )
 
     guide_tool.register(mcp, resolve)
@@ -49,3 +50,4 @@ def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
     git_tool.register(mcp, resolve)
     sources_tool.register(mcp, resolve)
     subscriptions_tool.register(mcp, resolve)
+    write_tool.register(mcp, resolve)
