@@ -86,8 +86,12 @@ def ingest_file(
     if not source_content.strip():
         raise IngestError(f"Source file is empty: {source_file}")
 
-    # Ensure the source is in raw/
-    raw_dest = _ensure_in_raw(workspace_path, source_file, source_content)
+    # Ensure the source is in raw/ (skip if already there, e.g. from fetch_and_save)
+    raw_dir = workspace_path / "raw"
+    if source_file.resolve().is_relative_to(raw_dir.resolve()):
+        raw_dest = source_file
+    else:
+        raw_dest = _ensure_in_raw(workspace_path, source_file, source_content)
 
     # Create a run
     run = create_run(home, workspace_slug, f"cli:ingest", "ingest")
@@ -126,13 +130,13 @@ def ingest_file(
     body = _extract_body(source_content)
 
     # If no footnotes exist in source, create one citing the raw destination
-    # (for PDFs, this is the extracted .md file, not the binary .pdf)
-    cite_name = raw_dest.name
+    # Use the relative path from workspace root so verifier + lint can find it
+    cite_path = str(raw_dest.relative_to(workspace_path))
     if not footnote_lines:
         quote = _extract_representative_quote(source_content)
         if quote:
-            footnote_lines = f'[^1]: {cite_name} — "{quote}"'
-            body += "[^1]"
+            footnote_lines = f'[^1]: {cite_path} — "{quote}"'
+            body += " [^1]"
 
     staged_path = stage_new_page(
         staged,
