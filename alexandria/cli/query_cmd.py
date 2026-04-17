@@ -1,4 +1,4 @@
-"""``alexandria query`` — answer questions from the wiki using FTS + beliefs."""
+"""``alexandria query`` — answer questions from the knowledge base."""
 
 from __future__ import annotations
 
@@ -19,11 +19,13 @@ def query_command(
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
     limit: int = typer.Option(10, "--limit", "-n", help="Max results per source."),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+    raw: bool = typer.Option(False, "--raw", help="Skip LLM, use raw FTS search only."),
 ) -> None:
-    """Answer a question by searching across wiki documents, beliefs, and events.
+    """Answer a question by searching your knowledge base.
 
-    Combines FTS5 search over documents, belief queries, and event search
-    to produce a structured answer with citations. Read-only, no LLM calls.
+    Uses the LLM to understand your question, search for relevant content,
+    and synthesize an answer with citations. Falls back to keyword search
+    if no LLM is configured (or with --raw).
     """
     home = resolve_home()
     config = load_config(home)
@@ -39,6 +41,37 @@ def query_command(
         console.print("[yellow]No database. Run alexandria init first.[/yellow]")
         raise typer.Exit(code=1)
 
+    # Try LLM-powered query first
+    if not raw:
+        with connect(db_path(home)) as conn:
+            from alexandria.core.llm_query import llm_query
+            result = llm_query(conn, slug, question, limit)
+
+        if result is not None:
+            if json_output:
+                import json
+                console.print_json(json.dumps(result, default=str))
+                return
+
+            console.print(f"\n[bold]Answer:[/bold]\n")
+            console.print(result["answer"])
+
+            if result.get("sources"):
+                console.print(f"\n[bold]Sources ({len(result['sources'])}):[/bold]")
+                for s in result["sources"]:
+                    console.print(f"  [dim]{s['title']}[/dim] — {s['path']}")
+
+            if result.get("beliefs"):
+                console.print(f"\n[bold]Related beliefs ({len(result['beliefs'])}):[/bold]")
+                for b in result["beliefs"]:
+                    console.print(f"  {b['statement']}")
+                    console.print(f"    [dim]topic: {b['topic']}[/dim]")
+
+            if result.get("keywords"):
+                console.print(f"\n[dim]Search keywords: {', '.join(result['keywords'])}[/dim]")
+            return
+
+    # Fall back to raw FTS search
     results = _search_all(home, slug, question, limit)
 
     if json_output:
@@ -89,11 +122,10 @@ def query_command(
 
 
 def _search_all(home, slug: str, question: str, limit: int) -> dict:
-    """Search across all knowledge sources."""
+    """Raw FTS keyword search across all knowledge sources."""
     results: dict = {"documents": [], "beliefs": [], "events": [], "subscriptions": []}
 
     with connect(db_path(home)) as conn:
-        # FTS search on documents
         try:
             rows = conn.execute(
                 """SELECT documents.title, documents.path, documents.content
@@ -110,10 +142,10 @@ def _search_all(home, slug: str, question: str, limit: int) -> dict:
         except Exception:
             pass
 
-        # Belief search
         try:
             rows = conn.execute(
-                """SELECT statement, topic, wiki_document_path FROM wiki_beliefs_fts
+                """SELECT wiki_beliefs.statement, wiki_beliefs.topic, wiki_beliefs.wiki_document_path
+                FROM wiki_beliefs_fts
                 JOIN wiki_beliefs ON wiki_beliefs.rowid = wiki_beliefs_fts.rowid
                 WHERE wiki_beliefs_fts MATCH ? AND wiki_beliefs.workspace = ?
                 AND wiki_beliefs.superseded_at IS NULL
@@ -127,7 +159,6 @@ def _search_all(home, slug: str, question: str, limit: int) -> dict:
         except Exception:
             pass
 
-        # Event search
         try:
             rows = conn.execute(
                 """SELECT e.title, e.source_type, e.occurred_at FROM events_fts
@@ -143,7 +174,6 @@ def _search_all(home, slug: str, question: str, limit: int) -> dict:
         except Exception:
             pass
 
-        # Subscription search
         try:
             rows = conn.execute(
                 """SELECT si.title, si.adapter_type, si.published_at
