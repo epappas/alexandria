@@ -51,8 +51,17 @@ class LimitsConfig(BaseModel):
     max_tokens_per_ingest: int = 200_000
 
 
+class LLMConfig(BaseModel):
+    """LLM inference configuration."""
+
+    provider: str = "anthropic"  # anthropic | openai | openai-compat
+    model: str = ""  # empty = provider default
+    api_key_env: str = ""  # env var name holding the key (e.g. ANTHROPIC_API_KEY)
+    base_url: str = ""  # for openai-compat (ollama, vllm, etc.)
+
+
 class SecretsConfig(BaseModel):
-    """Pointer to secret storage (vault arrives in Phase 4)."""
+    """Pointer to secret storage."""
 
     keyring_service: str = "alexandria"
 
@@ -64,6 +73,7 @@ class Config(BaseModel):
     state: StateConfig = Field(default_factory=StateConfig)
     daemon: DaemonConfig = Field(default_factory=DaemonConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     secrets: SecretsConfig = Field(default_factory=SecretsConfig)
 
 

@@ -114,32 +114,38 @@ def ingest_file(
     # Stage a new wiki page
     staged = get_staged_dir(home, run.run_id)
     slug = source_file.stem.lower().replace(" ", "-")
+    cite_path = str(raw_dest.relative_to(workspace_path))
 
-    # Extract title from content (first # heading) or fall back to filename
-    title = _extract_title_from_content(source_content) or \
-            source_file.stem.replace("-", " ").replace("_", " ").title()
+    # Try LLM-powered processing first; fall back to extraction if unavailable
+    from alexandria.core.llm_ingest import llm_process_content
+    llm_result = llm_process_content(source_content, source_file.name, cite_path)
 
-    # Extract any existing footnotes from the source for pass-through
-    footnotes = extract_footnotes(source_content)
-    footnote_lines = "\n".join(fn.raw_line for fn in footnotes) if footnotes else ""
+    if llm_result:
+        title = llm_result["title"]
+        body = llm_result["body"]
+        footnote_lines = ""  # already embedded in body by the LLM
+        llm_beliefs = llm_result.get("beliefs", [])
+    else:
+        # No LLM available — extract mechanically
+        title = _extract_title_from_content(source_content) or \
+                source_file.stem.replace("-", " ").replace("_", " ").title()
 
-    # Build the wiki page content
+        footnotes = extract_footnotes(source_content)
+        footnote_lines = "\n".join(fn.raw_line for fn in footnotes) if footnotes else ""
+
+        body = _extract_body(source_content)
+
+        if not footnote_lines:
+            quote = _extract_representative_quote(source_content)
+            if quote:
+                footnote_lines = f'[^1]: {cite_path} — "{quote}"'
+                body += " [^1]"
+
+        llm_beliefs = []
+
     raw_rel = raw_dest.relative_to(workspace_path)
     sources_line = f"{title}, {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
     raw_line = f"[{source_file.name}](../../{raw_rel})"
-
-    # Use a summary of the source as the body (in Phase 2b, the LLM would
-    # generate this; for now, use the first ~2000 chars as the body)
-    body = _extract_body(source_content)
-
-    # If no footnotes exist in source, create one citing the raw destination
-    # Use the relative path from workspace root so verifier + lint can find it
-    cite_path = str(raw_dest.relative_to(workspace_path))
-    if not footnote_lines:
-        quote = _extract_representative_quote(source_content)
-        if quote:
-            footnote_lines = f'[^1]: {cite_path} — "{quote}"'
-            body += " [^1]"
 
     staged_path = stage_new_page(
         staged,
@@ -211,6 +217,25 @@ def ingest_file(
                             len(source_content), title,
                         ),
                     )
+
+                    # Insert LLM-extracted beliefs
+                    if llm_beliefs:
+                        from alexandria.core.beliefs.model import Belief
+                        from alexandria.core.beliefs.repository import insert_belief
+                        wiki_rel = f"wiki/{committed_paths[0]}" if committed_paths else ""
+                        for b in llm_beliefs:
+                            belief = Belief(
+                                workspace=workspace_slug,
+                                statement=b.get("statement", "")[:500],
+                                topic=b.get("topic", resolved_topic),
+                                wiki_document_path=wiki_rel,
+                                footnote_ids=b.get("footnote_ids", []),
+                                subject=b.get("subject"),
+                                predicate=b.get("predicate"),
+                                object=b.get("object"),
+                                asserted_in_run=run.run_id,
+                            )
+                            insert_belief(conn, belief)
 
                     conn.execute("COMMIT")
                 except Exception:
