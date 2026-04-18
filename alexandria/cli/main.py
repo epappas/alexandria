@@ -168,6 +168,7 @@ beliefs_app.command("list", help="List beliefs in the workspace.")(beliefs_cmd.l
 beliefs_app.command("history", help="Full supersession chain for a belief.")(beliefs_cmd.history_command)
 beliefs_app.command("verify", help="Re-validate belief quote anchors.")(beliefs_cmd.verify_command)
 beliefs_app.command("export", help="Export beliefs to JSON or CSV.")(beliefs_cmd.export_command)
+beliefs_app.command("cleanup", help="Dedup beliefs and remove orphans.")(beliefs_cmd.cleanup_command)
 app.add_typer(beliefs_app, name="beliefs")
 
 

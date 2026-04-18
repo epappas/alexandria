@@ -79,12 +79,26 @@ def process_capture_queue(
                 client=row["client"],
                 session_id=session_id,
             )
-            conn.execute(
-                """UPDATE capture_queue
-                SET status = 'done', completed_at = ?, last_content_hash = ?
-                WHERE session_id = ?""",
-                (datetime.now(timezone.utc).isoformat(), result["content_hash"], session_id),
-            )
+
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                # Register captured doc in documents table (enables FTS)
+                _register_capture_doc(conn, row["workspace"], result)
+
+                # Emit event
+                _emit_capture_event(conn, row["workspace"], row["client"], session_id)
+
+                conn.execute(
+                    """UPDATE capture_queue
+                    SET status = 'done', completed_at = ?, last_content_hash = ?
+                    WHERE session_id = ?""",
+                    (datetime.now(timezone.utc).isoformat(), result["content_hash"], session_id),
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+
             processed += 1
         except (CaptureError, Exception) as exc:
             conn.execute(
@@ -93,6 +107,44 @@ def process_capture_queue(
             )
 
     return processed
+
+
+def _register_capture_doc(
+    conn: sqlite3.Connection, workspace: str, result: dict[str, Any],
+) -> None:
+    """Register captured markdown in documents table for FTS indexing."""
+    md_path = Path(result["absolute_path"])
+    if not md_path.exists():
+        return
+    content = md_path.read_text(encoding="utf-8")
+    doc_id = f"doc-{hashlib.sha256(result['output_path'].encode()).hexdigest()[:12]}"
+    conn.execute(
+        """INSERT OR REPLACE INTO documents
+          (id, workspace, layer, path, filename, file_type, content,
+           content_hash, size_bytes, title, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
+        (doc_id, workspace, "raw", result["output_path"], md_path.name, "md",
+         content, result["content_hash"], len(content),
+         f"Conversation {result['session_id'][:16]}"),
+    )
+
+
+def _emit_capture_event(
+    conn: sqlite3.Connection, workspace: str, client: str, session_id: str,
+) -> None:
+    """Emit a conversation event to the events table."""
+    from alexandria.core.adapters.base import FetchedItem
+    from alexandria.core.adapters.events import insert_event
+
+    item = FetchedItem(
+        source_type="capture",
+        event_type="conversation",
+        title=f"Conversation {session_id[:16]}",
+        author=client,
+        occurred_at=datetime.now(timezone.utc).isoformat(),
+        event_data={"session_id": session_id, "client": client},
+    )
+    insert_event(conn, workspace, None, item)
 
 
 def _file_hash(path: Path) -> str:

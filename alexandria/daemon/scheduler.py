@@ -92,6 +92,7 @@ class SchedulerChild:
         return [
             ("sync_sources", 300.0, self._job_sync_sources),     # every 5 min
             ("poll_subscriptions", 3600.0, self._job_poll_subs),  # every 1 hour
+            ("drain_captures", 60.0, self._job_drain_captures),   # every 1 min
         ]
 
     def _run_job(self, name: str, fn: Any) -> None:
@@ -151,5 +152,20 @@ class SchedulerChild:
                 except Exception as exc:
                     self._logger.error(
                         "poll_workspace_failed",
+                        data={"workspace": ws.slug, "error": str(exc)},
+                    )
+
+    def _job_drain_captures(self) -> None:
+        """Process pending conversation captures."""
+        from alexandria.core.capture.queue import process_capture_queue
+        from alexandria.core.workspace import list_workspaces
+
+        with connect(db_path(self._home)) as conn:
+            for ws in list_workspaces(self._home):
+                try:
+                    process_capture_queue(conn, ws.path)
+                except Exception as exc:
+                    self._logger.error(
+                        "drain_captures_failed",
                         data={"workspace": ws.slug, "error": str(exc)},
                     )

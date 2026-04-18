@@ -124,6 +124,48 @@ def list_beliefs(
     return [_row_to_belief(row) for row in cur.fetchall()]
 
 
+def find_duplicate_belief(
+    conn: sqlite3.Connection,
+    workspace: str,
+    statement: str,
+    wiki_document_path: str,
+    subject: str | None = None,
+    predicate: str | None = None,
+    object_val: str | None = None,
+) -> str | None:
+    """Find an existing current belief with identical content. Returns belief_id or None."""
+    sql = ("SELECT belief_id FROM wiki_beliefs WHERE workspace = ? "
+           "AND statement = ? AND wiki_document_path = ? AND superseded_at IS NULL")
+    params: list = [workspace, statement, wiki_document_path]
+
+    for col, val in [("subject", subject), ("predicate", predicate), ("object", object_val)]:
+        if val is not None:
+            sql += f" AND {col} = ?"
+            params.append(val)
+        else:
+            sql += f" AND {col} IS NULL"
+
+    row = conn.execute(sql + " LIMIT 1", params).fetchone()
+    return row["belief_id"] if row else None
+
+
+def supersede_beliefs_for_document(
+    conn: sqlite3.Connection,
+    wiki_document_path: str,
+    run_id: str,
+    reason: str = "document_reingested",
+) -> int:
+    """Supersede all current beliefs for a wiki document. Returns count."""
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """UPDATE wiki_beliefs SET superseded_at = ?, superseded_in_run = ?,
+           supersession_reason = ?
+        WHERE wiki_document_path = ? AND superseded_at IS NULL""",
+        (now, run_id, reason, wiki_document_path),
+    )
+    return cur.rowcount
+
+
 def supersede_belief(
     conn: sqlite3.Connection,
     old_belief_id: str,
@@ -209,6 +251,65 @@ def _fts_query(conn: sqlite3.Connection, q: BeliefQuery) -> list[Belief]:
         return [_row_to_belief(row) for row in cur.fetchall()]
     except sqlite3.OperationalError:
         return []
+
+
+def delete_orphaned_beliefs(
+    conn: sqlite3.Connection,
+    workspace: str,
+    workspace_path: Path,
+) -> int:
+    """Supersede beliefs whose wiki page no longer exists on disk."""
+    now = datetime.now(timezone.utc).isoformat()
+    paths = conn.execute(
+        """SELECT DISTINCT wiki_document_path FROM wiki_beliefs
+        WHERE workspace = ? AND superseded_at IS NULL AND wiki_document_path != ''""",
+        (workspace,),
+    ).fetchall()
+
+    count = 0
+    for row in paths:
+        doc_path = workspace_path / row["wiki_document_path"]
+        if not doc_path.exists():
+            cur = conn.execute(
+                """UPDATE wiki_beliefs SET superseded_at = ?, supersession_reason = 'orphan_cleanup'
+                WHERE wiki_document_path = ? AND workspace = ? AND superseded_at IS NULL""",
+                (now, row["wiki_document_path"], workspace),
+            )
+            count += cur.rowcount
+    return count
+
+
+def dedup_current_beliefs(
+    conn: sqlite3.Connection,
+    workspace: str,
+) -> int:
+    """Find and supersede duplicate current beliefs. Keeps oldest per group."""
+    now = datetime.now(timezone.utc).isoformat()
+    groups = conn.execute(
+        """SELECT MIN(rowid) as keep_rowid,
+                  statement, wiki_document_path, subject, predicate, object
+        FROM wiki_beliefs
+        WHERE workspace = ? AND superseded_at IS NULL
+        GROUP BY statement, wiki_document_path, subject, predicate, object
+        HAVING COUNT(*) > 1""",
+        (workspace,),
+    ).fetchall()
+
+    count = 0
+    for g in groups:
+        cur = conn.execute(
+            """UPDATE wiki_beliefs SET superseded_at = ?, supersession_reason = 'dedup_cleanup'
+            WHERE workspace = ? AND statement = ? AND wiki_document_path = ?
+              AND COALESCE(subject, '') = COALESCE(?, '')
+              AND COALESCE(predicate, '') = COALESCE(?, '')
+              AND COALESCE(object, '') = COALESCE(?, '')
+              AND superseded_at IS NULL AND rowid != ?""",
+            (now, workspace, g["statement"], g["wiki_document_path"],
+             g["subject"] or "", g["predicate"] or "", g["object"] or "",
+             g["keep_rowid"]),
+        )
+        count += cur.rowcount
+    return count
 
 
 def _row_to_belief(row: sqlite3.Row) -> Belief:

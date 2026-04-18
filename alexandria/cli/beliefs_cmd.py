@@ -11,6 +11,8 @@ from rich.table import Table
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
 from alexandria.core.beliefs.repository import (
+    dedup_current_beliefs,
+    delete_orphaned_beliefs,
     get_belief,
     list_beliefs,
     verify_belief_anchors,
@@ -169,3 +171,43 @@ def export_command(
         writer.writerow(["belief_id", "statement", "topic", "subject", "predicate", "object", "asserted_at", "superseded_at"])
         for b in beliefs:
             writer.writerow([b.belief_id, b.statement, b.topic, b.subject, b.predicate, b.object, b.asserted_at, b.superseded_at])
+
+
+def cleanup_command(
+    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without applying."),
+) -> None:
+    """Dedup beliefs and supersede orphans whose wiki pages no longer exist."""
+    home = resolve_home()
+    config = load_config(home)
+    slug = workspace or resolve_workspace(config)
+
+    from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+    try:
+        ws = get_workspace(home, slug)
+    except WorkspaceNotFoundError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if not db_path(home).exists():
+        console.print("[yellow]No database.[/yellow]")
+        raise typer.Exit(code=1)
+
+    with connect(db_path(home)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            deduped = dedup_current_beliefs(conn, slug)
+            orphaned = delete_orphaned_beliefs(conn, slug, ws.path)
+
+            if dry_run:
+                conn.execute("ROLLBACK")
+                console.print("[bold]Dry run:[/bold]")
+            else:
+                conn.execute("COMMIT")
+                console.print("[bold]Cleanup complete:[/bold]")
+
+            console.print(f"  Deduplicated: {deduped} belief(s)")
+            console.print(f"  Orphaned:     {orphaned} belief(s)")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise

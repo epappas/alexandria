@@ -51,6 +51,19 @@ class IngestResult:
         self.source_path = source_path
 
 
+def document_unchanged(
+    conn: sqlite3.Connection,
+    workspace: str,
+    content_hash: str,
+) -> bool:
+    """Check if a document with this content hash already exists."""
+    row = conn.execute(
+        "SELECT 1 FROM documents WHERE workspace = ? AND content_hash = ? LIMIT 1",
+        (workspace, content_hash),
+    ).fetchone()
+    return row is not None
+
+
 def ingest_file(
     home: Path,
     workspace_slug: str,
@@ -85,6 +98,19 @@ def ingest_file(
 
     if not source_content.strip():
         raise IngestError(f"Source file is empty: {source_file}")
+
+    # Dedup: skip if identical content already ingested
+    content_hash = hashlib.sha256(source_content.encode()).hexdigest()
+    if db_path(home).exists():
+        with connect(db_path(home)) as conn:
+            if document_unchanged(conn, workspace_slug, content_hash):
+                return IngestResult(
+                    run_id="",
+                    committed=False,
+                    committed_paths=[],
+                    verdict_reasoning="content unchanged (hash match)",
+                    source_path=str(source_file),
+                )
 
     # Ensure the source is in raw/ (skip if already there, e.g. from fetch_and_save)
     raw_dir = workspace_path / "raw"
@@ -240,47 +266,54 @@ def ingest_file(
                         ),
                     )
 
-                    # Insert LLM-extracted beliefs, superseding contradictions
+                    # Insert LLM-extracted beliefs with dedup
                     if llm_beliefs:
                         from alexandria.core.beliefs.model import Belief
                         from alexandria.core.beliefs.repository import (
-                            insert_belief, list_beliefs, supersede_belief,
+                            find_duplicate_belief, insert_belief,
+                            list_beliefs, supersede_belief,
+                            supersede_beliefs_for_document,
                         )
                         wiki_rel = f"wiki/{committed_paths[0]}" if committed_paths else ""
+
+                        # Supersede all existing beliefs for this doc first
+                        supersede_beliefs_for_document(conn, wiki_rel, run.run_id)
+
                         for b in llm_beliefs:
+                            stmt = b.get("statement", "")[:500]
+                            subj = b.get("subject")
+                            pred = b.get("predicate")
+                            obj = b.get("object")
+
+                            # Check if identical belief exists (was just superseded)
+                            dup_id = find_duplicate_belief(
+                                conn, workspace_slug, stmt, wiki_rel,
+                                subj, pred, obj,
+                            )
+                            if dup_id:
+                                # Restore the identical belief
+                                conn.execute(
+                                    """UPDATE wiki_beliefs SET superseded_at = NULL,
+                                       superseded_by_belief_id = NULL,
+                                       superseded_in_run = NULL,
+                                       supersession_reason = NULL
+                                    WHERE belief_id = ?""",
+                                    (dup_id,),
+                                )
+                                continue
+
                             belief = Belief(
                                 workspace=workspace_slug,
-                                statement=b.get("statement", "")[:500],
+                                statement=stmt,
                                 topic=b.get("topic", resolved_topic),
                                 wiki_document_path=wiki_rel,
                                 footnote_ids=b.get("footnote_ids", []),
-                                subject=b.get("subject"),
-                                predicate=b.get("predicate"),
-                                object=b.get("object"),
+                                subject=subj,
+                                predicate=pred,
+                                object=obj,
                                 asserted_in_run=run.run_id,
                             )
-
-                            # Insert the new belief first (FK target must exist)
                             insert_belief(conn, belief)
-
-                            # Check for existing beliefs with same subject
-                            # that this new belief supersedes
-                            if belief.subject:
-                                existing = list_beliefs(
-                                    conn, workspace_slug,
-                                    subject=belief.subject,
-                                    current_only=True,
-                                )
-                                for old in existing:
-                                    if (old.belief_id != belief.belief_id
-                                            and old.predicate == belief.predicate
-                                            and old.object != belief.object
-                                            and old.asserted_in_run != run.run_id):
-                                        supersede_belief(
-                                            conn, old.belief_id,
-                                            belief.belief_id,
-                                            run_id=run.run_id,
-                                        )
 
                     conn.execute("COMMIT")
                 except Exception:

@@ -136,6 +136,11 @@ def ingest_repo(
 
         if ir.committed:
             result.committed.extend(ir.committed_paths)
+        elif "content unchanged" in (ir.verdict_reasoning or ""):
+            result.skipped.append(rel)
+            if on_progress:
+                on_progress(rel, "skipped")
+            continue
         else:
             result.rejected.append(rel)
 
