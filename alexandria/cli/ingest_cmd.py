@@ -103,6 +103,7 @@ def _ingest_single_file(
 ) -> None:
     from alexandria.core.ingest import IngestError, ingest_file
 
+    console.print(f"[dim]Processing {source_path.name}...[/dim]")
     try:
         result = ingest_file(
             home=home, workspace_slug=slug, workspace_path=ws_path,

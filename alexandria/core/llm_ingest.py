@@ -221,7 +221,7 @@ class _ClaudeCodeSDKProvider:
             [claude_bin, "-p", "--output-format", "text", full_prompt],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
         )
         if result.returncode != 0:
             stderr = result.stderr.strip()
