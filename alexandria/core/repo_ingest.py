@@ -27,6 +27,7 @@ _SKIP_DIRS = {
     ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     "target", "build", "dist", ".next", ".nuxt", "coverage",
     ".terraform", ".terragrunt-cache",
+    "subagents", "tasks",  # Claude Code internal
 }
 
 # Files to skip
@@ -34,6 +35,9 @@ _SKIP_FILES = {
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
     "Cargo.lock", "go.sum", "poetry.lock", "uv.lock",
 }
+
+# File patterns to skip
+_SKIP_SUFFIXES = {".meta.json", ".lock"}
 
 # Max file size to ingest (500 KB)
 _MAX_FILE_SIZE = 500_000
@@ -105,17 +109,29 @@ def ingest_repo(
         file_topic = topic or _infer_topic_from_path(file_path, repo_path)
 
         try:
-            ir = ingest_file(
-                home=home,
-                workspace_slug=workspace_slug,
-                workspace_path=workspace_path,
-                source_file=file_path,
-                topic=file_topic,
-            )
-        except IngestError as exc:
+            # Route JSONL conversation transcripts through capture
+            if file_path.suffix == ".jsonl":
+                ir = _ingest_conversation_file(
+                    home, workspace_slug, workspace_path, file_path, file_topic,
+                )
+            else:
+                ir = ingest_file(
+                    home=home,
+                    workspace_slug=workspace_slug,
+                    workspace_path=workspace_path,
+                    source_file=file_path,
+                    topic=file_topic,
+                )
+        except (IngestError, Exception) as exc:
             result.errors.append(f"{rel}: {exc}")
             if on_progress:
                 on_progress(rel, "error")
+            continue
+
+        if ir is None:
+            result.skipped.append(rel)
+            if on_progress:
+                on_progress(rel, "skipped")
             continue
 
         if ir.committed:
@@ -130,19 +146,30 @@ def ingest_repo(
 
 
 def _collect_files(repo_path: Path, allowed_exts: set[str]) -> list[Path]:
-    """Walk the repo tree and collect files matching allowed extensions."""
+    """Walk the repo tree and collect files matching allowed extensions.
+
+    Also collects .jsonl conversation transcripts (Claude Code, Codex).
+    """
     files: list[Path] = []
     for item in sorted(repo_path.rglob("*")):
         if not item.is_file():
             continue
-        # Skip hidden files
-        if any(part.startswith(".") and part != "." for part in item.relative_to(repo_path).parts):
+        rel_parts = item.relative_to(repo_path).parts
+        # Skip hidden files/dirs
+        if any(part.startswith(".") and part != "." for part in rel_parts):
             continue
         # Skip known directories
-        if any(part in _SKIP_DIRS for part in item.relative_to(repo_path).parts):
+        if any(part in _SKIP_DIRS for part in rel_parts):
             continue
-        # Skip lock files
+        # Skip lock and metadata files
         if item.name in _SKIP_FILES:
+            continue
+        if any(item.name.endswith(s) for s in _SKIP_SUFFIXES):
+            continue
+        # JSONL conversation transcripts — always collect
+        if item.suffix == ".jsonl":
+            if item.stat().st_size > 0:
+                files.append(item)
             continue
         # Check extension
         if item.suffix.lower() not in allowed_exts:
@@ -152,6 +179,36 @@ def _collect_files(repo_path: Path, allowed_exts: set[str]) -> list[Path]:
             continue
         files.append(item)
     return files
+
+
+def _ingest_conversation_file(
+    home: Path,
+    workspace_slug: str,
+    workspace_path: Path,
+    jsonl_path: Path,
+    topic: str,
+) -> IngestResult | None:
+    """Capture a JSONL conversation and ingest it. Returns None if not a conversation."""
+    from alexandria.core.capture.conversation import (
+        capture_conversation, detect_format, CaptureError,
+    )
+    fmt = detect_format(jsonl_path)
+    if fmt == "unknown":
+        return None
+
+    try:
+        cap = capture_conversation(jsonl_path, workspace_path, client=fmt)
+    except CaptureError:
+        return None
+
+    md_path = Path(cap["absolute_path"])
+    return ingest_file(
+        home=home,
+        workspace_slug=workspace_slug,
+        workspace_path=workspace_path,
+        source_file=md_path,
+        topic=topic or "conversations",
+    )
 
 
 def _infer_topic_from_path(file_path: Path, repo_root: Path) -> str:
