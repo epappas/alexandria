@@ -118,6 +118,8 @@ def _ingest_single_file(
         for path in result.committed_paths:
             console.print(f"  [cyan]wiki/{path}[/cyan]")
         console.print(f"[dim]Verifier: {result.verdict_reasoning}[/dim]")
+    elif "content unchanged" in (result.verdict_reasoning or ""):
+        console.print(f"[dim]Already ingested (skipped)[/dim]")
     else:
         console.print(f"[red]Ingest rejected[/red] (run {result.run_id})")
         console.print(f"[yellow]Reason:[/yellow] {result.verdict_reasoning}")
@@ -264,7 +266,11 @@ def _ingest_git_repo(
 
 
 def _print_progress(rel: str, status: str) -> None:
-    sym = {"committed": "[green]+[/green]", "rejected": "[yellow]-[/yellow]"}.get(status, "[red]![/red]")
+    sym = {
+        "committed": "[green]+[/green]",
+        "rejected": "[yellow]-[/yellow]",
+        "skipped": "[dim]=[/dim]",
+    }.get(status, "[red]![/red]")
     console.print(f"  {sym} {rel}")
 
 
@@ -272,6 +278,8 @@ def _print_summary(result: "RepoIngestResult") -> None:
     console.print()
     console.print(f"[bold]Results:[/bold]")
     console.print(f"  Committed: [green]{len(result.committed)}[/green]")
+    if result.skipped:
+        console.print(f"  Skipped:   [dim]{len(result.skipped)}[/dim] (already ingested)")
     if result.rejected:
         console.print(f"  Rejected:  [yellow]{len(result.rejected)}[/yellow]")
     if result.errors:
