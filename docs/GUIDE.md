@@ -240,12 +240,26 @@ Secrets are encrypted with AES-256-GCM. The vault passphrase comes from the `ALE
 # Check for stale citations, missing sources, orphaned beliefs
 alxia lint
 
+# Deduplicate beliefs and remove orphans (beliefs whose wiki page was deleted)
+alxia beliefs cleanup --dry-run    # preview
+alxia beliefs cleanup              # apply
+
 # Run quality metrics
 alxia eval run
 
 # Generate a weekly digest from recent activity
 alxia synthesize --dry-run    # preview
 alxia synthesize              # generate
+```
+
+### Deduplication
+
+Alexandria automatically skips re-ingesting files whose content hasn't changed (content-hash check). When a file IS re-ingested with new content, existing beliefs are superseded and identical beliefs are restored — no duplicates accumulate.
+
+For manual cleanup of accumulated duplicates or orphaned beliefs:
+
+```bash
+alxia beliefs cleanup -w global
 ```
 
 ## Background Daemon
@@ -266,7 +280,10 @@ alxia daemon status
 alxia daemon stop
 ```
 
-The daemon runs source syncs every 5 minutes and subscription polls every hour.
+The daemon runs three jobs:
+- Source syncs every 5 minutes
+- Subscription polls every hour
+- Capture queue draining every 60 seconds (auto-processes conversation captures)
 
 ## Capturing Conversations
 

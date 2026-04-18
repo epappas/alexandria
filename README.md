@@ -127,6 +127,7 @@ alxia workspace use <slug>    Switch workspace
 alxia project create <name>   Create a project workspace
 
 alxia secrets set <ref>       Store an encrypted secret
+alxia beliefs cleanup         Dedup beliefs and remove orphans
 alxia hooks install <client>  Install capture hooks
 alxia capture conversation    Capture an agent session
 
@@ -144,9 +145,11 @@ alxia logs show               View structured logs
 - **Belief revision**: structured claims with supersession chains and provenance
 - **Conversation capture**: auto-captures Claude Code sessions with artifact extraction (papers, repos)
 - **Self-awareness**: Alexandria can answer questions about its own state and capabilities
+- **Document dedup**: content-hash check skips re-ingest of unchanged files
+- **Belief integrity**: supersede-all-then-restore prevents duplicates; `alxia beliefs cleanup` removes orphans
 - **AES-256-GCM vault**: encrypted secrets with PBKDF2 key derivation
 - **Structured JSONL logging** with run_id correlation
-- **8 schema migrations** applied automatically on init
+- **10 schema migrations** applied automatically on init
 
 See `docs/architecture/` for the 20 architecture documents.
 
@@ -164,7 +167,7 @@ docker run -v ~/.alexandria:/data alxia status
 git clone git@github.com:epappas/alexandria.git
 cd alexandria
 uv sync --dev
-uv run pytest tests/       # 352 tests
+uv run pytest tests/       # 352+ tests
 ./scripts/build.sh          # test + build
 ./scripts/publish.sh        # test + build + PyPI + git tag
 ```
