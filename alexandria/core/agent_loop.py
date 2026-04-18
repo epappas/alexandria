@@ -66,6 +66,14 @@ AGENT_TOOLS = [
         },
     ),
     ToolDefinition(
+        name="self",
+        description="Introspect Alexandria's own capabilities, state, and ingested content. Use this when the user asks about what Alexandria knows, can do, or has ingested.",
+        input_schema={
+            "type": "object",
+            "properties": {},
+        },
+    ),
+    ToolDefinition(
         name="answer",
         description="Provide the final answer to the user's question. Call this when you have enough information.",
         input_schema={
@@ -86,11 +94,12 @@ AGENT_TOOLS = [
 SYSTEM_PROMPT = """You are Alexandria's research agent. Your job is to answer the user's question by navigating the knowledge base using the available tools.
 
 Workflow:
-1. Use 'search' with relevant keywords to find documents
-2. Use 'read' to read the most relevant documents
-3. Use 'beliefs' to check what structured claims exist on the topic
-4. Use 'grep' if you need exact phrases or specific terms
-5. Call 'answer' with your findings, citing sources as [Source: path]
+1. If the question is about Alexandria itself (capabilities, state, what it knows), use 'self' first
+2. Use 'search' with relevant keywords to find documents
+3. Use 'read' to read the most relevant documents
+4. Use 'beliefs' to check what structured claims exist on the topic
+5. Use 'grep' if you need exact phrases or specific terms
+6. Call 'answer' with your findings, citing sources as [Source: path]
 
 Rules:
 - ALWAYS use the tools to find information — never make up answers
@@ -197,6 +206,12 @@ def _rag_query(
     provider: Any,
 ) -> dict[str, Any]:
     """Pre-retrieve context and synthesize for text-only providers (SDK)."""
+    # Self-knowledge for introspective queries
+    self_context = ""
+    if _is_self_referential(question):
+        from alexandria.core.self_knowledge import gather_self_knowledge
+        self_context = gather_self_knowledge(conn, workspace)
+
     # Gather context: FTS search + beliefs
     search_results = _tool_search(conn, workspace, question)
     belief_results = _tool_beliefs(conn, workspace)
@@ -215,18 +230,20 @@ def _rag_query(
 
     context = "\n\n---\n\n".join(doc_contents) if doc_contents else search_results
 
-    prompt = f"""Based ONLY on the following knowledge base content, answer this question: {question}
+    sections = [f"Based ONLY on the following knowledge base content, answer this question: {question}"]
 
-## Retrieved Documents
-{context}
+    if self_context:
+        sections.append(f"\n## Alexandria Self-Knowledge\n{self_context}")
 
-## Current Beliefs
-{belief_results}
-
-Rules:
-- Answer ONLY from the provided content — do not use your training knowledge
-- Cite sources as [Source: path] for every claim
-- If the content does not contain enough information, say so honestly"""
+    sections.append(f"\n## Retrieved Documents\n{context}")
+    sections.append(f"\n## Current Beliefs\n{belief_results}")
+    sections.append(
+        "\nRules:\n"
+        "- Answer ONLY from the provided content — do not use your training knowledge\n"
+        "- Cite sources as [Source: path] for every claim\n"
+        "- If the content does not contain enough information, say so honestly"
+    )
+    prompt = "\n".join(sections)
 
     request = CompletionRequest(
         model="",
@@ -263,6 +280,10 @@ def _execute_tool(
 
     if tool_name == "beliefs":
         return _tool_beliefs(conn, workspace, tool_input.get("topic"))
+
+    if tool_name == "self":
+        from alexandria.core.self_knowledge import gather_self_knowledge
+        return gather_self_knowledge(conn, workspace)
 
     return f"Unknown tool: {tool_name}"
 
@@ -359,3 +380,18 @@ def _tool_beliefs(conn: sqlite3.Connection, workspace: str, topic: str | None = 
         return "\n".join(lines)
     except Exception as exc:
         return f"Belief query error: {exc}"
+
+
+_SELF_KEYWORDS = frozenset({
+    "alexandria", "alxia", "yourself", "you", "your",
+    "capabilities", "capable", "ingested", "know",
+    "topics", "documents", "beliefs", "state",
+    "what can", "what do", "what have", "how many",
+    "tell me about yourself", "describe yourself",
+})
+
+
+def _is_self_referential(question: str) -> bool:
+    """Detect if a question is about Alexandria itself."""
+    q = question.lower()
+    return any(kw in q for kw in _SELF_KEYWORDS)
