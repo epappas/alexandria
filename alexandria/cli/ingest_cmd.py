@@ -1,4 +1,9 @@
-"""``alexandria ingest`` — compile a source into the wiki."""
+"""``alexandria ingest`` — compile sources into the wiki.
+
+Accepts a file, directory, URL, or git repo URL. Directories and repos
+are walked for all supported files. Single files and URLs go through
+the standard ingest pipeline.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,7 @@ console = Console()
 
 
 def ingest_command(
-    source: str = typer.Argument(..., help="File path or URL to ingest."),
+    source: str = typer.Argument(..., help="File, directory, URL, or git repo URL."),
     workspace: Optional[str] = typer.Option(
         None, "--workspace", "-w", help="Override the current workspace."
     ),
@@ -23,14 +28,17 @@ def ingest_command(
         None, "--topic", help="Topic directory for the wiki page (default: inferred)."
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", help="Preview the estimated cost without running."
+        False, "--dry-run", help="Preview without running (single file only)."
     ),
 ) -> None:
-    """Compile a source into the wiki via staged writes + verification.
+    """Compile sources into the wiki via staged writes + verification.
 
-    Accepts a local file path or a URL (http/https). URLs are fetched,
-    converted to markdown, and saved to raw/web/ before ingesting.
-    Supports HTML pages, PDFs, and arxiv URLs.
+    Accepts:
+    - Local file: ``alxia ingest paper.pdf``
+    - Local directory: ``alxia ingest ./my-project``
+    - URL: ``alxia ingest https://example.com/page``
+    - Git URL: ``alxia ingest https://github.com/owner/repo``
+    - GitHub shorthand: ``alxia ingest owner/repo``
     """
     home = resolve_home()
     config = load_config(home)
@@ -42,48 +50,54 @@ def ingest_command(
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    # URL detection
-    if source.startswith("http://") or source.startswith("https://"):
-        console.print(f"[dim]Fetching {source}...[/dim]")
-        from alexandria.core.web import fetch_and_save, WebFetchError
-        try:
-            source_path = fetch_and_save(source, ws.path)
-            console.print(f"[dim]Saved to {source_path.relative_to(ws.path)}[/dim]")
-        except WebFetchError as exc:
-            console.print(f"[red]Fetch failed:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
-    else:
-        source_path = Path(source).expanduser().resolve()
-        if not source_path.exists():
-            console.print(f"[red]error:[/red] source file not found: {source}")
-            raise typer.Exit(code=1)
-
     if dry_run:
         from alexandria.llm.budget import BudgetConfig, BudgetEnforcer
-
         budget = BudgetEnforcer(BudgetConfig())
         est = budget.pre_flight_estimate(
-            estimated_writer_calls=1,
-            avg_input_per_call=4000,
-            avg_output_per_call=2000,
+            estimated_writer_calls=1, avg_input_per_call=4000, avg_output_per_call=2000,
         )
-        console.print(f"[bold]Dry run preview:[/bold]")
-        console.print(f"  Source:       {source_path}")
-        console.print(f"  Workspace:    {target_slug}")
-        console.print(f"  Topic:        {topic or '(inferred)'}")
-        console.print(f"  Est. cost:    ${est:.4f}")
-        console.print(f"[dim]Run without --dry-run to execute.[/dim]")
+        console.print(f"[bold]Dry run:[/bold] {source}")
+        console.print(f"  Workspace: {target_slug}, Topic: {topic or '(inferred)'}, Est: ${est:.4f}")
         return
 
+    # Expand GitHub shorthand: owner/repo -> git URL
+    if _is_github_shorthand(source):
+        source = f"https://github.com/{source}.git"
+
+    # Git repo URL
+    if _is_git_url(source):
+        _ingest_git_repo(home, target_slug, ws.path, source, topic)
+        return
+
+    # HTTP/HTTPS URL (non-git)
+    if source.startswith(("http://", "https://")):
+        _ingest_url(home, target_slug, ws.path, source, topic)
+        return
+
+    # Local path
+    local = Path(source).expanduser().resolve()
+    if not local.exists():
+        console.print(f"[red]error:[/red] not found: {source}")
+        raise typer.Exit(code=1)
+
+    # Directory -> repo ingest
+    if local.is_dir():
+        _ingest_directory(home, target_slug, ws.path, local, topic)
+        return
+
+    # Single file
+    _ingest_single_file(home, target_slug, ws.path, local, topic)
+
+
+def _ingest_single_file(
+    home: Path, slug: str, ws_path: Path, source_path: Path, topic: str | None,
+) -> None:
     from alexandria.core.ingest import IngestError, ingest_file
 
     try:
         result = ingest_file(
-            home=home,
-            workspace_slug=target_slug,
-            workspace_path=ws.path,
-            source_file=source_path,
-            topic=topic,
+            home=home, workspace_slug=slug, workspace_path=ws_path,
+            source_file=source_path, topic=topic,
         )
     except IngestError as exc:
         console.print(f"[red]Ingest failed:[/red] {exc}")
@@ -97,5 +111,111 @@ def ingest_command(
     else:
         console.print(f"[red]Ingest rejected[/red] (run {result.run_id})")
         console.print(f"[yellow]Reason:[/yellow] {result.verdict_reasoning}")
-        console.print(f"[dim]Run `alexandria runs show {result.run_id}` to inspect.[/dim]")
         raise typer.Exit(code=1)
+
+
+def _ingest_url(
+    home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
+) -> None:
+    from alexandria.core.web import fetch_and_save, WebFetchError
+
+    console.print(f"[dim]Fetching {url}...[/dim]")
+    try:
+        source_path = fetch_and_save(url, ws_path)
+    except WebFetchError as exc:
+        console.print(f"[red]Fetch failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[dim]Saved to {source_path.relative_to(ws_path)}[/dim]")
+    _ingest_single_file(home, slug, ws_path, source_path, topic)
+
+
+def _ingest_directory(
+    home: Path, slug: str, ws_path: Path, dir_path: Path, topic: str | None,
+) -> None:
+    from alexandria.core.repo_ingest import ingest_repo, _collect_files, ALL_INGEST_EXTS
+
+    files = _collect_files(dir_path, ALL_INGEST_EXTS)
+    console.print(f"Found [bold]{len(files)}[/bold] files to ingest")
+    if not files:
+        console.print("[yellow]No supported files found.[/yellow]")
+        return
+
+    result = ingest_repo(
+        home=home, workspace_slug=slug, workspace_path=ws_path,
+        repo_path=dir_path, topic=topic,
+        on_progress=_print_progress,
+    )
+    _print_summary(result)
+
+
+def _ingest_git_repo(
+    home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
+) -> None:
+    from alexandria.core.repo_ingest import (
+        clone_repo, ingest_repo, _collect_files, ALL_INGEST_EXTS, IngestError,
+    )
+
+    console.print(f"[dim]Cloning {url}...[/dim]")
+    try:
+        repo_path = clone_repo(url, ws_path / "raw" / "git")
+    except IngestError as exc:
+        console.print(f"[red]Clone failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[dim]Repo at {repo_path.relative_to(ws_path)}[/dim]")
+
+    files = _collect_files(repo_path, ALL_INGEST_EXTS)
+    console.print(f"Found [bold]{len(files)}[/bold] files to ingest")
+    if not files:
+        console.print("[yellow]No supported files found.[/yellow]")
+        return
+
+    result = ingest_repo(
+        home=home, workspace_slug=slug, workspace_path=ws_path,
+        repo_path=repo_path, topic=topic,
+        on_progress=_print_progress,
+    )
+    _print_summary(result)
+
+
+def _print_progress(rel: str, status: str) -> None:
+    sym = {"committed": "[green]+[/green]", "rejected": "[yellow]-[/yellow]"}.get(status, "[red]![/red]")
+    console.print(f"  {sym} {rel}")
+
+
+def _print_summary(result: "RepoIngestResult") -> None:
+    console.print()
+    console.print(f"[bold]Results:[/bold]")
+    console.print(f"  Committed: [green]{len(result.committed)}[/green]")
+    if result.rejected:
+        console.print(f"  Rejected:  [yellow]{len(result.rejected)}[/yellow]")
+    if result.errors:
+        console.print(f"  Errors:    [red]{len(result.errors)}[/red]")
+        for err in result.errors[:5]:
+            console.print(f"    {err}")
+
+
+def _is_git_url(source: str) -> bool:
+    if source.startswith(("git@", "ssh://")):
+        return True
+    if source.endswith(".git"):
+        return True
+    # GitHub/GitLab HTTPS with path depth >= 2
+    if source.startswith(("http://", "https://")):
+        from urllib.parse import urlparse
+        parsed = urlparse(source)
+        host = parsed.hostname or ""
+        path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+        if host in ("github.com", "gitlab.com", "bitbucket.org") and len(path_parts) >= 2:
+            return True
+    return False
+
+
+def _is_github_shorthand(source: str) -> bool:
+    """Detect owner/repo pattern that isn't a local path."""
+    if "/" not in source or source.count("/") != 1:
+        return False
+    if source.startswith(("http", "git@", "ssh://", "/", ".", "~")):
+        return False
+    return not Path(source).exists()

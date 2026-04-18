@@ -115,97 +115,81 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         )
 
     @mcp.tool()
-    def ingest_url(
-        url: str,
-        workspace: str | None = None,
-        topic: str | None = None,
-    ) -> str:
-        """Ingest a URL into the knowledge base.
-
-        Fetches the page, extracts content, runs the verifier, and
-        commits to the wiki. If an LLM is configured, produces a
-        summary with structured beliefs.
-        """
-        from alexandria.config import resolve_home, load_config, resolve_workspace
-        from alexandria.core.workspace import get_workspace
-        from alexandria.core.web import fetch_and_save, WebFetchError
-        from alexandria.core.ingest import ingest_file, IngestError
-
-        ws_path, slug = resolve(workspace)
-        home = resolve_home()
-
-        try:
-            source_path = fetch_and_save(url, ws_path)
-        except WebFetchError as exc:
-            return f"Fetch failed: {exc}"
-
-        try:
-            ws = get_workspace(home, slug)
-            result = ingest_file(home, slug, ws.path, source_path, topic=topic)
-        except IngestError as exc:
-            return f"Ingest failed: {exc}"
-
-        if result.committed:
-            return (
-                f"Ingested: {url}\n"
-                f"Wiki page: {', '.join(result.committed_paths)}\n"
-                f"Run: {result.run_id}"
-            )
-        return f"Rejected: {result.verdict_reasoning}"
-
-    @mcp.tool()
-    def ingest_repo(
+    def ingest(
         source: str,
         workspace: str | None = None,
         topic: str | None = None,
     ) -> str:
-        """Ingest all supported files from a git repo or local directory.
+        """Ingest a source into the knowledge base.
 
-        Accepts a git URL (GitHub, GitLab) or local path. Git URLs are
-        shallow-cloned automatically. Walks the tree and ingests code
-        files (.py, .ts, .rs, .go, .tf, .yml), docs (.md), and configs.
+        Accepts any of:
+        - URL (fetches page/PDF, extracts content)
+        - Git repo URL or GitHub shorthand ``owner/repo`` (clones and ingests all files)
+        - Local file path
+        - Local directory path (ingests all supported files)
         """
+        from pathlib import Path
         from alexandria.config import resolve_home
-        from alexandria.core.workspace import get_workspace
-        from alexandria.core.repo_ingest import (
-            clone_repo, ingest_repo as _ingest_repo, IngestError,
-        )
-        from alexandria.cli.ingest_repo_cmd import _is_git_url
+        from alexandria.core.ingest import ingest_file, IngestError
+        from alexandria.cli.ingest_cmd import _is_git_url, _is_github_shorthand
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
 
+        # GitHub shorthand
+        if _is_github_shorthand(source):
+            source = f"https://github.com/{source}.git"
+
+        # Git repo
         if _is_git_url(source):
+            from alexandria.core.repo_ingest import clone_repo, ingest_repo
             try:
-                git_dir = ws_path / "raw" / "git"
-                repo_path = clone_repo(source, git_dir)
+                repo_path = clone_repo(source, ws_path / "raw" / "git")
             except IngestError as exc:
                 return f"Clone failed: {exc}"
-        else:
-            from pathlib import Path
-            repo_path = Path(source).expanduser().resolve()
-            if not repo_path.is_dir():
-                return f"Not a directory: {source}"
+            result = ingest_repo(
+                home=home, workspace_slug=slug, workspace_path=ws_path,
+                repo_path=repo_path, topic=topic,
+            )
+            return _format_repo_result(source, result)
 
-        result = _ingest_repo(
-            home=home,
-            workspace_slug=slug,
-            workspace_path=ws_path,
-            repo_path=repo_path,
-            topic=topic,
-        )
+        # HTTP URL (non-git)
+        if source.startswith(("http://", "https://")):
+            from alexandria.core.web import fetch_and_save, WebFetchError
+            try:
+                source_path = fetch_and_save(source, ws_path)
+            except WebFetchError as exc:
+                return f"Fetch failed: {exc}"
+            try:
+                r = ingest_file(home, slug, ws_path, source_path, topic=topic)
+            except IngestError as exc:
+                return f"Ingest failed: {exc}"
+            if r.committed:
+                return f"Ingested: {source}\nWiki: {', '.join(r.committed_paths)}"
+            return f"Rejected: {r.verdict_reasoning}"
 
-        lines = [f"Ingested repo: {source}"]
-        lines.append(f"Committed: {len(result.committed)} files")
-        if result.rejected:
-            lines.append(f"Rejected: {len(result.rejected)}")
-        if result.errors:
-            lines.append(f"Errors: {len(result.errors)}")
-            for err in result.errors[:3]:
-                lines.append(f"  {err}")
-        if result.committed:
-            lines.append(f"\nPages: {', '.join(result.committed[:10])}")
-        return "\n".join(lines)
+        # Local path
+        local = Path(source).expanduser().resolve()
+        if not local.exists():
+            return f"Not found: {source}"
+
+        # Directory
+        if local.is_dir():
+            from alexandria.core.repo_ingest import ingest_repo
+            result = ingest_repo(
+                home=home, workspace_slug=slug, workspace_path=ws_path,
+                repo_path=local, topic=topic,
+            )
+            return _format_repo_result(source, result)
+
+        # Single file
+        try:
+            r = ingest_file(home, slug, ws_path, local, topic=topic)
+        except IngestError as exc:
+            return f"Ingest failed: {exc}"
+        if r.committed:
+            return f"Ingested: {local.name}\nWiki: {', '.join(r.committed_paths)}"
+        return f"Rejected: {r.verdict_reasoning}"
 
     @mcp.tool()
     def query(
@@ -240,3 +224,16 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
                 f"- {s.get('title', '')} ({s.get('path', '')})" for s in sources
             )
         return answer + source_text
+
+    def _format_repo_result(source: str, result: "RepoIngestResult") -> str:
+        from alexandria.core.repo_ingest import RepoIngestResult
+        lines = [f"Ingested: {source}", f"Committed: {len(result.committed)} files"]
+        if result.rejected:
+            lines.append(f"Rejected: {len(result.rejected)}")
+        if result.errors:
+            lines.append(f"Errors: {len(result.errors)}")
+            for err in result.errors[:3]:
+                lines.append(f"  {err}")
+        if result.committed:
+            lines.append(f"\nPages: {', '.join(result.committed[:10])}")
+        return "\n".join(lines)
