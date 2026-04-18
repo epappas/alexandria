@@ -410,7 +410,6 @@ def _execute_cascade(
         plan = None
 
     if plan and plan.action == "merge" and plan.target_page:
-        # target_page is "wiki/topic/slug.md", stage_merge expects "topic/slug.md"
         rel = plan.target_page.removeprefix("wiki/")
         return stage_merge(
             staged, workspace_path, rel,
