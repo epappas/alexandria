@@ -410,8 +410,10 @@ def _execute_cascade(
         plan = None
 
     if plan and plan.action == "merge" and plan.target_page:
+        # target_page is "wiki/topic/slug.md", stage_merge expects "topic/slug.md"
+        rel = plan.target_page.removeprefix("wiki/")
         return stage_merge(
-            staged, workspace_path, plan.target_page,
+            staged, workspace_path, rel,
             plan.section_heading, body,
             f'[^src]: {cite_path}' if cite_path else "",
         )
@@ -429,7 +431,8 @@ def _execute_cascade(
     if plan and plan.cross_refs:
         for ref_path in plan.cross_refs:
             try:
-                stage_cross_ref(staged, workspace_path, f"{topic}/{slug}.md", ref_path)
+                ref_rel = ref_path.removeprefix("wiki/")
+                stage_cross_ref(staged, workspace_path, f"{topic}/{slug}.md", ref_rel)
             except Exception:
                 continue
     return path
@@ -440,18 +443,18 @@ def _execute_hedge(
     body: str, cite_path: str,
 ) -> Path:
     """Execute a hedge (contradiction) cascade operation."""
-    target = workspace_path / plan.target_page
+    rel = plan.target_page.removeprefix("wiki/")
+    target = workspace_path / "wiki" / rel
     if not target.exists():
         raise IngestError(f"hedge target not found: {plan.target_page}")
     content = target.read_text(encoding="utf-8")
-    # Find first substantial paragraph as the existing claim
     existing = ""
     for line in content.split("\n"):
         if line.strip() and not line.startswith(("#", ">", "[^", "---")):
             existing = line.strip()
             break
     return stage_hedge(
-        staged, workspace_path, plan.target_page,
+        staged, workspace_path, rel,
         plan.section_heading, existing, body[:500],
         cite_path, f'[^hedge]: {cite_path}',
     )
