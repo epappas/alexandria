@@ -35,16 +35,25 @@ def detect_format(path: Path) -> str:
 
     suffix = path.suffix.lower()
     if suffix == ".jsonl":
-        first_line = _read_first_line(path)
-        if first_line:
+        # Scan first few lines — first line may be metadata, not a message
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()[:10]
+        except OSError:
+            return "unknown"
+        for raw in lines:
+            raw = raw.strip()
+            if not raw:
+                continue
             try:
-                obj = json.loads(first_line)
-                if "type" in obj and "message" in obj:
-                    return "claude-code"
-                if "role" in obj and "content" in obj:
-                    return "codex"
+                obj = json.loads(raw)
             except json.JSONDecodeError:
-                pass
+                continue
+            # Claude Code: has "type" field with user/assistant/permission-mode
+            if obj.get("type") in ("user", "human", "assistant", "permission-mode"):
+                return "claude-code"
+            # Codex: has role + content directly
+            if "role" in obj and "content" in obj and "type" not in obj:
+                return "codex"
         return "unknown"
 
     if suffix in (".md", ".txt"):
@@ -95,6 +104,7 @@ def capture_conversation(
     return {
         "session_id": session_id,
         "output_path": str(out_path.relative_to(workspace_path)),
+        "absolute_path": str(out_path),
         "content_hash": content_hash,
         "message_count": len(messages),
         "client": client,
@@ -115,12 +125,19 @@ def _parse_claude_code_jsonl(path: Path) -> list[dict[str, Any]]:
             continue
 
         msg_type = obj.get("type", "")
-        if msg_type in ("human", "assistant", "tool_use", "tool_result"):
-            messages.append({
-                "role": "user" if msg_type == "human" else msg_type,
-                "content": _extract_text_content(obj.get("message", {})),
-                "timestamp": obj.get("timestamp", ""),
-            })
+        if msg_type not in ("user", "human", "assistant"):
+            continue
+        role = "user" if msg_type in ("user", "human") else "assistant"
+        content = _extract_text_content(obj.get("message", {}))
+        # Skip empty messages and bare tool-call lines
+        stripped = content.strip()
+        if not stripped or stripped.startswith("[tool:"):
+            continue
+        messages.append({
+            "role": role,
+            "content": content,
+            "timestamp": obj.get("timestamp", ""),
+        })
     return messages
 
 

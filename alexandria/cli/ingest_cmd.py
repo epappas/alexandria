@@ -85,6 +85,11 @@ def ingest_command(
         _ingest_directory(home, target_slug, ws.path, local, topic)
         return
 
+    # JSONL conversation transcript -> capture + ingest
+    if local.suffix == ".jsonl":
+        _ingest_conversation(home, target_slug, ws.path, local, topic)
+        return
+
     # Single file
     _ingest_single_file(home, target_slug, ws.path, local, topic)
 
@@ -112,6 +117,52 @@ def _ingest_single_file(
         console.print(f"[red]Ingest rejected[/red] (run {result.run_id})")
         console.print(f"[yellow]Reason:[/yellow] {result.verdict_reasoning}")
         raise typer.Exit(code=1)
+
+
+def _ingest_conversation(
+    home: Path, slug: str, ws_path: Path, jsonl_path: Path, topic: str | None,
+) -> None:
+    from alexandria.core.capture.conversation import (
+        capture_conversation, detect_format, CaptureError,
+    )
+    from alexandria.core.ingest import IngestError, ingest_file
+
+    fmt = detect_format(jsonl_path)
+    if fmt == "unknown":
+        # Not a conversation — fall back to single file ingest
+        _ingest_single_file(home, slug, ws_path, jsonl_path, topic)
+        return
+
+    console.print(f"[dim]Capturing {fmt} conversation...[/dim]")
+    try:
+        result = capture_conversation(jsonl_path, ws_path, client=fmt)
+    except CaptureError as exc:
+        console.print(f"[red]Capture failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"[dim]Captured {result['message_count']} messages to "
+        f"{result['output_path']}[/dim]"
+    )
+
+    # Now ingest the captured markdown through the full pipeline
+    md_path = Path(result["absolute_path"])
+    resolved_topic = topic or "conversations"
+    try:
+        ir = ingest_file(
+            home=home, workspace_slug=slug, workspace_path=ws_path,
+            source_file=md_path, topic=resolved_topic,
+        )
+    except IngestError as exc:
+        console.print(f"[red]Ingest failed:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    if ir.committed:
+        console.print(f"[green]Conversation ingested[/green] (run {ir.run_id})")
+        for path in ir.committed_paths:
+            console.print(f"  [cyan]wiki/{path}[/cyan]")
+    else:
+        console.print(f"[yellow]Rejected:[/yellow] {ir.verdict_reasoning}")
 
 
 def _ingest_url(

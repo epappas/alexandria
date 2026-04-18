@@ -182,6 +182,29 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
             )
             return _format_repo_result(source, result)
 
+        # JSONL conversation transcript
+        if local.suffix == ".jsonl":
+            from alexandria.core.capture.conversation import (
+                capture_conversation, detect_format, CaptureError,
+            )
+            fmt = detect_format(local)
+            if fmt != "unknown":
+                try:
+                    cap = capture_conversation(local, ws_path, client=fmt)
+                except CaptureError as exc:
+                    return f"Capture failed: {exc}"
+                md_path = Path(cap["absolute_path"])
+                try:
+                    r = ingest_file(home, slug, ws_path, md_path, topic=topic or "conversations")
+                except IngestError as exc:
+                    return f"Ingest failed: {exc}"
+                if r.committed:
+                    return (
+                        f"Conversation captured: {cap['message_count']} messages\n"
+                        f"Wiki: {', '.join(r.committed_paths)}"
+                    )
+                return f"Rejected: {r.verdict_reasoning}"
+
         # Single file
         try:
             r = ingest_file(home, slug, ws_path, local, topic=topic)
