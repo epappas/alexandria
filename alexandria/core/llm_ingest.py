@@ -266,14 +266,17 @@ def _parse_llm_response(result: CompletionResult, raw_path: str) -> dict[str, An
     summary = data.get("summary", "")
     beliefs_raw = data.get("beliefs", [])
 
-    # Build footnote section
+    # Build footnote section — reference sources without embedding quotes.
+    # LLM "verbatim" quotes are often not truly verbatim (whitespace,
+    # unicode, markdown conversion), which causes verifier hash mismatches.
     footnotes: list[str] = []
     beliefs: list[dict[str, Any]] = []
+    seen_fn: set[str] = set()
     for b in beliefs_raw:
         fn_id = b.get("footnote_id", str(len(footnotes) + 1))
-        quote = b.get("quote", "")
-        if quote:
-            footnotes.append(f'[^{fn_id}]: {raw_path} — "{quote}"')
+        if fn_id not in seen_fn:
+            footnotes.append(f"[^{fn_id}]: {raw_path}")
+            seen_fn.add(fn_id)
         beliefs.append({
             "statement": b.get("statement", ""),
             "topic": b.get("topic", ""),
