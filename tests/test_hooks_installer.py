@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from alexandria.hooks.installer.claude_code import (
-    HOOK_PROTOCOL_VERSION,
     install_claude_code_hooks,
     uninstall_claude_code_hooks,
     verify_claude_code_hooks,
@@ -26,7 +25,10 @@ class TestClaudeCodeHooks:
 
         config = json.loads(settings.read_text())
         assert "Stop" in config["hooks"]
-        assert config["hooks"]["Stop"]["_alexandria_managed"] is True
+        # Hooks are arrays of matcher objects
+        assert isinstance(config["hooks"]["Stop"], list)
+        assert config["hooks"]["Stop"][0]["_alexandria_managed"] is True
+        assert config["hooks"]["Stop"][0]["hooks"][0]["type"] == "command"
 
     def test_install_with_workspace(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
@@ -35,7 +37,8 @@ class TestClaudeCodeHooks:
         )
         result = install_claude_code_hooks(workspace="myproject")
         config = json.loads(settings.read_text())
-        assert "--workspace myproject" in config["hooks"]["Stop"]["command"]
+        cmd = config["hooks"]["Stop"][0]["hooks"][0]["command"]
+        assert "--workspace myproject" in cmd
 
     def test_uninstall(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
@@ -47,7 +50,8 @@ class TestClaudeCodeHooks:
         assert removed is True
 
         config = json.loads(settings.read_text())
-        assert "Stop" not in config.get("hooks", {})
+        # After uninstall, arrays should be empty
+        assert config["hooks"]["Stop"] == []
 
     def test_uninstall_no_hooks(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
@@ -76,27 +80,11 @@ class TestClaudeCodeHooks:
         assert result["installed"] is False
         assert len(result["issues"]) > 0
 
-    def test_verify_version_mismatch(self, tmp_path: Path, monkeypatch) -> None:
-        settings = tmp_path / "settings.local.json"
-        monkeypatch.setattr(
-            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
-        )
-        install_claude_code_hooks()
-        # Tamper with version
-        config = json.loads(settings.read_text())
-        config["hooks"]["Stop"]["_protocol_version"] = 999
-        settings.write_text(json.dumps(config))
-
-        result = verify_claude_code_hooks()
-        assert result["installed"] is False
-        assert any("version mismatch" in i for i in result["issues"])
-
     def test_preserves_existing_settings(self, tmp_path: Path, monkeypatch) -> None:
         settings = tmp_path / "settings.local.json"
         monkeypatch.setattr(
             "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
         )
-        # Pre-existing settings
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text(json.dumps({"custom_key": "preserved"}))
 
@@ -104,3 +92,15 @@ class TestClaudeCodeHooks:
         config = json.loads(settings.read_text())
         assert config["custom_key"] == "preserved"
         assert "hooks" in config
+
+    def test_idempotent_install(self, tmp_path: Path, monkeypatch) -> None:
+        settings = tmp_path / "settings.local.json"
+        monkeypatch.setattr(
+            "alexandria.hooks.installer.claude_code.SETTINGS_PATH", settings
+        )
+        install_claude_code_hooks()
+        install_claude_code_hooks()  # second install
+        config = json.loads(settings.read_text())
+        # Should have exactly 1 entry per event, not duplicates
+        assert len(config["hooks"]["Stop"]) == 1
+        assert len(config["hooks"]["PreCompact"]) == 1

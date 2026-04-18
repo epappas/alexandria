@@ -27,32 +27,39 @@ def install_claude_code_hooks(workspace: str | None = None) -> dict[str, Any]:
     if workspace:
         base_cmd += f" --workspace {workspace}"
 
-    hooks = {
-        "Stop": {
-            "command": base_cmd,
+    # Claude Code hooks format: event -> array of {matcher, hooks[]}
+    hook_entries = {
+        "Stop": [{
+            "matcher": "",
+            "hooks": [{"type": "command", "command": base_cmd}],
             MARKER: True,
-            "_protocol_version": HOOK_PROTOCOL_VERSION,
-        },
-        "PreCompact": {
-            "command": f"{base_cmd} --reason pre-compact",
+        }],
+        "PreCompact": [{
+            "matcher": "",
+            "hooks": [{"type": "command", "command": f"{base_cmd} --reason pre-compact"}],
             MARKER: True,
-            "_protocol_version": HOOK_PROTOCOL_VERSION,
-        },
+        }],
     }
 
     config = _read_settings()
     if "hooks" not in config:
         config["hooks"] = {}
 
-    for event, hook_entry in hooks.items():
-        config["hooks"][event] = hook_entry
+    for event, entries in hook_entries.items():
+        existing = config["hooks"].get(event, [])
+        if not isinstance(existing, list):
+            existing = []
+        # Remove any previous alexandria-managed entries
+        existing = [e for e in existing if not (isinstance(e, dict) and e.get(MARKER))]
+        existing.extend(entries)
+        config["hooks"][event] = existing
 
     _write_settings(config)
 
     return {
         "client": "claude-code",
         "settings_path": str(SETTINGS_PATH),
-        "hooks_installed": list(hooks.keys()),
+        "hooks_installed": list(hook_entries.keys()),
         "protocol_version": HOOK_PROTOCOL_VERSION,
     }
 
@@ -64,10 +71,13 @@ def uninstall_claude_code_hooks() -> bool:
     removed = False
 
     for event in list(hooks.keys()):
-        entry = hooks[event]
-        if isinstance(entry, dict) and entry.get(MARKER):
-            del hooks[event]
+        entries = hooks[event]
+        if not isinstance(entries, list):
+            continue
+        filtered = [e for e in entries if not (isinstance(e, dict) and e.get(MARKER))]
+        if len(filtered) < len(entries):
             removed = True
+            hooks[event] = filtered if filtered else []
 
     if removed:
         _write_settings(config)
@@ -75,33 +85,27 @@ def uninstall_claude_code_hooks() -> bool:
 
 
 def verify_claude_code_hooks() -> dict[str, Any]:
-    """Check if hooks are correctly installed and version matches."""
+    """Check if hooks are correctly installed."""
     config = _read_settings()
     hooks = config.get("hooks", {})
 
     results: dict[str, Any] = {"installed": False, "hooks": {}, "issues": []}
 
     for event in ("Stop", "PreCompact"):
-        entry = hooks.get(event)
-        if not entry or not isinstance(entry, dict):
+        entries = hooks.get(event, [])
+        if not isinstance(entries, list):
+            results["issues"].append(f"{event} hook has wrong format")
+            continue
+
+        managed = [e for e in entries if isinstance(e, dict) and e.get(MARKER)]
+        if not managed:
             results["issues"].append(f"{event} hook not found")
             continue
 
-        if not entry.get(MARKER):
-            results["issues"].append(f"{event} hook not managed by alexandria")
-            continue
-
-        version = entry.get("_protocol_version", 0)
-        if version != HOOK_PROTOCOL_VERSION:
-            results["issues"].append(
-                f"{event} hook version mismatch: installed={version}, current={HOOK_PROTOCOL_VERSION}"
-            )
-
-        results["hooks"][event] = {
-            "command": entry.get("command", ""),
-            "version": version,
-            "managed": True,
-        }
+        entry = managed[0]
+        hook_cmds = entry.get("hooks", [])
+        cmd = hook_cmds[0].get("command", "") if hook_cmds else ""
+        results["hooks"][event] = {"command": cmd, "managed": True}
 
     results["installed"] = len(results["issues"]) == 0 and len(results["hooks"]) > 0
     return results

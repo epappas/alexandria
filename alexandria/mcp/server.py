@@ -29,13 +29,15 @@ from alexandria.core.workspace import (
 from alexandria.mcp.tools import register_all
 
 INSTRUCTIONS = (
-    "You are connected to an alexandria knowledge engine. "
-    "alexandria accumulates the user's gathered knowledge (raw sources, compiled "
-    "wiki pages, event streams, AI conversations) and exposes it through the "
-    "tools below. Call `guide` first to orient yourself, then use `overview` "
-    "for a quick structural snapshot, then compose `list`, `grep`, `search`, "
-    "`read`, and `follow` to navigate. "
-    "This is a read-only surface in Phase 1 — write tools arrive in Phase 2."
+    "You are connected to Alexandria, a local-first knowledge engine. "
+    "Alexandria accumulates gathered knowledge (raw sources, compiled "
+    "wiki pages, beliefs, AI conversations) and exposes it through the "
+    "tools below.\n\n"
+    "Navigation: call `guide` to orient, `overview` for a structural snapshot, "
+    "then compose `search`, `grep`, `read`, `follow`, and `beliefs` to find information.\n\n"
+    "Write: use `ingest` to add files, directories, URLs, git repos, or conversations. "
+    "Use `belief_add` and `belief_supersede` to manage structured claims. "
+    "Use `query` for LLM-powered answers grounded in the knowledge base."
 )
 
 
