@@ -116,6 +116,11 @@ def ingest_file(
     slug = source_file.stem.lower().replace(" ", "-")
     cite_path = str(raw_dest.relative_to(workspace_path))
 
+    # AST extraction for code files (deterministic, no LLM needed)
+    from alexandria.core.code import detect_language, extract_structure
+    lang = detect_language(source_file.suffix)
+    code_structure = extract_structure(source_content, lang) if lang else None
+
     # Try LLM-powered processing first; fall back to extraction if unavailable
     from alexandria.core.llm_ingest import llm_process_content
     llm_result = llm_process_content(source_content, source_file.name, cite_path)
@@ -123,10 +128,22 @@ def ingest_file(
     if llm_result:
         title = llm_result["title"]
         body = llm_result["body"]
+        if code_structure:
+            body += "\n\n## Code Structure\n\n" + code_structure.to_markdown()
         footnote_lines = ""  # already embedded in body by the LLM
         llm_beliefs = llm_result.get("beliefs", [])
+    elif code_structure:
+        # Code file without LLM — use AST structure as the wiki page
+        title = f"{source_file.name} ({code_structure.language})"
+        body = code_structure.to_markdown()
+        # Use module docstring or filename as citation quote
+        quote = (code_structure.module_docstring.split("\n")[0][:80]
+                 if code_structure.module_docstring else source_file.name)
+        footnote_lines = f'[^1]: {cite_path} — "{quote}"'
+        body += " [^1]"
+        llm_beliefs = []
     else:
-        # No LLM available — extract mechanically
+        # No LLM, no code structure — extract mechanically
         title = _extract_title_from_content(source_content) or \
                 source_file.stem.replace("-", " ").replace("_", " ").title()
 
@@ -142,6 +159,11 @@ def ingest_file(
                 body += " [^1]"
 
         llm_beliefs = []
+
+    # Add AST-derived beliefs (deterministic, always available for code)
+    if code_structure:
+        ast_beliefs = code_structure.to_beliefs(resolved_topic, "")
+        llm_beliefs.extend(ast_beliefs)
 
     raw_rel = raw_dest.relative_to(workspace_path)
     sources_line = f"{title}, {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
@@ -252,7 +274,8 @@ def ingest_file(
                                 for old in existing:
                                     if (old.belief_id != belief.belief_id
                                             and old.predicate == belief.predicate
-                                            and old.object != belief.object):
+                                            and old.object != belief.object
+                                            and old.asserted_in_run != run.run_id):
                                         supersede_belief(
                                             conn, old.belief_id,
                                             belief.belief_id,
