@@ -23,24 +23,24 @@ uv tool install alexandria-wiki
 ## Quick Start
 
 ```bash
-# Initialize
+# 1. Initialize
 alxia init
-alxia status
 
-# Create a project workspace
-alxia project create my-research --description "ML papers"
-alxia workspace use my-research
+# 2. Connect to Claude Code (one-time setup)
+alxia mcp install claude-code         # register MCP server
+alxia hooks install claude-code       # auto-capture conversations
 
-# Ingest from anywhere
+# 3. Restart Claude Code — Alexandria tools are now available
+
+# 4. Ingest from anywhere
 alxia ingest ~/Documents/paper.pdf
-alxia ingest https://arxiv.org/pdf/2401.12345.pdf
-alxia ingest https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)
+alxia ingest https://arxiv.org/abs/2407.09450
+alxia ingest ./my-project                         # whole directory
+alxia ingest epappas/alexandria                    # GitHub repo
+alxia ingest ~/.claude/projects/*/session.jsonl    # conversation
 
-# Query your knowledge
-alxia query "attention mechanisms"
-
-# Connect to Claude Code
-alxia mcp install claude-code
+# 5. Query your knowledge
+alxia query "What do you know?"
 ```
 
 ## Sources
@@ -52,9 +52,12 @@ Alexandria ingests from 14 source types:
 | **Local file** | `alxia ingest ~/file.md` |
 | **PDF** | `alxia ingest ~/paper.pdf` |
 | **URL** (HTML) | `alxia ingest https://example.com/article` |
-| **URL** (PDF) | `alxia ingest https://arxiv.org/pdf/2401.12345.pdf` |
-| **Git repo** | `alxia source add git-local --name repo --repo-url ~/project` |
-| **GitHub** | `alxia source add github --name repo --owner x --repo y` |
+| **Code** (.py/.ts/.rs/.go/.tf/.yml) | `alxia ingest main.py` (AST extraction) |
+| **Directory** | `alxia ingest ./my-project` |
+| **Git repo** | `alxia ingest https://github.com/owner/repo` |
+| **GitHub shorthand** | `alxia ingest owner/repo` |
+| **Conversation** | `alxia ingest ~/.claude/projects/*/session.jsonl` |
+| **GitHub** (events) | `alxia source add github --name repo --owner x --repo y` |
 | **RSS/Atom** | `alxia source add rss --name blog --feed-url https://example.com/feed` |
 | **YouTube** | `alxia source add youtube --name talks --urls "https://youtu.be/abc"` |
 | **Notion** | `alxia source add notion --name wiki --token-ref key --page-ids "abc"` |
@@ -75,14 +78,31 @@ alxia sync
 Alexandria exposes your knowledge to AI agents via the [Model Context Protocol](https://modelcontextprotocol.io/).
 
 ```bash
-# Register with Claude Code (stdio transport)
+# Register with Claude Code (one-time)
 alxia mcp install claude-code
 
-# Or run the HTTP server for other clients
-alxia mcp serve-http --port 7219
+# Install conversation capture hooks (one-time)
+alxia hooks install claude-code
+
+# Restart Claude Code — done. Verify:
+alxia mcp status
+alxia hooks verify claude-code
 ```
 
-Available MCP tools: `guide`, `overview`, `list`, `grep`, `search`, `read`, `follow`, `history`, `why`, `events`, `timeline`, `git_log`, `git_show`, `git_blame`, `sources`, `subscriptions`.
+After setup, Claude Code has 20 Alexandria tools:
+
+| Category | Tools |
+|----------|-------|
+| Navigate | `guide`, `overview`, `list`, `search`, `grep`, `read`, `follow` |
+| History | `history`, `why`, `timeline`, `events` |
+| Git | `git_log`, `git_show`, `git_blame` |
+| Sources | `sources`, `subscriptions` |
+| Write | `ingest`, `query`, `belief_add`, `belief_supersede` |
+
+For other MCP clients:
+```bash
+alxia mcp serve-http --port 7219
+```
 
 ## CLI Reference
 
@@ -91,8 +111,8 @@ alxia init                    Initialize ~/.alexandria/
 alxia status                  Operational dashboard
 alxia doctor                  Health checks
 
-alxia ingest <file-or-url>    Ingest a source (file, PDF, URL)
-alxia query <question>        Search across all knowledge
+alxia ingest <source>         Ingest file, dir, URL, repo, or conversation
+alxia query <question>        LLM-powered answers from your knowledge base
 alxia why <topic>             Belief explainability + provenance
 alxia lint                    Find wiki rot (stale citations)
 alxia synthesize              Generate temporal digest
@@ -118,9 +138,12 @@ alxia logs show               View structured logs
 ## Architecture
 
 - **SQLite + filesystem hybrid**: filesystem is source of truth for documents, SQLite for search/metadata/events
-- **FTS5** for keyword search (no vectors, no RAG — the agent IS the retriever)
+- **Hybrid search**: FTS5 BM25 + recency decay + belief support scoring (no vectors, no RAG — the agent IS the retriever)
+- **AST extraction**: Python, TypeScript, Rust, Go, Terraform, Ansible, YAML parsed into structured beliefs
 - **Hostile verifier**: every wiki write is verified before commit (citations, quote anchors, cascade policy)
 - **Belief revision**: structured claims with supersession chains and provenance
+- **Conversation capture**: auto-captures Claude Code sessions with artifact extraction (papers, repos)
+- **Self-awareness**: Alexandria can answer questions about its own state and capabilities
 - **AES-256-GCM vault**: encrypted secrets with PBKDF2 key derivation
 - **Structured JSONL logging** with run_id correlation
 - **8 schema migrations** applied automatically on init

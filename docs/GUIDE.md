@@ -38,7 +38,25 @@ alxia status
 alxia doctor
 ```
 
-### 3. Create a workspace for your project
+### 3. Connect to Claude Code
+
+```bash
+# Register Alexandria as an MCP server (one-time)
+alxia mcp install claude-code
+
+# Install hooks to auto-capture conversations (one-time)
+alxia hooks install claude-code
+```
+
+Restart Claude Code. You now have 20 Alexandria tools available (`mcp__alexandria__search`, `mcp__alexandria__ingest`, `mcp__alexandria__query`, etc.).
+
+To verify:
+```bash
+alxia mcp status
+alxia hooks verify claude-code
+```
+
+### 4. Create a workspace for your project
 
 ```bash
 alxia project create ml-research --description "Machine learning papers and notes"
@@ -49,6 +67,8 @@ Workspaces isolate knowledge by project. The `global` workspace is for general k
 
 ## Ingesting Knowledge
 
+The `ingest` command handles everything: files, directories, URLs, git repos, and conversations.
+
 ### From files
 
 ```bash
@@ -57,6 +77,10 @@ alxia ingest ~/notes/transformer-notes.md
 
 # PDF (arxiv papers, books, slides)
 alxia ingest ~/Downloads/attention-is-all-you-need.pdf
+
+# Code files (Python, TypeScript, Rust, Go, Terraform, Ansible, YAML)
+# AST extraction produces structured beliefs automatically
+alxia ingest ~/project/main.py --topic myproject
 ```
 
 ### From URLs
@@ -65,14 +89,35 @@ alxia ingest ~/Downloads/attention-is-all-you-need.pdf
 # Web pages
 alxia ingest https://lilianweng.github.io/posts/2023-06-23-agent/
 
-# PDF URLs (arxiv, conference proceedings)
-alxia ingest https://arxiv.org/pdf/2401.12345.pdf
+# Arxiv papers
+alxia ingest https://arxiv.org/abs/2407.09450
 
 # Wikipedia
 alxia ingest https://en.wikipedia.org/wiki/Retrieval-augmented_generation
+```
 
-# GitHub gists
-alxia ingest https://gist.githubusercontent.com/user/id/raw/file.md
+### From directories and git repos
+
+```bash
+# Local directory (walks tree, ingests all supported files)
+alxia ingest ./my-project --topic myproject
+
+# Git repo URL (shallow clones, then ingests)
+alxia ingest https://github.com/owner/repo.git
+
+# GitHub shorthand
+alxia ingest owner/repo
+```
+
+### From conversations
+
+```bash
+# Ingest a Claude Code session transcript
+# Captures the conversation AND ingests all referenced artifacts (papers, repos)
+alxia ingest ~/.claude/projects/*/session-id.jsonl --topic research
+
+# Ingest all sessions from a project directory
+alxia ingest ~/.claude/projects/-home-me-myproject/ --topic research
 ```
 
 ### From continuous sources
@@ -140,28 +185,33 @@ alxia query "RAG vs fine-tuning" --json
 
 ### From Claude Code (via MCP)
 
-This is where Alexandria really shines. Connect it to Claude Code:
-
-```bash
-alxia mcp install claude-code
-```
-
-Restart Claude Code. Now Claude can access your knowledge through MCP tools:
+This is where Alexandria really shines. If you followed step 3 above, Claude Code already has access. Examples of what to ask:
 
 - **"What do my notes say about transformers?"** — Claude calls `search` and `read`
-- **"Summarize the recent posts from my RSS feeds"** — Claude calls `subscriptions` and `read`
+- **"Ingest this paper: https://arxiv.org/abs/2407.09450"** — Claude calls `ingest`
+- **"Ingest my project at ./backend"** — Claude calls `ingest` on the directory
 - **"What changed in my-project this week?"** — Claude calls `events` and `git_log`
 - **"Why do I believe X?"** — Claude calls `why` to trace belief provenance
+- **"What do you know?"** — Claude calls `query`, Alexandria answers with self-knowledge
+- **"Add a belief: Transformers use self-attention"** — Claude calls `belief_add`
 
-The MCP server exposes 16 tools: `guide`, `overview`, `list`, `grep`, `search`, `read`, `follow`, `history`, `why`, `events`, `timeline`, `git_log`, `git_show`, `git_blame`, `sources`, `subscriptions`.
+The MCP server exposes 20 tools:
+
+| Category | Tools |
+|----------|-------|
+| Navigate | `guide`, `overview`, `list`, `search`, `grep`, `read`, `follow` |
+| History | `history`, `why`, `timeline`, `events` |
+| Git | `git_log`, `git_show`, `git_blame` |
+| Sources | `sources`, `subscriptions` |
+| Write | `ingest`, `query`, `belief_add`, `belief_supersede` |
 
 ### Pinned vs Open mode
 
 By default, the MCP server runs in **open mode** — all workspaces are accessible. For project-specific use:
 
 ```bash
-# Pin to one workspace
-alxia mcp serve --workspace ml-research
+# Pin to one workspace in the project's .mcp.json
+alxia mcp install claude-code --workspace ml-research
 ```
 
 ## Managing Secrets
@@ -220,20 +270,34 @@ The daemon runs source syncs every 5 minutes and subscription polls every hour.
 
 ## Capturing Conversations
 
-Alexandria can capture your AI coding sessions:
+Alexandria auto-captures your AI coding sessions when hooks are installed:
 
 ```bash
-# Install hooks for Claude Code
+# Install hooks (one-time, already done if you followed Getting Started)
 alxia hooks install claude-code
 
-# Or for Codex
-alxia hooks install codex
+# Verify hooks are active
+alxia hooks verify claude-code
+```
 
-# Manually capture a transcript
+When a Claude Code session ends, the Stop hook fires and:
+1. Parses the JSONL transcript
+2. Converts to a searchable wiki page
+3. Extracts referenced artifacts (papers, repos, URLs)
+4. Ingests each artifact through the full pipeline
+
+You can also manually ingest conversations:
+
+```bash
+# Ingest a specific session
+alxia ingest ~/.claude/projects/*/session-id.jsonl --topic research
+
+# Ingest all sessions from a project
+alxia ingest ~/.claude/projects/-home-me-myproject/ --topic research
+
+# Or use the capture command directly
 alxia capture conversation ~/path/to/session.jsonl --client claude-code
-
-# List captures
-alxia captures
+alxia captures    # list captured sessions
 ```
 
 ## Workspaces
@@ -260,8 +324,24 @@ docker run -v ~/.alexandria:/data ghcr.io/epappas/alexandria ingest https://arxi
 
 ## Typical Workflow
 
-1. **Morning**: `alxia sync` pulls overnight RSS, GitHub activity, git commits
-2. **During work**: `alxia ingest` papers, articles, notes as you find them
-3. **In Claude Code**: ask questions, Claude searches your Alexandria knowledge
-4. **Weekly**: `alxia synthesize` generates a digest of what happened
-5. **Maintenance**: `alxia lint` checks wiki health, `alxia eval run` tracks quality
+1. **Setup (once)**: `alxia init && alxia mcp install claude-code && alxia hooks install claude-code`
+2. **Morning**: `alxia sync` pulls overnight RSS, GitHub activity, git commits
+3. **During work**: `alxia ingest` papers, repos, articles, notes as you find them
+4. **In Claude Code**: ask questions — Claude searches your Alexandria knowledge via MCP tools
+5. **After sessions**: conversations auto-captured by hooks, referenced papers/repos ingested
+6. **Weekly**: `alxia synthesize` generates a digest of what happened
+7. **Querying**: `alxia query "What do I know about X?"` for grounded answers from your knowledge base
+8. **Maintenance**: `alxia lint` checks wiki health, `alxia eval run` tracks quality
+
+## LLM Configuration
+
+Alexandria uses an LLM for query answering, content summarization, and belief extraction during ingest. It auto-detects providers in this order:
+
+1. **Claude Max/Pro subscription** (via Claude Code SDK) — no API key needed, works automatically if `claude` CLI is installed
+2. **ANTHROPIC_API_KEY** — direct Anthropic API
+3. **OPENAI_API_KEY** — OpenAI / GPT models
+4. **OPENROUTER_API_KEY** — OpenRouter (any model)
+5. **GOOGLE_API_KEY** — Google Gemini
+6. **config.toml `[llm]` section** — local models (Ollama, vLLM, SGLang)
+
+Without an LLM, Alexandria still works for ingest (mechanical extraction), search (FTS5), and code analysis (AST). Query and belief extraction require an LLM.
