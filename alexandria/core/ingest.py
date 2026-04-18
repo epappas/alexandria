@@ -396,11 +396,13 @@ def _execute_cascade(
     from alexandria.core.cascade.decision import plan_cascade
 
     # Try cascade planning if DB exists
+    own_wiki_path = f"wiki/{topic}/{slug}.md"
     if db_path(home).exists():
         try:
             with connect(db_path(home)) as conn:
                 plan = plan_cascade(
                     conn, workspace_slug, workspace_path, title, body, beliefs,
+                    exclude_path=own_wiki_path,
                 )
         except Exception:
             plan = None

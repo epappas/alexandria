@@ -43,20 +43,25 @@ def find_candidate_pages(
     title: str,
     beliefs: list[dict[str, Any]],
     *,
+    exclude_path: str = "",
     limit: int = 5,
 ) -> list[CandidatePage]:
     """Find existing wiki pages covering the same concept. No LLM needed."""
     seen: dict[str, CandidatePage] = {}
 
-    # 1. Hybrid search on the title
+    # 1. Direct title similarity — most reliable signal
+    _title_search(conn, workspace, title, seen)
+
+    # 2. Hybrid search on the title (FTS + recency + beliefs)
     for hit in hybrid_search(conn, workspace, title, limit=limit):
-        if hit.layer != "wiki":
+        if hit.layer != "wiki" or hit.path in seen:
             continue
         seen[hit.path] = CandidatePage(
-            path=hit.path, title=hit.title, score=hit.score, match_reason="fts",
+            path=hit.path, title=hit.title, score=hit.score * 0.8,
+            match_reason="fts",
         )
 
-    # 2. Belief subject overlap — find pages sharing the same subjects
+    # 3. Belief subject overlap
     for b in beliefs:
         subj = b.get("subject")
         if not subj:
@@ -69,8 +74,65 @@ def find_candidate_pages(
                     path=p, title=subj, score=0.5, match_reason="belief_subject",
                 )
 
+    # Remove self-matches
+    if exclude_path:
+        seen.pop(exclude_path, None)
+
     candidates = sorted(seen.values(), key=lambda c: c.score, reverse=True)
     return candidates[:limit]
+
+
+def _title_search(
+    conn: sqlite3.Connection,
+    workspace: str,
+    title: str,
+    seen: dict[str, CandidatePage],
+) -> None:
+    """Find wiki pages with similar titles using word overlap."""
+    import re
+    title_words = {
+        w.lower() for w in re.findall(r'[a-zA-Z]{3,}', title)
+    } - _TITLE_STOP_WORDS
+
+    if not title_words:
+        return
+
+    rows = conn.execute(
+        "SELECT path, title FROM documents WHERE workspace = ? AND layer = 'wiki'",
+        (workspace,),
+    ).fetchall()
+
+    for row in rows:
+        page_title = row["title"] or ""
+        page_words = {
+            w.lower() for w in re.findall(r'[a-zA-Z]{3,}', page_title)
+        } - _TITLE_STOP_WORDS
+
+        if not page_words:
+            continue
+
+        overlap = len(title_words & page_words)
+        min_size = min(len(title_words), len(page_words))
+        if min_size == 0:
+            continue
+
+        # Overlap coefficient: intersection / min(|A|, |B|)
+        # Better than Jaccard for asymmetric title matching
+        coeff = overlap / min_size
+        if coeff >= 0.3 and overlap >= 1:
+            # Title matches are high-confidence — boost above FTS noise
+            score = 0.6 + (coeff * 0.4)  # range: [0.72, 1.0]
+            seen[row["path"]] = CandidatePage(
+                path=row["path"], title=page_title,
+                score=score, match_reason="title",
+            )
+
+
+_TITLE_STOP_WORDS = frozenset({
+    "the", "and", "for", "with", "from", "that", "this", "are", "was",
+    "has", "have", "its", "can", "how", "new", "via", "using", "based",
+    "learning", "test", "time", "model", "models",
+})
 
 
 def llm_classify_relation(

@@ -41,9 +41,13 @@ def plan_cascade(
     title: str,
     body: str,
     beliefs: list[dict[str, Any]],
+    *,
+    exclude_path: str = "",
 ) -> CascadePlan:
     """Decide how to integrate a new source into the wiki."""
-    candidates = find_candidate_pages(conn, workspace, title, beliefs)
+    candidates = find_candidate_pages(
+        conn, workspace, title, beliefs, exclude_path=exclude_path,
+    )
 
     if not candidates or candidates[0].score < CROSSREF_THRESHOLD:
         return CascadePlan(action="new_page", reasoning="no related pages found")
