@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from alexandria.core.cascade import stage_new_page
+from alexandria.core.cascade import stage_cross_ref, stage_hedge, stage_merge, stage_new_page
 from alexandria.core.citations import extract_footnotes
 from alexandria.core.runs import (
     RunStatus,
@@ -194,16 +194,14 @@ def ingest_file(
     raw_rel = raw_dest.relative_to(workspace_path)
     sources_line = f"{title}, {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
     raw_line = f"[{source_file.name}](../../{raw_rel})"
+    cite_path = str(raw_dest.relative_to(workspace_path))
 
-    staged_path = stage_new_page(
-        staged,
-        topic=resolved_topic,
-        slug=slug,
-        title=title,
-        body=body,
-        sources_line=sources_line,
-        raw_line=raw_line,
-        footnotes=footnote_lines,
+    staged_path = _execute_cascade(
+        home, workspace_slug, workspace_path, staged,
+        topic=resolved_topic, slug=slug, title=title, body=body,
+        sources_line=sources_line, raw_line=raw_line,
+        footnotes=footnote_lines, beliefs=llm_beliefs,
+        cite_path=cite_path,
     )
 
     # Run the verifier
@@ -320,6 +318,27 @@ def ingest_file(
                     conn.execute("ROLLBACK")
                     raise
 
+        # Post-commit: discover cross-references (best-effort)
+        if db_path(home).exists() and committed_paths:
+            try:
+                from alexandria.core.cascade.crossref import discover_cross_refs
+                with connect(db_path(home)) as conn:
+                    xrefs = discover_cross_refs(
+                        conn, workspace_slug, workspace_path, committed_paths,
+                    )
+                    for xref in xrefs:
+                        try:
+                            xref_staged = get_staged_dir(home, f"{run.run_id}-xref")
+                            stage_cross_ref(
+                                xref_staged, workspace_path,
+                                xref.from_page, xref.to_page, xref.label,
+                            )
+                            commit_run(home, f"{run.run_id}-xref", workspace_path)
+                        except Exception:
+                            continue
+            except Exception:
+                pass  # cross-refs are best-effort
+
         return IngestResult(
             run_id=run.run_id,
             committed=True,
@@ -354,6 +373,85 @@ def ingest_file(
         committed_paths=[],
         verdict_reasoning=verdict.reasoning,
         source_path=str(source_file),
+    )
+
+
+def _execute_cascade(
+    home: Path,
+    workspace_slug: str,
+    workspace_path: Path,
+    staged: Path,
+    *,
+    topic: str,
+    slug: str,
+    title: str,
+    body: str,
+    sources_line: str,
+    raw_line: str,
+    footnotes: str,
+    beliefs: list[dict],
+    cite_path: str,
+) -> Path:
+    """Decide merge/hedge/new_page and execute the cascade operation."""
+    from alexandria.core.cascade.decision import plan_cascade
+
+    # Try cascade planning if DB exists
+    if db_path(home).exists():
+        try:
+            with connect(db_path(home)) as conn:
+                plan = plan_cascade(
+                    conn, workspace_slug, workspace_path, title, body, beliefs,
+                )
+        except Exception:
+            plan = None
+    else:
+        plan = None
+
+    if plan and plan.action == "merge" and plan.target_page:
+        return stage_merge(
+            staged, workspace_path, plan.target_page,
+            plan.section_heading, body,
+            f'[^src]: {cite_path}' if cite_path else "",
+        )
+
+    if plan and plan.action == "hedge" and plan.target_page:
+        return _execute_hedge(staged, workspace_path, plan, body, cite_path)
+
+    # Default: new page (also handles cross_refs after commit in ingest_file)
+    path = stage_new_page(
+        staged, topic=topic, slug=slug, title=title, body=body,
+        sources_line=sources_line, raw_line=raw_line, footnotes=footnotes,
+    )
+
+    # Stage cross-refs if any
+    if plan and plan.cross_refs:
+        for ref_path in plan.cross_refs:
+            try:
+                stage_cross_ref(staged, workspace_path, f"{topic}/{slug}.md", ref_path)
+            except Exception:
+                continue
+    return path
+
+
+def _execute_hedge(
+    staged: Path, workspace_path: Path, plan: "CascadePlan",
+    body: str, cite_path: str,
+) -> Path:
+    """Execute a hedge (contradiction) cascade operation."""
+    target = workspace_path / plan.target_page
+    if not target.exists():
+        raise IngestError(f"hedge target not found: {plan.target_page}")
+    content = target.read_text(encoding="utf-8")
+    # Find first substantial paragraph as the existing claim
+    existing = ""
+    for line in content.split("\n"):
+        if line.strip() and not line.startswith(("#", ">", "[^", "---")):
+            existing = line.strip()
+            break
+    return stage_hedge(
+        staged, workspace_path, plan.target_page,
+        plan.section_heading, existing, body[:500],
+        cite_path, f'[^hedge]: {cite_path}',
     )
 
 

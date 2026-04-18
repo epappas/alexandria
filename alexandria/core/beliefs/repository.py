@@ -124,6 +124,52 @@ def list_beliefs(
     return [_row_to_belief(row) for row in cur.fetchall()]
 
 
+def find_beliefs_by_subject(
+    conn: sqlite3.Connection,
+    workspace: str,
+    subject: str,
+    *,
+    current_only: bool = True,
+    limit: int = 20,
+) -> list[Belief]:
+    """Find all beliefs about a given subject."""
+    sql = "SELECT * FROM wiki_beliefs WHERE workspace = ? AND subject = ?"
+    params: list = [workspace, subject]
+    if current_only:
+        sql += " AND superseded_at IS NULL"
+    sql += " ORDER BY asserted_at DESC LIMIT ?"
+    params.append(limit)
+    return [_row_to_belief(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def find_related_beliefs(
+    conn: sqlite3.Connection,
+    workspace: str,
+    subject: str | None = None,
+    object_val: str | None = None,
+    *,
+    current_only: bool = True,
+    limit: int = 20,
+) -> list[Belief]:
+    """Find beliefs where subject or object matches (one-hop graph traversal)."""
+    conditions = []
+    params: list = [workspace]
+    if subject:
+        conditions.append("subject = ?")
+        params.append(subject)
+    if object_val:
+        conditions.append("object = ?")
+        params.append(object_val)
+    if not conditions:
+        return []
+    sql = f"SELECT * FROM wiki_beliefs WHERE workspace = ? AND ({' OR '.join(conditions)})"
+    if current_only:
+        sql += " AND superseded_at IS NULL"
+    sql += " ORDER BY asserted_at DESC LIMIT ?"
+    params.append(limit)
+    return [_row_to_belief(r) for r in conn.execute(sql, params).fetchall()]
+
+
 def find_duplicate_belief(
     conn: sqlite3.Connection,
     workspace: str,
