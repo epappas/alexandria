@@ -32,6 +32,7 @@ dependencies = [
   "cryptography>=42.0.0",
   "feedparser>=6.0.0",
   "markdownify>=0.12.0",
+  "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -44,10 +45,14 @@ youtube = [
 claude = [
   "claude-code-sdk>=0.0.20",
 ]
+hcl = [
+  "python-hcl2>=4.0.0",
+]
 all = [
   "pymupdf>=1.24.0",
   "youtube-transcript-api>=0.6.0",
   "claude-code-sdk>=0.0.20",
+  "python-hcl2>=4.0.0",
 ]
 dev = [
   "pytest>=8.0.0",
