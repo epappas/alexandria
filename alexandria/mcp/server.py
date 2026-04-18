@@ -13,6 +13,7 @@ Two binding modes per ``08_mcp_integration.md``:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -96,6 +97,9 @@ def run_stdio(pinned_workspace: str | None = None) -> None:
 
     Logs to stderr only — stdout is the MCP protocol channel.
     """
+    # The MCP server is a separate process — clear CLAUDECODE so the
+    # LLM provider detection allows using the Claude Code SDK.
+    os.environ.pop("CLAUDECODE", None)
     server = create_server(pinned_workspace=pinned_workspace)
     server.run(transport="stdio")
 
@@ -106,5 +110,6 @@ def run_http(
     port: int = 7219,
 ) -> None:
     """Start the MCP server over HTTP+SSE. Phase 6b transport."""
+    os.environ.pop("CLAUDECODE", None)
     server = create_server(pinned_workspace=pinned_workspace)
     server.run(transport="sse", host=host, port=port)

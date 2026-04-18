@@ -8,11 +8,30 @@ Calls the configured LLM to:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import os
-from typing import Any
+from typing import Any, Coroutine, TypeVar
 
 from alexandria.llm.base import CompletionRequest, CompletionResult, Message
+
+T = TypeVar("T")
+
+
+def _run_async(coro: Coroutine[Any, Any, T]) -> T:
+    """Run an async coroutine, handling both sync and async caller contexts.
+
+    Uses asyncio.run() normally. When called from inside an existing event
+    loop (e.g. MCP server), offloads to a thread with its own loop.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Already inside an event loop — run in a separate thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 SYSTEM_PROMPT = """You are a knowledge engineer for a personal wiki. Given a source document, produce a structured wiki page with:
@@ -80,7 +99,10 @@ def llm_process_content(
         temperature=0.2,
     )
 
-    result = provider.complete(request)
+    try:
+        result = provider.complete(request)
+    except RuntimeError:
+        return None
     return _parse_llm_response(result, raw_path)
 
 
@@ -149,21 +171,19 @@ def _build_provider(provider: str, api_key: str, model: str, base_url: str) -> A
 
 
 def _has_claude_code_sdk() -> bool:
-    """Check if the Claude Code SDK is available and usable.
+    """Check if the claude CLI is available for subprocess calls.
 
     Returns False if we're inside an active Claude Code session (CLAUDECODE=1)
-    because the SDK would conflict with the running session's rate limits.
+    to avoid nested rate-limit conflicts.
     """
-    # Don't use SDK inside an active Claude Code session
     if os.environ.get("CLAUDECODE") == "1":
         return False
-    try:
-        import claude_code_sdk  # noqa: F401
-        from pathlib import Path
-        creds = Path.home() / ".claude" / ".credentials.json"
-        return creds.exists()
-    except ImportError:
+    import shutil
+    from pathlib import Path
+    if not shutil.which("claude"):
         return False
+    creds = Path.home() / ".claude" / ".credentials.json"
+    return creds.exists()
 
 
 class _ClaudeCodeSDKProvider:
@@ -176,8 +196,8 @@ class _ClaudeCodeSDKProvider:
     name = "claude-code-sdk"
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
-        import asyncio
-        from claude_code_sdk import query, ClaudeCodeOptions
+        import shutil
+        import subprocess
 
         # Build the prompt from the request
         system_text = "\n".join(
@@ -193,35 +213,33 @@ class _ClaudeCodeSDKProvider:
 
         full_prompt = f"{system_text}\n\n{user_text}" if system_text else user_text
 
-        # Call the SDK
-        async def _run() -> str:
-            response_text = ""
-            try:
-                async for msg in query(
-                    prompt=full_prompt,
-                    options=ClaudeCodeOptions(max_turns=1),
-                ):
-                    if hasattr(msg, "content"):
-                        for block in msg.content:
-                            if hasattr(block, "text"):
-                                response_text += block.text
-            except Exception as exc:
-                if "rate_limit" in str(exc).lower():
-                    raise RuntimeError(
-                        "Rate limited — this happens when Alexandria runs inside "
-                        "an active Claude Code session. Run alxia ingest from a "
-                        "regular terminal instead."
-                    ) from exc
-                raise
-            return response_text
+        claude_bin = shutil.which("claude")
+        if not claude_bin:
+            raise RuntimeError("claude CLI not found in PATH")
 
-        text = asyncio.run(_run())
+        result = subprocess.run(
+            [claude_bin, "-p", "--output-format", "text", full_prompt],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            if "rate" in stderr.lower() or "limit" in stderr.lower():
+                raise RuntimeError(
+                    "Rate limited by Claude Max subscription. "
+                    "Close any other Claude Code sessions and retry, "
+                    "or set ANTHROPIC_API_KEY for independent API access."
+                )
+            raise RuntimeError(f"claude -p failed: {stderr[:200]}")
+
+        text = result.stdout.strip()
 
         from alexandria.llm.base import Usage
         return CompletionResult(
             content=[{"type": "text", "text": text}],
             stop_reason="end_turn",
-            usage=Usage(),  # SDK doesn't expose token counts
+            usage=Usage(),
             model="claude-code-sdk",
         )
 

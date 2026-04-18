@@ -15,6 +15,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from alexandria.core.search import hybrid_search
+from alexandria.db.connection import sanitize_fts_query
 from alexandria.llm.base import CompletionRequest, CompletionResult, Message, ToolDefinition
 
 
@@ -108,16 +110,35 @@ def run_agent_query(
     """Run the agent loop to answer a question.
 
     Returns dict with: answer, sources, tool_calls. Returns None if no LLM.
+
+    Two strategies based on provider capabilities:
+    - Tool-use providers (Anthropic API, OpenAI): agentic loop that calls
+      search/grep/read/beliefs tools iteratively.
+    - Text-only providers (Claude Code SDK): pre-retrieves context from the
+      database, composes a rich prompt, and synthesizes in one call.
     """
     from alexandria.core.llm_ingest import _get_provider
     provider = _get_provider()
     if provider is None:
         return None
 
+    if getattr(provider, "name", "") == "claude-code-sdk":
+        return _rag_query(conn, workspace, workspace_path, question, provider)
+    return _agentic_query(conn, workspace, workspace_path, question, provider, max_turns)
+
+
+def _agentic_query(
+    conn: sqlite3.Connection,
+    workspace: str,
+    workspace_path: Path,
+    question: str,
+    provider: Any,
+    max_turns: int = 6,
+) -> dict[str, Any]:
+    """Tool-use agent loop for providers that support it."""
     messages: list[Message] = [
         Message(role="user", content=[{"type": "text", "text": question}]),
     ]
-
     tool_log: list[dict[str, Any]] = []
 
     for turn in range(max_turns):
@@ -129,54 +150,97 @@ def run_agent_query(
             max_output_tokens=4096,
             temperature=0.2,
         )
-
         result = provider.complete(request)
 
-        # Check if the agent wants to use tools
-        if result.stop_reason == "tool_use":
-            # Process each tool call
-            tool_results: list[dict[str, Any]] = []
-            for tc in result.tool_calls:
-                tool_name = tc.get("name", "")
-                tool_input = tc.get("input", {})
-                tool_id = tc.get("id", f"tool_{turn}")
+        if result.stop_reason != "tool_use":
+            return {"answer": result.text, "sources": [], "tool_calls": tool_log}
 
-                # Execute the tool
-                tool_output = _execute_tool(
-                    conn, workspace, workspace_path, tool_name, tool_input
-                )
-                tool_log.append({"tool": tool_name, "input": tool_input, "output_len": len(tool_output)})
+        tool_results: list[dict[str, Any]] = []
+        for tc in result.tool_calls:
+            tool_name = tc.get("name", "")
+            tool_input = tc.get("input", {})
+            tool_id = tc.get("id", f"tool_{turn}")
 
-                # Check if this is the 'answer' tool
-                if tool_name == "answer":
-                    return {
-                        "answer": tool_input.get("text", ""),
-                        "sources": tool_input.get("sources", []),
-                        "tool_calls": tool_log,
-                    }
+            tool_output = _execute_tool(
+                conn, workspace, workspace_path, tool_name, tool_input
+            )
+            tool_log.append({"tool": tool_name, "input": tool_input, "output_len": len(tool_output)})
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": tool_output[:10000],  # cap context size
-                })
+            if tool_name == "answer":
+                return {
+                    "answer": tool_input.get("text", ""),
+                    "sources": tool_input.get("sources", []),
+                    "tool_calls": tool_log,
+                }
 
-            # Add assistant message + tool results to conversation
-            messages.append(Message(role="assistant", content=result.content))
-            messages.append(Message(role="tool_result", content=tool_results))
-        else:
-            # Agent finished without calling 'answer' tool — use the text response
-            return {
-                "answer": result.text,
-                "sources": [],
-                "tool_calls": tool_log,
-            }
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tool_id,
+                "content": tool_output[:10000],
+            })
 
-    # Ran out of turns
+        messages.append(Message(role="assistant", content=result.content))
+        messages.append(Message(role="tool_result", content=tool_results))
+
     return {
-        "answer": "I explored the knowledge base but couldn't find a complete answer within the search budget.",
+        "answer": "Could not find a complete answer within the search budget.",
         "sources": [],
         "tool_calls": tool_log,
+    }
+
+
+def _rag_query(
+    conn: sqlite3.Connection,
+    workspace: str,
+    workspace_path: Path,
+    question: str,
+    provider: Any,
+) -> dict[str, Any]:
+    """Pre-retrieve context and synthesize for text-only providers (SDK)."""
+    # Gather context: FTS search + beliefs
+    search_results = _tool_search(conn, workspace, question)
+    belief_results = _tool_beliefs(conn, workspace)
+    grep_results = _tool_grep(workspace_path, question.split()[0] if question.split() else "")
+
+    # Hybrid search — BM25 + recency + belief support
+    hits = hybrid_search(conn, workspace, question, limit=5)
+    doc_contents: list[str] = []
+    sources: list[dict[str, str]] = []
+    for hit in hits:
+        belief_note = f" ({hit.belief_count} beliefs)" if hit.belief_count else ""
+        doc_contents.append(
+            f"### {hit.title} ({hit.path}){belief_note}\n{hit.content[:4000]}"
+        )
+        sources.append({"title": hit.title, "path": hit.path})
+
+    context = "\n\n---\n\n".join(doc_contents) if doc_contents else search_results
+
+    prompt = f"""Based ONLY on the following knowledge base content, answer this question: {question}
+
+## Retrieved Documents
+{context}
+
+## Current Beliefs
+{belief_results}
+
+Rules:
+- Answer ONLY from the provided content — do not use your training knowledge
+- Cite sources as [Source: path] for every claim
+- If the content does not contain enough information, say so honestly"""
+
+    request = CompletionRequest(
+        model="",
+        system=[{"type": "text", "text": "You are a research assistant. Answer questions using only the provided context."}],
+        tools=[],
+        messages=[Message(role="user", content=[{"type": "text", "text": prompt}])],
+        max_output_tokens=4096,
+        temperature=0.2,
+    )
+    result = provider.complete(request)
+    return {
+        "answer": result.text,
+        "sources": sources,
+        "tool_calls": [{"tool": "rag_retrieval", "input": {"question": question}, "output_len": len(context)}],
     }
 
 
@@ -204,23 +268,18 @@ def _execute_tool(
 
 
 def _tool_search(conn: sqlite3.Connection, workspace: str, query: str) -> str:
-    """FTS5 search across documents."""
+    """Hybrid search across documents (BM25 + recency + beliefs)."""
     try:
-        rows = conn.execute(
-            """SELECT documents.title, documents.path,
-                      substr(documents.content, 1, 300) as snippet
-            FROM documents_fts
-            JOIN documents ON documents.rowid = documents_fts.rowid
-            WHERE documents_fts MATCH ? AND documents.workspace = ?
-            ORDER BY rank LIMIT 10""",
-            (query, workspace),
-        ).fetchall()
-        if not rows:
+        hits = hybrid_search(conn, workspace, query, limit=10)
+        if not hits:
             return f"No documents found for: {query}"
-        lines = [f"Found {len(rows)} document(s):"]
-        for r in rows:
-            lines.append(f"\n- {r['title']} ({r['path']})")
-            lines.append(f"  {r['snippet'][:200]}")
+        lines = [f"Found {len(hits)} document(s):"]
+        for hit in hits:
+            score_info = f"score={hit.score:.2f}"
+            if hit.belief_count:
+                score_info += f", {hit.belief_count} belief(s)"
+            lines.append(f"\n- {hit.title} ({hit.path}) [{score_info}]")
+            lines.append(f"  {hit.content[:200]}")
         return "\n".join(lines)
     except Exception as exc:
         return f"Search error: {exc}"

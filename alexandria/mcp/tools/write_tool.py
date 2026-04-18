@@ -73,7 +73,10 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         """
         from alexandria.config import resolve_home
         from alexandria.db.connection import connect, db_path
-        from alexandria.core.beliefs.repository import get_belief, supersede_belief
+        from alexandria.core.beliefs.model import Belief
+        from alexandria.core.beliefs.repository import (
+            get_belief, insert_belief, supersede_belief,
+        )
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -83,11 +86,22 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
             if not old:
                 return f"Belief not found: {belief_id}"
 
+            # Create the replacement belief from the old one
+            new_belief = Belief(
+                workspace=old.workspace,
+                statement=new_statement[:500],
+                topic=old.topic,
+                subject=old.subject,
+                predicate=old.predicate,
+                object=old.object,
+                wiki_document_path=old.wiki_document_path,
+                footnote_ids=old.footnote_ids,
+            )
+
             conn.execute("BEGIN IMMEDIATE")
             try:
-                new_belief = supersede_belief(
-                    conn, belief_id, new_statement, reason,
-                )
+                insert_belief(conn, new_belief)
+                supersede_belief(conn, belief_id, new_belief.belief_id, reason=reason)
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")

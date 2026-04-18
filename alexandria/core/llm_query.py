@@ -14,6 +14,8 @@ import json
 import sqlite3
 from typing import Any
 
+from alexandria.db.connection import sanitize_fts_query
+
 from alexandria.llm.base import CompletionRequest, CompletionResult, Message
 
 
@@ -179,7 +181,7 @@ def _fts_search_documents(conn: sqlite3.Connection, workspace: str, keyword: str
             JOIN documents ON documents.rowid = documents_fts.rowid
             WHERE documents_fts MATCH ? AND documents.workspace = ?
             ORDER BY rank LIMIT ?""",
-            (keyword, workspace, limit),
+            (sanitize_fts_query(keyword), workspace, limit),
         ).fetchall()
         return [{"title": r["title"], "path": r["path"], "content": r["content"] or ""} for r in rows]
     except Exception:
@@ -195,7 +197,7 @@ def _fts_search_beliefs(conn: sqlite3.Connection, workspace: str, keyword: str, 
             WHERE wiki_beliefs_fts MATCH ? AND wiki_beliefs.workspace = ?
             AND wiki_beliefs.superseded_at IS NULL
             ORDER BY rank LIMIT ?""",
-            (keyword, workspace, limit),
+            (sanitize_fts_query(keyword), workspace, limit),
         ).fetchall()
         return [{"statement": r["statement"], "topic": r["topic"], "page": r["wiki_document_path"]} for r in rows]
     except Exception:

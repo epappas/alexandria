@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from alexandria.db.connection import sanitize_fts_query
+
 from alexandria.core.adapters.base import FetchedItem
 
 
@@ -130,7 +132,7 @@ def _fts_query(conn: sqlite3.Connection, q: EventQuery) -> list[Event]:
         params.append(until_val)
 
     where = " AND ".join(clauses)
-    params.insert(0, q.query)  # MATCH param comes first
+    params.insert(0, sanitize_fts_query(q.query))  # MATCH param comes first
     params.append(q.limit)
 
     sql = f"""SELECT e.event_id, e.workspace, e.source_id, e.source_type, e.event_type,

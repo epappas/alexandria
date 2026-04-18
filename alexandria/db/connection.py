@@ -7,6 +7,7 @@ not leak file handles.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import contextmanager
 from collections.abc import Iterator
@@ -55,3 +56,27 @@ def set_user_version(conn: sqlite3.Connection, version: int) -> None:
     if not isinstance(version, int) or version < 0:
         raise ValueError(f"version must be a non-negative int, got {version!r}")
     conn.execute(f"PRAGMA user_version = {version}")
+
+
+_STOP_WORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "do", "does",
+    "for", "from", "has", "have", "how", "if", "in", "is", "it", "its",
+    "of", "on", "or", "so", "that", "the", "this", "to", "was", "what",
+    "when", "where", "which", "who", "why", "will", "with",
+})
+
+
+def sanitize_fts_query(query: str) -> str:
+    """Sanitize a query string for FTS5 MATCH.
+
+    Strips punctuation, drops stop words, and joins with OR so documents
+    matching *any* keyword are returned (BM25 ranks multi-match higher).
+    """
+    cleaned = re.sub(r'[^a-zA-Z0-9\s-]', " ", query)
+    tokens = [
+        t for t in cleaned.split()
+        if len(t) > 1 and t.lower() not in _STOP_WORDS
+    ]
+    if not tokens:
+        return '""'
+    return " OR ".join(f'"{t}"' for t in tokens)

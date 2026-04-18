@@ -238,8 +238,11 @@ def ingest_file(
                                 asserted_in_run=run.run_id,
                             )
 
+                            # Insert the new belief first (FK target must exist)
+                            insert_belief(conn, belief)
+
                             # Check for existing beliefs with same subject
-                            # that this new belief may supersede
+                            # that this new belief supersedes
                             if belief.subject:
                                 existing = list_beliefs(
                                     conn, workspace_slug,
@@ -247,15 +250,14 @@ def ingest_file(
                                     current_only=True,
                                 )
                                 for old in existing:
-                                    if (old.predicate == belief.predicate
+                                    if (old.belief_id != belief.belief_id
+                                            and old.predicate == belief.predicate
                                             and old.object != belief.object):
                                         supersede_belief(
                                             conn, old.belief_id,
-                                            belief.statement,
-                                            f"Updated by new source: {source_file.name}",
+                                            belief.belief_id,
+                                            run_id=run.run_id,
                                         )
-
-                            insert_belief(conn, belief)
 
                     conn.execute("COMMIT")
                 except Exception:

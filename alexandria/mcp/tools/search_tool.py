@@ -1,4 +1,4 @@
-"""``search`` — FTS5 keyword search with ranking + path/tag scoping.
+"""``search`` — hybrid search with BM25 + recency + belief support.
 
 The broad tool for "pages about concept X". Not the retriever — one
 primitive among several that the agent composes.
@@ -6,10 +6,10 @@ primitive among several that the agent composes.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from alexandria.config import resolve_home
+from alexandria.core.search import hybrid_search
 from alexandria.db.connection import connect, db_path
 
 if TYPE_CHECKING:
@@ -26,10 +26,11 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
     @mcp.tool(
         name="search",
         description=(
-            "FTS5 keyword search with ranking. The broad tool for 'pages about X'. "
+            "Hybrid search (BM25 + recency + belief support). "
+            "The broad tool for 'pages about X'. "
             "Searches both raw/ and wiki/ layers by default. "
             "Use `path_prefix` to scope: '/wiki/' for wiki only, '/raw/' for raw. "
-            "Returns matching documents ranked by relevance."
+            "Returns matching documents ranked by composite score."
         ),
     )
     def search(
@@ -47,49 +48,22 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
             return f"No database found at {home}. Run `alexandria init` first."
 
         with connect(db_path(home)) as conn:
-            # Build query — FTS5 MATCH with optional path filter
-            if path_prefix:
-                sql = (
-                    "SELECT d.id, d.path, d.filename, d.title, d.layer, d.content, "
-                    "  rank "
-                    "FROM documents_fts f "
-                    "JOIN documents d ON d.rowid = f.rowid "
-                    "WHERE f.documents_fts MATCH ? "
-                    "  AND d.workspace = ? "
-                    "  AND d.path LIKE ? "
-                    "ORDER BY rank "
-                    "LIMIT ?"
-                )
-                params = (query, slug, path_prefix + "%", limit)
-            else:
-                sql = (
-                    "SELECT d.id, d.path, d.filename, d.title, d.layer, d.content, "
-                    "  rank "
-                    "FROM documents_fts f "
-                    "JOIN documents d ON d.rowid = f.rowid "
-                    "WHERE f.documents_fts MATCH ? "
-                    "  AND d.workspace = ? "
-                    "ORDER BY rank "
-                    "LIMIT ?"
-                )
-                params = (query, slug, limit)
+            hits = hybrid_search(conn, slug, query, limit=limit)
 
-            try:
-                cur = conn.execute(sql, params)
-                rows = cur.fetchall()
-            except Exception as exc:
-                return f"Search error: {exc}"
-
-        if not rows:
+        if not hits:
             return f"No results for `{query}` in workspace `{slug}`."
 
-        lines = [f"**{len(rows)} result(s)** for `{query}` in `{slug}`:\n"]
-        for row in rows:
-            filepath = f"{row['path']}{row['filename']}"
-            title = row["title"] or row["filename"]
-            content = row["content"] or ""
-            snippet = _extract_snippet(content, query)
-            lines.append(f"**{filepath}** — {title}")
+        # Filter by path_prefix if given
+        if path_prefix:
+            hits = [h for h in hits if h.path.startswith(path_prefix.lstrip("/"))]
+
+        lines = [f"**{len(hits)} result(s)** for `{query}` in `{slug}`:\n"]
+        for hit in hits:
+            snippet = _extract_snippet(hit.content, query)
+            score_detail = f"score={hit.score:.2f}"
+            if hit.belief_count > 0:
+                score_detail += f", {hit.belief_count} belief(s)"
+            lines.append(f"**{hit.path}** — {hit.title} ({score_detail})")
             if snippet:
                 lines.append(f"```\n{snippet}\n```")
             lines.append("")

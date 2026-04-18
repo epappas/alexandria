@@ -16,6 +16,7 @@ from pathlib import Path
 from alexandria.core.beliefs.model import Belief
 from alexandria.core.citations import verify_quote_anchor
 from alexandria.core.citations.anchors import create_anchor
+from alexandria.db.connection import sanitize_fts_query
 
 
 @dataclass
@@ -192,7 +193,7 @@ def _fts_query(conn: sqlite3.Connection, q: BeliefQuery) -> list[Belief]:
         "JOIN wiki_beliefs b ON b.rowid = f.rowid "
         "WHERE wiki_beliefs_fts MATCH ? AND b.workspace = ?"
     )
-    params: list = [q.query, q.workspace]
+    params: list = [sanitize_fts_query(q.query or ""), q.workspace]
 
     if q.current_only:
         sql += " AND b.superseded_at IS NULL"

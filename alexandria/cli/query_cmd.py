@@ -41,7 +41,11 @@ def query_command(
 
     with connect(db_path(home)) as conn:
         from alexandria.core.agent_loop import run_agent_query
-        result = run_agent_query(conn, slug, ws.path, question)
+        try:
+            result = run_agent_query(conn, slug, ws.path, question)
+        except RuntimeError as exc:
+            console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
 
     if result is None:
         console.print("[red]No LLM provider configured.[/red]")
