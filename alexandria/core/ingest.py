@@ -55,13 +55,22 @@ def document_unchanged(
     conn: sqlite3.Connection,
     workspace: str,
     content_hash: str,
+    source_path: str = "",
 ) -> bool:
-    """Check if a document with this content hash already exists."""
-    row = conn.execute(
+    """Check if a document was already ingested (by hash or source path)."""
+    if conn.execute(
         "SELECT 1 FROM documents WHERE workspace = ? AND content_hash = ? LIMIT 1",
         (workspace, content_hash),
-    ).fetchone()
-    return row is not None
+    ).fetchone():
+        return True
+    # Also check by raw source path (URLs produce different hashes on re-fetch)
+    if source_path:
+        row = conn.execute(
+            "SELECT 1 FROM documents WHERE workspace = ? AND path = ? LIMIT 1",
+            (workspace, source_path),
+        ).fetchone()
+        return row is not None
+    return False
 
 
 def ingest_file(
@@ -99,11 +108,14 @@ def ingest_file(
     if not source_content.strip():
         raise IngestError(f"Source file is empty: {source_file}")
 
-    # Dedup: skip if identical content already ingested
+    # Dedup: skip if identical content already ingested (or same source path)
     content_hash = hashlib.sha256(source_content.encode()).hexdigest()
+    raw_rel = ""
+    if source_file.resolve().is_relative_to((workspace_path / "raw").resolve()):
+        raw_rel = str(source_file.relative_to(workspace_path))
     if db_path(home).exists():
         with connect(db_path(home)) as conn:
-            if document_unchanged(conn, workspace_slug, content_hash):
+            if document_unchanged(conn, workspace_slug, content_hash, raw_rel):
                 return IngestResult(
                     run_id="",
                     committed=False,
