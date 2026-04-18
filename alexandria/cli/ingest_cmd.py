@@ -164,6 +164,34 @@ def _ingest_conversation(
     else:
         console.print(f"[yellow]Rejected:[/yellow] {ir.verdict_reasoning}")
 
+    # Extract and ingest referenced artifacts (papers, repos, etc.)
+    from alexandria.core.capture.artifacts import extract_artifacts
+    from alexandria.core.capture.conversation import _parse_claude_code_jsonl
+
+    raw_messages = _parse_claude_code_jsonl(jsonl_path) if fmt == "claude-code" else []
+    artifacts = extract_artifacts(raw_messages)
+    if not artifacts:
+        return
+
+    console.print(f"\n[bold]{len(artifacts)}[/bold] referenced artifacts found")
+    committed = 0
+    for art in artifacts:
+        try:
+            art_result = ingest_file(
+                home=home, workspace_slug=slug, workspace_path=ws_path,
+                source_file=_fetch_artifact(art.url, ws_path),
+                topic=topic or "research",
+            )
+            if art_result.committed:
+                committed += 1
+                console.print(f"  [green]+[/green] [{art.kind}] {art.url[:70]}")
+            else:
+                console.print(f"  [yellow]-[/yellow] [{art.kind}] {art.url[:70]}")
+        except Exception:
+            console.print(f"  [red]![/red] [{art.kind}] {art.url[:70]}")
+
+    console.print(f"[dim]Artifacts: {committed}/{len(artifacts)} committed[/dim]")
+
 
 def _ingest_url(
     home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
@@ -270,3 +298,9 @@ def _is_github_shorthand(source: str) -> bool:
     if source.startswith(("http", "git@", "ssh://", "/", ".", "~")):
         return False
     return not Path(source).exists()
+
+
+def _fetch_artifact(url: str, ws_path: Path) -> Path:
+    """Fetch an artifact URL and return the local path."""
+    from alexandria.core.web import fetch_and_save
+    return fetch_and_save(url, ws_path)

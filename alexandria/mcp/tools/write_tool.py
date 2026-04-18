@@ -198,12 +198,32 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
                     r = ingest_file(home, slug, ws_path, md_path, topic=topic or "conversations")
                 except IngestError as exc:
                     return f"Ingest failed: {exc}"
+                lines = []
                 if r.committed:
-                    return (
-                        f"Conversation captured: {cap['message_count']} messages\n"
-                        f"Wiki: {', '.join(r.committed_paths)}"
-                    )
-                return f"Rejected: {r.verdict_reasoning}"
+                    lines.append(f"Conversation captured: {cap['message_count']} messages")
+                    lines.append(f"Wiki: {', '.join(r.committed_paths)}")
+                else:
+                    lines.append(f"Conversation rejected: {r.verdict_reasoning}")
+
+                # Ingest referenced artifacts
+                from alexandria.core.capture.artifacts import extract_artifacts
+                from alexandria.core.capture.conversation import _parse_claude_code_jsonl
+                from alexandria.core.web import fetch_and_save, WebFetchError
+
+                raw_msgs = _parse_claude_code_jsonl(local) if fmt == "claude-code" else []
+                artifacts = extract_artifacts(raw_msgs)
+                art_ok = 0
+                for art in artifacts:
+                    try:
+                        art_path = fetch_and_save(art.url, ws_path)
+                        ar = ingest_file(home, slug, ws_path, art_path, topic=topic or "research")
+                        if ar.committed:
+                            art_ok += 1
+                    except Exception:
+                        continue
+                if artifacts:
+                    lines.append(f"Artifacts: {art_ok}/{len(artifacts)} ingested")
+                return "\n".join(lines)
 
         # Single file
         try:
