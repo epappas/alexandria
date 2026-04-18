@@ -140,6 +140,10 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         if _is_github_shorthand(source):
             source = f"https://github.com/{source}.git"
 
+        # Bare domain URL (e.g. arxiv.org/abs/...) -> prepend https://
+        if _is_bare_url(source):
+            source = f"https://{source}"
+
         # Git repo
         if _is_git_url(source):
             from alexandria.core.repo_ingest import clone_repo, ingest_repo

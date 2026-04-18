@@ -64,6 +64,10 @@ def ingest_command(
     if _is_github_shorthand(source):
         source = f"https://github.com/{source}.git"
 
+    # Bare domain URL (e.g. arxiv.org/abs/...) -> prepend https://
+    if _is_bare_url(source):
+        source = f"https://{source}"
+
     # Git repo URL
     if _is_git_url(source):
         _ingest_git_repo(home, target_slug, ws.path, source, topic)
@@ -289,6 +293,20 @@ def _is_git_url(source: str) -> bool:
         if host in ("github.com", "gitlab.com", "bitbucket.org") and len(path_parts) >= 2:
             return True
     return False
+
+
+def _is_bare_url(source: str) -> bool:
+    """Detect bare domain URLs like arxiv.org/abs/123."""
+    if source.startswith(("http://", "https://", "/", ".", "~")):
+        return False
+    first_segment = source.split("/")[0]
+    # Must have a TLD-like dot and at least 2 parts (domain.tld)
+    parts = first_segment.split(".")
+    if len(parts) < 2:
+        return False
+    # Last part must look like a TLD, not a file extension
+    tld = parts[-1]
+    return len(tld) >= 2 and tld.isalpha() and "/" in source
 
 
 def _is_github_shorthand(source: str) -> bool:
