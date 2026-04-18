@@ -21,6 +21,7 @@ from alexandria.cli import (
     eval_cmd,
     hooks_cmd,
     ingest_cmd,
+    ingest_repo_cmd,
     init_cmd,
     lint_cmd,
     logs_cmd,
@@ -146,6 +147,10 @@ app.add_typer(reindex_app, name="reindex")
 
 app.command("ingest", help="Compile a source into the wiki (staged + verified).")(
     ingest_cmd.ingest_command
+)
+
+app.command("ingest-repo", help="Ingest all files from a local dir or git repo.")(
+    ingest_repo_cmd.ingest_repo_command
 )
 
 

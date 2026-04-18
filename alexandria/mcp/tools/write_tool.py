@@ -154,6 +154,60 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         return f"Rejected: {result.verdict_reasoning}"
 
     @mcp.tool()
+    def ingest_repo(
+        source: str,
+        workspace: str | None = None,
+        topic: str | None = None,
+    ) -> str:
+        """Ingest all supported files from a git repo or local directory.
+
+        Accepts a git URL (GitHub, GitLab) or local path. Git URLs are
+        shallow-cloned automatically. Walks the tree and ingests code
+        files (.py, .ts, .rs, .go, .tf, .yml), docs (.md), and configs.
+        """
+        from alexandria.config import resolve_home
+        from alexandria.core.workspace import get_workspace
+        from alexandria.core.repo_ingest import (
+            clone_repo, ingest_repo as _ingest_repo, IngestError,
+        )
+        from alexandria.cli.ingest_repo_cmd import _is_git_url
+
+        ws_path, slug = resolve(workspace)
+        home = resolve_home()
+
+        if _is_git_url(source):
+            try:
+                git_dir = ws_path / "raw" / "git"
+                repo_path = clone_repo(source, git_dir)
+            except IngestError as exc:
+                return f"Clone failed: {exc}"
+        else:
+            from pathlib import Path
+            repo_path = Path(source).expanduser().resolve()
+            if not repo_path.is_dir():
+                return f"Not a directory: {source}"
+
+        result = _ingest_repo(
+            home=home,
+            workspace_slug=slug,
+            workspace_path=ws_path,
+            repo_path=repo_path,
+            topic=topic,
+        )
+
+        lines = [f"Ingested repo: {source}"]
+        lines.append(f"Committed: {len(result.committed)} files")
+        if result.rejected:
+            lines.append(f"Rejected: {len(result.rejected)}")
+        if result.errors:
+            lines.append(f"Errors: {len(result.errors)}")
+            for err in result.errors[:3]:
+                lines.append(f"  {err}")
+        if result.committed:
+            lines.append(f"\nPages: {', '.join(result.committed[:10])}")
+        return "\n".join(lines)
+
+    @mcp.tool()
     def query(
         question: str,
         workspace: str | None = None,
