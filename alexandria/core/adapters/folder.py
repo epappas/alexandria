@@ -125,12 +125,13 @@ class FolderAdapter:
 
 def _walk_files(root: Path) -> list[Path]:
     """Walk directory tree, skipping common non-content directories."""
+    import os
     files: list[Path] = []
-    for dirpath, dirnames, filenames in root.walk():
+    for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for f in sorted(filenames):
             if not f.startswith("."):
-                files.append(dirpath / f)
+                files.append(Path(dirpath) / f)
     return files
 
 
