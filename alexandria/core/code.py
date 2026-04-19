@@ -119,6 +119,7 @@ class CodeStructure:
     def to_beliefs(self, topic: str, wiki_path: str) -> list[dict[str, str]]:
         """Generate belief dicts from the extracted structure."""
         beliefs: list[dict[str, str]] = []
+        fn_ids = ["1"]  # reference the source file footnote
 
         for cls in self.classes:
             stmt = f"Module defines {cls.name}"
@@ -130,6 +131,7 @@ class CodeStructure:
                 "subject": cls.name,
                 "predicate": "is_a",
                 "object": "type",
+                "footnote_ids": fn_ids,
             })
 
         for fn in self.functions:
@@ -139,6 +141,7 @@ class CodeStructure:
                 "subject": fn.name,
                 "predicate": "is_a",
                 "object": "function",
+                "footnote_ids": fn_ids,
             })
 
         for res in self.resources:
@@ -148,6 +151,7 @@ class CodeStructure:
                 "subject": res.name,
                 "predicate": "is_a",
                 "object": res.kind,
+                "footnote_ids": fn_ids,
             })
 
         for imp in self.imports[:20]:
@@ -157,6 +161,7 @@ class CodeStructure:
                 "subject": topic,
                 "predicate": "depends_on",
                 "object": imp,
+                "footnote_ids": fn_ids,
             })
 
         return beliefs
