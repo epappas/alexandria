@@ -82,7 +82,7 @@ def test_guide_returns_l0_and_l1(workspace_with_content: tuple[Path, str]) -> No
     assert "## L0 — Identity" in result
     assert "## L1 — Essential State" in result
     assert "research" in result.lower()
-    assert "not_yet_populated" in result  # Phase 1 markers
+    assert "Runs and verifier" in result  # Live state section
 
 
 def test_overview_returns_tree_and_counts(workspace_with_content: tuple[Path, str]) -> None:

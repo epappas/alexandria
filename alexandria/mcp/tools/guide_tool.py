@@ -83,24 +83,37 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         else:
             parts.append("\n### Recent log\nNo log entries yet.")
 
-        # Phase markers for not-yet-populated fields (per llm-architect I7)
-        parts.append("\n### Runs and verifier")
-        parts.append(
-            '{"status": "not_yet_populated", "available_in_phase": 2, '
-            '"note": "Staged writes and hostile verification arrive in Phase 2."}'
-        )
-        parts.append("\n### Eval health")
-        parts.append(
-            '{"status": "not_yet_populated", "available_in_phase": 9, '
-            '"note": "M1-M5 metrics arrive in Phase 9."}'
-        )
-        parts.append("\n### Events and subscriptions")
-        parts.append(
-            '{"status": "not_yet_populated", "available_in_phase": 4, '
-            '"note": "Source adapters arrive in Phase 4; subscriptions in Phase 5."}'
-        )
+        # Live state from database
+        from alexandria.config import resolve_home
+        from alexandria.db.connection import connect, db_path
 
-        parts.append(f"\n---\nphase: 1\nworkspace: {slug}")
+        home = resolve_home()
+        if db_path(home).exists():
+            with connect(db_path(home)) as conn:
+                runs = conn.execute("SELECT COUNT(*) as c FROM runs").fetchone()
+                committed = conn.execute("SELECT COUNT(*) as c FROM runs WHERE status='committed'").fetchone()
+                beliefs = conn.execute("SELECT COUNT(*) as c FROM wiki_beliefs WHERE workspace=? AND superseded_at IS NULL", (slug,)).fetchone()
+                events = conn.execute("SELECT COUNT(*) as c FROM events WHERE workspace=?", (slug,)).fetchone()
+                sources = conn.execute("SELECT COUNT(*) as c FROM source_adapters WHERE workspace=?", (slug,)).fetchone()
+
+                parts.append(f"\n### Runs and verifier\n{runs['c']} runs ({committed['c']} committed)")
+                parts.append(f"\n### Beliefs\n{beliefs['c']} current beliefs")
+                parts.append(f"\n### Events and sources\n{events['c']} events, {sources['c']} source adapters")
+
+                # Eval health
+                try:
+                    evals = conn.execute("SELECT metric, score, passed FROM eval_runs WHERE workspace=? ORDER BY started_at DESC LIMIT 5", (slug,)).fetchall()
+                    if evals:
+                        parts.append("\n### Eval health")
+                        for ev in evals:
+                            status = "PASS" if ev["passed"] else "FAIL"
+                            parts.append(f"- {ev['metric']}: {ev['score']:.2f} ({status})")
+                    else:
+                        parts.append("\n### Eval health\nNo eval runs yet. Run `alxia eval run`.")
+                except Exception:
+                    parts.append("\n### Eval health\nRun `alxia eval run` to check quality.")
+
+        parts.append(f"\n---\nworkspace: {slug}")
 
         return "\n".join(parts)
 

@@ -107,6 +107,15 @@ def _install_claude_code(workspace: str | None) -> None:
     """Write an MCP server entry to Claude Code's config."""
     alexandria_bin = _find_alexandria_bin()
     args = ["mcp", "serve"]
+
+    # Auto-pin when only one workspace exists
+    if not workspace:
+        from alexandria.core.workspace import list_workspaces
+        workspaces = list_workspaces(resolve_home())
+        if len(workspaces) == 1:
+            workspace = workspaces[0].slug
+            console.print(f"[dim]Auto-pinning to workspace: {workspace}[/dim]")
+
     if workspace:
         args.extend(["--workspace", workspace])
 

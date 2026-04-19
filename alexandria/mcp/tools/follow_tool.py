@@ -16,7 +16,15 @@ if TYPE_CHECKING:
 
     from alexandria.mcp.tools import WorkspaceResolver
 
-FOOTNOTE_RE = re.compile(r"\[\^(\d+)\]:\s*(.+?)(?:,\s*p\.?\s*(\d+))?$", re.MULTILINE)
+# Matches: [^1]: source_path, p.3 — "quote"  or  [^1]: source_path
+FOOTNOTE_RE = re.compile(
+    r"\[\^(\d+)\]:\s*"           # [^1]:
+    r"(\S+)"                     # source path (no spaces)
+    r"(?:,\s*p\.?\s*(\d+))?"     # optional , p.3
+    r"(?:\s*(?:—|--)\s*.*)?"     # optional — "quote"
+    r"$",
+    re.MULTILINE,
+)
 MAX_CONTENT = 8_000
 
 
@@ -59,7 +67,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             footnotes[fn_id] = (fn_source, fn_page)
 
         if footnote_id not in footnotes:
-            available = ", ".join(sorted(footnotes.keys())) or "(none)"
+            available = ", ".join(sorted(footnotes)) or "(none)"
             return (
                 f"Footnote [^{footnote_id}] not found in `{wiki_page}`. "
                 f"Available footnotes: {available}"
