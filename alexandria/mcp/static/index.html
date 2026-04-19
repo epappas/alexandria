@@ -34,6 +34,8 @@ td { font-size: 0.9rem; }
 #doc-viewer { display: none; }
 #doc-viewer.active { display: block; }
 #doc-title { margin-bottom: 0.5rem; font-size: 1.1rem; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: rgba(88, 166, 255, 0.1); }
 </style>
 </head>
 <body>
@@ -68,48 +70,80 @@ td { font-size: 0.9rem; }
 </main>
 
 <script>
+"use strict";
 const API = '';
 const WS = new URLSearchParams(location.search).get('workspace') || 'global';
 
-async function loadStats() {
-  const r = await fetch(`${API}/api/stats?workspace=${WS}`);
-  const d = await r.json();
-  document.getElementById('workspace-info').textContent = `workspace: ${d.workspace}`;
-  document.getElementById('stats').innerHTML = [
-    card(d.documents, 'Documents'),
-    card(d.wiki_pages, 'Wiki Pages'),
-    card(d.beliefs, 'Beliefs'),
-    card(d.topics.length, 'Topics'),
-    card(d.runs, 'Runs'),
-  ].join('');
+// Safe text escaping — prevents XSS
+// Safe element creation helpers
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  if (attrs) Object.entries(attrs).forEach(([k, v]) => {
+    if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  });
+  children.forEach(c => {
+    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+    else if (c) e.appendChild(c);
+  });
+  return e;
 }
 
-function card(value, label) {
-  return `<div class="stat-card"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+async function loadStats() {
+  const r = await fetch(`${API}/api/stats?workspace=${encodeURIComponent(WS)}`);
+  const d = await r.json();
+  document.getElementById('workspace-info').textContent = `workspace: ${d.workspace}`;
+  const container = document.getElementById('stats');
+  container.textContent = '';
+  [
+    [d.documents, 'Documents'], [d.wiki_pages, 'Wiki Pages'],
+    [d.beliefs, 'Beliefs'], [d.topics.length, 'Topics'], [d.runs, 'Runs'],
+  ].forEach(([value, label]) => {
+    const card = el('div', {class: 'stat-card'},
+      el('div', {class: 'value'}, String(value)),
+      el('div', {class: 'label'}, label),
+    );
+    container.appendChild(card);
+  });
 }
 
 async function doSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
-  const r = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&workspace=${WS}`);
+  const r = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&workspace=${encodeURIComponent(WS)}`);
   const d = await r.json();
   const panel = document.getElementById('search-results');
   const body = document.getElementById('results-body');
   panel.style.display = 'block';
+  body.textContent = '';
 
   if (!d.results.length) {
-    body.innerHTML = '<div class="empty">No results</div>';
+    body.appendChild(el('div', {class: 'empty'}, 'No results'));
     return;
   }
-  body.innerHTML = `<table><thead><tr><th>Title</th><th>Score</th><th>Beliefs</th><th>Layer</th></tr></thead><tbody>
-    ${d.results.map(r => `<tr style="cursor:pointer" onclick="readDoc('${r.path}')">
-      <td>${esc(r.title)}</td><td class="score">${r.score}</td>
-      <td>${r.belief_count || '-'}</td><td>${r.layer}</td></tr>`).join('')}
-  </tbody></table>`;
+
+  const table = el('table');
+  const thead = el('thead', null, el('tr', null,
+    el('th', null, 'Title'), el('th', null, 'Score'),
+    el('th', null, 'Beliefs'), el('th', null, 'Layer'),
+  ));
+  table.appendChild(thead);
+  const tbody = el('tbody');
+  d.results.forEach(result => {
+    const row = el('tr', {class: 'clickable', onclick: () => readDoc(result.path)},
+      el('td', null, result.title),
+      el('td', {class: 'score'}, String(result.score)),
+      el('td', null, String(result.belief_count || '-')),
+      el('td', null, result.layer),
+    );
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
 }
 
 async function readDoc(path) {
-  const r = await fetch(`${API}/api/documents?path=${encodeURIComponent(path)}&workspace=${WS}`);
+  const r = await fetch(`${API}/api/documents?path=${encodeURIComponent(path)}&workspace=${encodeURIComponent(WS)}`);
   const d = await r.json();
   const viewer = document.getElementById('doc-viewer');
   viewer.classList.add('active');
@@ -118,23 +152,33 @@ async function readDoc(path) {
 }
 
 async function loadBeliefs() {
-  const r = await fetch(`${API}/api/beliefs?workspace=${WS}&limit=100`);
+  const r = await fetch(`${API}/api/beliefs?workspace=${encodeURIComponent(WS)}&limit=100`);
   const d = await r.json();
   const body = document.getElementById('beliefs-body');
   document.getElementById('belief-count').textContent = `(${d.beliefs.length})`;
+  body.textContent = '';
 
   if (!d.beliefs.length) {
-    body.innerHTML = '<div class="empty">No beliefs</div>';
+    body.appendChild(el('div', {class: 'empty'}, 'No beliefs'));
     return;
   }
-  body.innerHTML = `<table><thead><tr><th>Statement</th><th>Topic</th><th>Subject</th></tr></thead><tbody>
-    ${d.beliefs.map(b => `<tr><td>${esc(b.statement)}</td>
-      <td><span class="topic-tag">${esc(b.topic)}</span></td>
-      <td>${esc(b.subject || '')}</td></tr>`).join('')}
-  </tbody></table>`;
-}
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  const table = el('table');
+  table.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Statement'), el('th', null, 'Topic'), el('th', null, 'Subject'),
+  )));
+  const tbody = el('tbody');
+  d.beliefs.forEach(b => {
+    const topicSpan = el('span', {class: 'topic-tag'}, b.topic);
+    tbody.appendChild(el('tr', null,
+      el('td', null, b.statement),
+      el('td', null, topicSpan),
+      el('td', null, b.subject || ''),
+    ));
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+}
 
 document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 

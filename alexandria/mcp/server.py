@@ -134,6 +134,22 @@ def run_http(
         return FileResponse(static_dir / "index.html")
 
     # Build combined app: dashboard + API + MCP SSE
+    from starlette.middleware import Middleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):  # noqa: ANN001
+            response = await call_next(request)
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                "connect-src 'self'; frame-ancestors 'none'"
+            )
+            return response
+
     mcp_app = server.sse_app()
     routes = [
         Route("/", dashboard),
@@ -142,7 +158,10 @@ def run_http(
         Route("/api/beliefs", beliefs_handler),
         Route("/api/documents", documents_handler),
     ]
-    app = Starlette(routes=routes)
+    app = Starlette(
+        routes=routes,
+        middleware=[Middleware(SecurityHeadersMiddleware)],
+    )
     app.mount("/mcp", mcp_app)
 
     uvicorn.run(app, host=host, port=port)
