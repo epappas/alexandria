@@ -4,39 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alexandria Dashboard</title>
-<style>
-:root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; --green: #3fb950; --red: #f85149; --dim: #8b949e; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
-header { padding: 1rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; }
-header h1 { font-size: 1.4rem; color: var(--accent); }
-header span { color: var(--dim); font-size: 0.9rem; }
-main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
-.stat-card .value { font-size: 2rem; font-weight: bold; color: var(--accent); }
-.stat-card .label { color: var(--dim); font-size: 0.85rem; margin-top: 0.3rem; }
-.search-bar { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-.search-bar input { flex: 1; padding: 0.6rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 1rem; outline: none; }
-.search-bar input:focus { border-color: var(--accent); }
-.search-bar button { padding: 0.6rem 1.2rem; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-.panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
-.panel h2 { padding: 0.8rem 1rem; border-bottom: 1px solid var(--border); font-size: 1rem; color: var(--accent); }
-.panel-body { padding: 1rem; max-height: 400px; overflow-y: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); }
-th { color: var(--dim); font-size: 0.85rem; }
-td { font-size: 0.9rem; }
-.score { color: var(--green); font-weight: bold; }
-.topic-tag { background: #1f2937; color: var(--accent); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-.doc-content { white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; line-height: 1.5; color: var(--dim); }
-.empty { color: var(--dim); text-align: center; padding: 2rem; }
-#doc-viewer { display: none; }
-#doc-viewer.active { display: block; }
-#doc-title { margin-bottom: 0.5rem; font-size: 1.1rem; }
-tr.clickable { cursor: pointer; }
-tr.clickable:hover { background: rgba(88, 166, 255, 0.1); }
-</style>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
@@ -48,7 +16,7 @@ tr.clickable:hover { background: rgba(88, 166, 255, 0.1); }
 
   <div class="search-bar">
     <input type="text" id="search-input" placeholder="Search your knowledge base..." autofocus>
-    <button onclick="doSearch()">Search</button>
+    <button id="search-btn">Search</button>
   </div>
 
   <div class="panel" id="search-results" style="display:none">
@@ -62,128 +30,12 @@ tr.clickable:hover { background: rgba(88, 166, 255, 0.1); }
   </div>
 
   <div class="panel">
-    <h2>Beliefs <span id="belief-count" style="color:var(--dim);font-weight:normal"></span></h2>
+    <h2>Beliefs <span id="belief-count"></span></h2>
     <div class="panel-body" id="beliefs-body">
       <div class="empty">Loading...</div>
     </div>
   </div>
 </main>
-
-<script>
-"use strict";
-const API = '';
-const WS = new URLSearchParams(location.search).get('workspace') || 'global';
-
-// Safe text escaping — prevents XSS
-// Safe element creation helpers
-function el(tag, attrs, ...children) {
-  const e = document.createElement(tag);
-  if (attrs) Object.entries(attrs).forEach(([k, v]) => {
-    if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v);
-  });
-  children.forEach(c => {
-    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
-    else if (c) e.appendChild(c);
-  });
-  return e;
-}
-
-async function loadStats() {
-  const r = await fetch(`${API}/api/stats?workspace=${encodeURIComponent(WS)}`);
-  const d = await r.json();
-  document.getElementById('workspace-info').textContent = `workspace: ${d.workspace}`;
-  const container = document.getElementById('stats');
-  container.textContent = '';
-  [
-    [d.documents, 'Documents'], [d.wiki_pages, 'Wiki Pages'],
-    [d.beliefs, 'Beliefs'], [d.topics.length, 'Topics'], [d.runs, 'Runs'],
-  ].forEach(([value, label]) => {
-    const card = el('div', {class: 'stat-card'},
-      el('div', {class: 'value'}, String(value)),
-      el('div', {class: 'label'}, label),
-    );
-    container.appendChild(card);
-  });
-}
-
-async function doSearch() {
-  const q = document.getElementById('search-input').value.trim();
-  if (!q) return;
-  const r = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&workspace=${encodeURIComponent(WS)}`);
-  const d = await r.json();
-  const panel = document.getElementById('search-results');
-  const body = document.getElementById('results-body');
-  panel.style.display = 'block';
-  body.textContent = '';
-
-  if (!d.results.length) {
-    body.appendChild(el('div', {class: 'empty'}, 'No results'));
-    return;
-  }
-
-  const table = el('table');
-  const thead = el('thead', null, el('tr', null,
-    el('th', null, 'Title'), el('th', null, 'Score'),
-    el('th', null, 'Beliefs'), el('th', null, 'Layer'),
-  ));
-  table.appendChild(thead);
-  const tbody = el('tbody');
-  d.results.forEach(result => {
-    const row = el('tr', {class: 'clickable', onclick: () => readDoc(result.path)},
-      el('td', null, result.title),
-      el('td', {class: 'score'}, String(result.score)),
-      el('td', null, String(result.belief_count || '-')),
-      el('td', null, result.layer),
-    );
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  body.appendChild(table);
-}
-
-async function readDoc(path) {
-  const r = await fetch(`${API}/api/documents?path=${encodeURIComponent(path)}&workspace=${encodeURIComponent(WS)}`);
-  const d = await r.json();
-  const viewer = document.getElementById('doc-viewer');
-  viewer.classList.add('active');
-  document.getElementById('doc-title').textContent = d.title || d.path;
-  document.getElementById('doc-content').textContent = d.content;
-}
-
-async function loadBeliefs() {
-  const r = await fetch(`${API}/api/beliefs?workspace=${encodeURIComponent(WS)}&limit=100`);
-  const d = await r.json();
-  const body = document.getElementById('beliefs-body');
-  document.getElementById('belief-count').textContent = `(${d.beliefs.length})`;
-  body.textContent = '';
-
-  if (!d.beliefs.length) {
-    body.appendChild(el('div', {class: 'empty'}, 'No beliefs'));
-    return;
-  }
-
-  const table = el('table');
-  table.appendChild(el('thead', null, el('tr', null,
-    el('th', null, 'Statement'), el('th', null, 'Topic'), el('th', null, 'Subject'),
-  )));
-  const tbody = el('tbody');
-  d.beliefs.forEach(b => {
-    const topicSpan = el('span', {class: 'topic-tag'}, b.topic);
-    tbody.appendChild(el('tr', null,
-      el('td', null, b.statement),
-      el('td', null, topicSpan),
-      el('td', null, b.subject || ''),
-    ));
-  });
-  table.appendChild(tbody);
-  body.appendChild(table);
-}
-
-document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
-
-loadStats();
-loadBeliefs();
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

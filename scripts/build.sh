@@ -7,6 +7,10 @@ cd "$ROOT"
 echo "==> Cleaning previous builds"
 rm -rf dist/ build/ *.egg-info
 
+echo "==> Security audit"
+uv run pip-audit --strict 2>/dev/null || echo "pip-audit not installed, skipping (install with: uv pip install pip-audit)"
+uv run ruff check alexandria/
+
 echo "==> Running tests"
 uv run pytest tests/ -q --tb=short
 

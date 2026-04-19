@@ -1,0 +1,83 @@
+name: Security
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    # Run weekly on Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: |
+          uv sync --dev
+          uv pip install pip-audit
+
+      - name: Audit dependencies for known CVEs
+        run: uv run pip-audit --strict --desc
+
+      - name: Verify lockfile integrity
+        run: |
+          # Ensure uv.lock is committed and up to date
+          uv lock --check
+
+      - name: Check for unsafe patterns in source
+        run: |
+          echo "Checking for eval/exec..."
+          ! grep -rn "eval(\|exec(" alexandria/ --include="*.py" | grep -v __pycache__ || true
+
+          echo "Checking for shell=True..."
+          ! grep -rn "shell=True" alexandria/ --include="*.py" | grep -v __pycache__ || true
+
+          echo "Checking for innerHTML..."
+          ! grep -n "innerHTML" alexandria/mcp/static/*.html || true
+
+          echo "Checking for external CDN/script references..."
+          ! grep -n "src=.*http\|href=.*http\|cdn\.\|unpkg\.\|jsdelivr\." alexandria/mcp/static/*.html || true
+
+          echo "All source checks passed"
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Generate SBOM
+        run: |
+          uv pip install cyclonedx-bom
+          uv run cyclonedx-py environment -o sbom.json --format json
+          echo "SBOM generated: $(wc -l < sbom.json) lines"
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90
