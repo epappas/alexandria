@@ -112,7 +112,37 @@ def run_http(
     host: str = "127.0.0.1",
     port: int = 7219,
 ) -> None:
-    """Start the MCP server over HTTP+SSE. Phase 6b transport."""
+    """Start the MCP server over HTTP+SSE with web dashboard."""
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.responses import FileResponse
+    from starlette.routing import Route
+
+    from alexandria.mcp.api import (
+        beliefs_handler,
+        documents_handler,
+        search_handler,
+        stats_handler,
+    )
+
     os.environ.pop("CLAUDECODE", None)
     server = create_server(pinned_workspace=pinned_workspace)
-    server.run(transport="sse", host=host, port=port)
+
+    static_dir = Path(__file__).parent / "static"
+
+    async def dashboard(request: object) -> FileResponse:
+        return FileResponse(static_dir / "index.html")
+
+    # Build combined app: dashboard + API + MCP SSE
+    mcp_app = server.sse_app()
+    routes = [
+        Route("/", dashboard),
+        Route("/api/stats", stats_handler),
+        Route("/api/search", search_handler),
+        Route("/api/beliefs", beliefs_handler),
+        Route("/api/documents", documents_handler),
+    ]
+    app = Starlette(routes=routes)
+    app.mount("/mcp", mcp_app)
+
+    uvicorn.run(app, host=host, port=port)
