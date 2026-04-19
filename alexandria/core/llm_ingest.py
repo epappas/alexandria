@@ -12,7 +12,8 @@ import asyncio
 import concurrent.futures
 import json
 import os
-from typing import Any, Coroutine, TypeVar
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 from alexandria.llm.base import CompletionRequest, CompletionResult, Message
 
@@ -254,7 +255,7 @@ def _parse_llm_response(result: CompletionResult, raw_path: str) -> dict[str, An
     # Extract JSON from response (may be wrapped in markdown code block)
     if text.startswith("```"):
         lines = text.split("\n")
-        json_lines = [l for l in lines if not l.startswith("```")]
+        json_lines = [line for line in lines if not line.startswith("```")]
         text = "\n".join(json_lines)
 
     try:

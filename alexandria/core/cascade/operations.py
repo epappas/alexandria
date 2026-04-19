@@ -12,7 +12,7 @@ They operate on the run's ``staged/`` directory.
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -148,7 +148,7 @@ def stage_hedge(
     Returns the path to the staged file.
     """
     staged_file = _ensure_staged(staged_dir, workspace_path, page_rel_path)
-    date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = date or datetime.now(UTC).strftime("%Y-%m-%d")
 
     content = staged_file.read_text(encoding="utf-8")
 
@@ -208,7 +208,7 @@ def stage_new_page(
         f"\n"
         f"> Sources: {sources_line}\n"
         f"> Raw: {raw_line}\n"
-        f"> Updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
+        f"> Updated: {datetime.now(UTC).strftime('%Y-%m-%d')}\n"
         f"\n"
         f"## Overview\n\n"
         f"{body}\n"
@@ -236,8 +236,8 @@ def stage_cross_ref(
     content = staged_file.read_text(encoding="utf-8")
 
     # Compute relative link
-    from_parts = Path(from_page).parent.parts
-    to_parts = Path(to_page).parts
+    Path(from_page).parent.parts
+    Path(to_page).parts
     rel_link = _relative_link(from_page, to_page)
     link_text = label or Path(to_page).stem.replace("-", " ").title()
     link_line = f"- [{link_text}]({rel_link})"
@@ -319,7 +319,7 @@ def _relative_link(from_page: str, to_page: str) -> str:
         from_parts = from_dir.parts
         to_parts = to_path.parts
         common = 0
-        for a, b in zip(from_parts, to_parts):
+        for a, b in zip(from_parts, to_parts, strict=False):
             if a != b:
                 break
             common += 1

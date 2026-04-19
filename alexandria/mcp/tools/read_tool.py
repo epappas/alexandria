@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 MAX_BATCH_CHARS = 120_000
 TEXT_EXTENSIONS = {".md", ".txt", ".json", ".toml", ".yaml", ".yml", ".csv", ".html", ".xml"}
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="read",

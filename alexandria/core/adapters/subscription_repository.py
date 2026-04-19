@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -51,7 +51,7 @@ def insert_subscription_item(
 ) -> str:
     """Insert a subscription item. Returns item_id."""
     item_id = f"sub-{uuid.uuid4().hex[:16]}"
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO subscription_items
           (item_id, workspace, source_id, adapter_type, external_id, title,
@@ -128,14 +128,14 @@ def get_subscription_item(
 def mark_ingested(conn: sqlite3.Connection, item_id: str) -> None:
     conn.execute(
         "UPDATE subscription_items SET status = 'ingested', ingested_at = ? WHERE item_id = ?",
-        (datetime.now(timezone.utc).isoformat(), item_id),
+        (datetime.now(UTC).isoformat(), item_id),
     )
 
 
 def mark_dismissed(conn: sqlite3.Connection, item_id: str) -> None:
     conn.execute(
         "UPDATE subscription_items SET status = 'dismissed', dismissed_at = ? WHERE item_id = ?",
-        (datetime.now(timezone.utc).isoformat(), item_id),
+        (datetime.now(UTC).isoformat(), item_id),
     )
 
 

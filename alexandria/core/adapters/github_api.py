@@ -7,12 +7,11 @@ via the REST API. Commits are handled by git-local, not here.
 from __future__ import annotations
 
 import json
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from alexandria.core.adapters.base import AdapterKind, FetchedItem, SyncResult
 
@@ -70,7 +69,7 @@ class GitHubAdapter:
 
         # Update state
         if items:
-            state["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_synced_at"] = datetime.now(UTC).isoformat()
             self._save_state(state_file, state)
 
         return items, result
@@ -113,7 +112,7 @@ class GitHubAdapter:
                 event_data={
                     "number": issue["number"],
                     "state": issue["state"],
-                    "labels": [l["name"] for l in issue.get("labels", [])],
+                    "labels": [lb["name"] for lb in issue.get("labels", [])],
                     "is_pr": is_pr,
                 },
             ))

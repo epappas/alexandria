@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from alexandria.core.repo_ingest import ALL_INGEST_EXTS, _SKIP_DIRS, _SKIP_FILES, _SKIP_SUFFIXES
+from alexandria.core.repo_ingest import _SKIP_DIRS, _SKIP_FILES, _SKIP_SUFFIXES, ALL_INGEST_EXTS
 
 
 def start_watcher(
@@ -24,8 +25,8 @@ def start_watcher(
 ) -> None:
     """Watch a directory and auto-ingest changed files. Blocks until interrupted."""
     try:
-        from watchdog.observers import Observer
-        from watchdog.events import FileSystemEventHandler, FileSystemEvent
+        from watchdog.events import FileSystemEvent, FileSystemEventHandler
+        from watchdog.observers import Observer  # noqa: F401
     except ImportError:
         raise RuntimeError(
             "watchdog not installed. Run: pip install 'alexandria-wiki[watch]'"

@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -510,8 +511,9 @@ _TF_PROVIDER = re.compile(r'^provider\s+"(\w+)"', re.MULTILINE)
 def _extract_terraform(source: str) -> CodeStructure:
     # Try python-hcl2 for proper parsing
     try:
-        import hcl2
         import io
+
+        import hcl2
         return _extract_terraform_hcl2(source)
     except ImportError:
         pass
@@ -519,8 +521,9 @@ def _extract_terraform(source: str) -> CodeStructure:
 
 
 def _extract_terraform_hcl2(source: str) -> CodeStructure:
-    import hcl2
     import io
+
+    import hcl2
 
     s = CodeStructure(language="terraform")
     data = hcl2.load(io.StringIO(source))

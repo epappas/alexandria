@@ -11,20 +11,18 @@ Phase 2b ships the basic ingest for local markdown files. Source adapters
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from alexandria.core.cascade import stage_cross_ref, stage_hedge, stage_merge, stage_new_page
 from alexandria.core.citations import extract_footnotes
 from alexandria.core.runs import (
-    RunStatus,
     commit_run,
     create_run,
     get_staged_dir,
     reject_run,
-    update_run_status,
 )
 from alexandria.core.verifier import DeterministicVerifier
 from alexandria.db.connection import connect, db_path
@@ -97,13 +95,13 @@ def _compute_diff(old: str, new: str) -> DedupResult:
     new_lines = new.splitlines(keepends=True)
     diff = list(difflib.unified_diff(old_lines, new_lines, n=1))
 
-    added = sum(1 for l in diff if l.startswith("+") and not l.startswith("+++"))
-    removed = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
+    added = sum(1 for d in diff if d.startswith("+") and not d.startswith("+++"))
+    removed = sum(1 for d in diff if d.startswith("-") and not d.startswith("---"))
 
     if added == 0 and removed == 0:
         return DedupResult(status="unchanged")
 
-    preview_lines = [l.rstrip() for l in diff[:10] if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))]
+    preview_lines = [d.rstrip() for d in diff[:10] if d.startswith(("+", "-")) and not d.startswith(("+++", "---"))]
     return DedupResult(
         status="changed", added=added, removed=removed,
         diff_preview="\n".join(preview_lines[:5]),
@@ -171,7 +169,7 @@ def ingest_file(
         raw_dest = _ensure_in_raw(workspace_path, source_file, source_content)
 
     # Create a run
-    run = create_run(home, workspace_slug, f"cli:ingest", "ingest")
+    run = create_run(home, workspace_slug, "cli:ingest", "ingest")
 
     # Record the run in SQLite
     if db_path(home).exists():
@@ -243,11 +241,11 @@ def ingest_file(
         llm_beliefs.extend(ast_beliefs)
 
     raw_rel = raw_dest.relative_to(workspace_path)
-    sources_line = f"{title}, {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+    sources_line = f"{title}, {datetime.now(UTC).strftime('%Y-%m-%d')}"
     raw_line = f"[{source_file.name}](../../{raw_rel})"
     cite_path = str(raw_dest.relative_to(workspace_path))
 
-    staged_path = _execute_cascade(
+    _execute_cascade(
         home, workspace_slug, workspace_path, staged,
         topic=resolved_topic, slug=slug, title=title, body=body,
         sources_line=sources_line, raw_line=raw_line,
@@ -274,7 +272,7 @@ def ingest_file(
                         conn, run.run_id,
                         status="committed",
                         verdict="commit",
-                        ended_at=datetime.now(timezone.utc).isoformat(),
+                        ended_at=datetime.now(UTC).isoformat(),
                     )
 
                     # Register committed wiki pages in documents table (populates FTS)
@@ -319,8 +317,8 @@ def ingest_file(
                     if llm_beliefs:
                         from alexandria.core.beliefs.model import Belief
                         from alexandria.core.beliefs.repository import (
-                            find_duplicate_belief, insert_belief,
-                            list_beliefs, supersede_belief,
+                            find_duplicate_belief,
+                            insert_belief,
                             supersede_beliefs_for_document,
                         )
                         wiki_rel = f"wiki/{committed_paths[0]}" if committed_paths else ""
@@ -411,7 +409,7 @@ def ingest_file(
                     status="rejected",
                     verdict="reject",
                     reject_reason=verdict.reasoning,
-                    ended_at=datetime.now(timezone.utc).isoformat(),
+                    ended_at=datetime.now(UTC).isoformat(),
                 )
                 conn.execute("COMMIT")
             except Exception:
@@ -489,7 +487,7 @@ def _execute_cascade(
 
 
 def _execute_hedge(
-    staged: Path, workspace_path: Path, plan: "CascadePlan",
+    staged: Path, workspace_path: Path, plan: CascadePlan,  # noqa: F821
     body: str, cite_path: str,
 ) -> Path:
     """Execute a hedge (contradiction) cascade operation."""
@@ -606,7 +604,7 @@ def _extract_body(content: str) -> str:
             start = i
             break
 
-    body_lines = [l for l in lines[start:] if not l.startswith("[^")]
+    body_lines = [line for line in lines[start:] if not line.startswith("[^")]
     body = "\n".join(body_lines).strip()
     if len(body) > 3000:
         body = body[:3000] + "\n\n... (content continues in raw source)"
@@ -639,7 +637,7 @@ def _extract_representative_quote(content: str) -> str | None:
 
 def _extract_pdf_content(source_file: Path) -> str:
     """Extract text from a PDF file and return as markdown."""
-    from alexandria.core.pdf import pdf_to_markdown, PDFExtractionError
+    from alexandria.core.pdf import PDFExtractionError, pdf_to_markdown
     try:
         return pdf_to_markdown(source_file)
     except PDFExtractionError as exc:

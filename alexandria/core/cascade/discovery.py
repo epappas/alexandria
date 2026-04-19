@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from alexandria.core.beliefs.repository import find_beliefs_by_subject
@@ -182,7 +181,7 @@ def _parse_relation(text: str, candidate_path: str) -> ConceptRelation | None:
     text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
-        text = "\n".join(l for l in lines if not l.startswith("```"))
+        text = "\n".join(ln for ln in lines if not ln.startswith("```"))
 
     try:
         data = json.loads(text)

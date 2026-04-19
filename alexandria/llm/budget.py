@@ -8,7 +8,7 @@ Per ``PLAN_AMENDMENTS.md`` B3: ships in Phase 2b with three hard mechanisms:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from alexandria.llm.base import Usage
 
@@ -16,7 +16,7 @@ from alexandria.llm.base import Usage
 class BudgetExhausted(Exception):
     """Raised when a run exceeds its configured budget."""
 
-    def __init__(self, message: str, usage: "RunUsage") -> None:
+    def __init__(self, message: str, usage: RunUsage) -> None:
         super().__init__(message)
         self.usage = usage
 

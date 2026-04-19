@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
-from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 from alexandria.db.connection import connect, db_path
 
 console = Console()
 
 
 def subs_list_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    status: Optional[str] = typer.Option("pending", "--status", "-s", help="Filter: pending|ingested|dismissed"),
-    adapter: Optional[str] = typer.Option(None, "--adapter", help="Filter by adapter type (rss|imap)."),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    status: str | None = typer.Option("pending", "--status", "-s", help="Filter: pending|ingested|dismissed"),
+    adapter: str | None = typer.Option(None, "--adapter", help="Filter by adapter type (rss|imap)."),
 ) -> None:
     """Show pending subscription items grouped by source."""
     home = resolve_home()
@@ -109,8 +107,8 @@ def subs_dismiss_command(
 
 
 def subs_poll_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    source_id: Optional[str] = typer.Option(None, "--source", help="Poll a specific source."),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    source_id: str | None = typer.Option(None, "--source", help="Poll a specific source."),
 ) -> None:
     """Poll all subscription sources (RSS + IMAP)."""
     home = resolve_home()

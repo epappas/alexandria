@@ -15,9 +15,7 @@ import sqlite3
 from typing import Any
 
 from alexandria.db.connection import sanitize_fts_query
-
-from alexandria.llm.base import CompletionRequest, CompletionResult, Message
-
+from alexandria.llm.base import CompletionRequest, Message
 
 KEYWORD_PROMPT = """You are a search query planner for a knowledge base. Given a user question, extract the key search terms that would find relevant documents.
 
@@ -127,7 +125,7 @@ def _extract_keywords(provider: Any, question: str) -> list[str]:
 
     # Parse JSON array from response
     if text.startswith("```"):
-        text = "\n".join(l for l in text.split("\n") if not l.startswith("```"))
+        text = "\n".join(ln for ln in text.split("\n") if not ln.startswith("```"))
     try:
         keywords = json.loads(text)
         if isinstance(keywords, list):

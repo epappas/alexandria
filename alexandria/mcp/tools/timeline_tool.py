@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     @mcp.tool()
     def timeline(
         workspace: str | None = None,
@@ -23,9 +24,10 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         "what happened last week" or "show recent activity".
         """
         from collections import defaultdict
+
         from alexandria.config import resolve_home
-        from alexandria.db.connection import connect, db_path
         from alexandria.core.adapters.events import EventQuery, query_events
+        from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()

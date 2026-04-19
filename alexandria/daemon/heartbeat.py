@@ -7,7 +7,7 @@ and marks children missing 3+ consecutive beats (45s) as failed.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 HEARTBEAT_INTERVAL = 5.0  # seconds between child heartbeats
@@ -23,7 +23,7 @@ def record_heartbeat(
     state: str = "running",
 ) -> None:
     """Upsert a heartbeat for a child process."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO daemon_heartbeats (child_name, pid, started_at, last_beat, state)
         VALUES (?, ?, ?, ?, ?)
@@ -37,7 +37,7 @@ def record_heartbeat(
 
 def check_heartbeats(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Check for stale heartbeats. Returns list of dead children."""
-    cutoff = (datetime.now(timezone.utc) - DEADLINE).isoformat()
+    cutoff = (datetime.now(UTC) - DEADLINE).isoformat()
     rows = conn.execute(
         """SELECT child_name, pid, last_beat, state FROM daemon_heartbeats
         WHERE last_beat < ? AND state NOT IN ('failed', 'draining')""",

@@ -6,9 +6,7 @@ Uses the HuggingFace Hub API (no auth required for public repos).
 from __future__ import annotations
 
 import hashlib
-import json
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
@@ -50,7 +48,7 @@ class HuggingFaceAdapter:
                     f"# {repo_id}",
                     "",
                     f"- source: https://huggingface.co/{repo_id}",
-                    f"- fetched: {datetime.now(timezone.utc).isoformat()}",
+                    f"- fetched: {datetime.now(UTC).isoformat()}",
                     "", "---", "",
                     readme,
                 ]
@@ -62,7 +60,7 @@ class HuggingFaceAdapter:
                     title=repo_id,
                     body=readme[:500],
                     url=f"https://huggingface.co/{repo_id}",
-                    occurred_at=datetime.now(timezone.utc).isoformat(),
+                    occurred_at=datetime.now(UTC).isoformat(),
                     event_data={
                         "repo_id": repo_id,
                         "content_hash": content_hash,

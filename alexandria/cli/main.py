@@ -6,8 +6,6 @@ All commands have real implementations — no stubs.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from alexandria import __version__
@@ -65,7 +63,7 @@ app = typer.Typer(
 @app.callback()
 def root(
     ctx: typer.Context,
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None,
         "--version",
         "-V",

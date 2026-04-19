@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -19,7 +18,6 @@ from alexandria.config import (
 )
 from alexandria.core.workspace import (
     GLOBAL_SLUG,
-    WorkspaceExistsError,
     init_workspace,
 )
 from alexandria.db.connection import connect, db_path
@@ -29,7 +27,7 @@ console = Console()
 
 
 def init_command(
-    home: Optional[Path] = typer.Option(
+    home: Path | None = typer.Option(
         None,
         "--path",
         "--home",

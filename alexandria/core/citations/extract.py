@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 # Matches: [^1]: filename.md, p.3 — "verbatim quote text"
 # Also:    [^1]: filename.md — "verbatim quote text"
 # Also:    [^1]: filename.md, p.3

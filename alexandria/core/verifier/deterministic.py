@@ -16,7 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from alexandria.core.citations import (
-    AnchorVerifyResult,
     QuoteAnchor,
     extract_footnotes,
     verify_quote_anchor,

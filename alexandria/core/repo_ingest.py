@@ -195,7 +195,9 @@ def _ingest_conversation_file(
 ) -> IngestResult | None:
     """Capture a JSONL conversation and ingest it. Returns None if not a conversation."""
     from alexandria.core.capture.conversation import (
-        capture_conversation, detect_format, CaptureError,
+        CaptureError,
+        capture_conversation,
+        detect_format,
     )
     fmt = detect_format(jsonl_path)
     if fmt == "unknown":

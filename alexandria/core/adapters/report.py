@@ -7,7 +7,7 @@ Contains counts per source, error summaries, and top slowest runs.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -16,12 +16,12 @@ def generate_weekly_report(conn: sqlite3.Connection, home: Path) -> Path:
     reports_dir = home / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     week_start = (now - timedelta(days=7)).isoformat()
     report_path = reports_dir / "weekly.md"
 
     lines = [
-        f"# alexandria Weekly Report",
+        "# alexandria Weekly Report",
         f"Generated: {now.strftime('%Y-%m-%d %H:%M UTC')}",
         f"Period: {week_start[:10]} to {now.strftime('%Y-%m-%d')}",
         "",

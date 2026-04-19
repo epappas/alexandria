@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from alexandria.db.connection import connect, db_path
@@ -138,7 +138,7 @@ def init_workspace(
     if ws_path.exists():
         raise WorkspaceExistsError(f"workspace {slug!r} already exists at {ws_path}")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     ws_path.mkdir(parents=True)
     (ws_path / "raw").mkdir()
     (ws_path / "wiki").mkdir()
@@ -243,7 +243,7 @@ def delete_workspace(home: Path, slug: str) -> Path:
         raise WorkspaceNotFoundError(f"workspace {slug!r} not found at {ws_path}")
     if slug == GLOBAL_SLUG:
         raise WorkspaceError("the 'global' workspace cannot be deleted")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     trash = trash_dir(home)
     trash.mkdir(parents=True, exist_ok=True)
     target = trash / f"{timestamp}-{slug}"
@@ -275,7 +275,7 @@ def rename_workspace(home: Path, old_slug: str, new_slug: str) -> Workspace:
         raise WorkspaceError("the 'global' workspace cannot be renamed")
 
     shutil.move(str(old_path), str(new_path))
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with connect(db_path(home)) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -14,8 +13,8 @@ console = Console()
 
 
 def logs_show_command(
-    run_id: Optional[str] = typer.Argument(None, help="Filter by run_id."),
-    family: Optional[str] = typer.Option(None, "--family", "-f", help="Filter by log family."),
+    run_id: str | None = typer.Argument(None, help="Filter by run_id."),
+    family: str | None = typer.Option(None, "--family", "-f", help="Filter by log family."),
     tail: int = typer.Option(50, "--tail", "-n", help="Number of recent lines to show."),
     json_output: bool = typer.Option(False, "--json", help="Raw JSON output."),
 ) -> None:

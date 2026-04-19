@@ -7,7 +7,7 @@ for a workspace. Uses the configured LLM provider with budget enforcement.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,7 @@ def run_synthesis(
 
     Returns metadata about the synthesis run.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = (now - timedelta(days=period_days)).isoformat()
 
     # Gather data
@@ -119,7 +119,7 @@ def _build_digest(
     lines = [
         f"# Weekly Digest — {workspace}",
         "",
-        f"draft: true",
+        "draft: true",
         f"period: {period_days} days ending {now.strftime('%Y-%m-%d')}",
         f"generated: {now.isoformat()}",
         "", "---", "",

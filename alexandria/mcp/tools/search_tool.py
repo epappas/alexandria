@@ -14,6 +14,7 @@ from alexandria.db.connection import connect, db_path
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
@@ -21,7 +22,7 @@ MAX_RESULTS = 20
 SNIPPET_LEN = 200
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="search",

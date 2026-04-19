@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     @mcp.tool()
     def sources(
         workspace: str | None = None,
@@ -20,8 +21,8 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         Read-only — use the CLI to add/remove sources.
         """
         from alexandria.config import resolve_home
+        from alexandria.core.adapters.source_repository import list_source_runs, list_sources
         from alexandria.db.connection import connect, db_path
-        from alexandria.core.adapters.source_repository import list_sources, list_source_runs
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()

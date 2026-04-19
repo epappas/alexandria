@@ -6,12 +6,12 @@ Per ``05_source_integrations.md``: all sources implement one interface.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
 
-class AdapterKind(str, Enum):
+class AdapterKind(StrEnum):
     LOCAL = "local"
     GIT_LOCAL = "git-local"
     GITHUB = "github"

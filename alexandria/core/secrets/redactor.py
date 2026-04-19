@@ -7,7 +7,6 @@ writing to disk. Covers common token/key patterns.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 
 REDACTED = "[REDACTED]"
 

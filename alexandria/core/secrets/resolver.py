@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from alexandria.core.secrets.vault import SecretVault, VaultError
+from alexandria.core.secrets.vault import SecretVault
 
 
 class SecretResolver:

@@ -8,10 +8,8 @@ about Alexandria itself.
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 
 from alexandria import __version__
-
 
 CAPABILITIES = """Alexandria is a local-first single-user knowledge engine (v{version}).
 It accumulates knowledge from multiple source types and exposes it via MCP

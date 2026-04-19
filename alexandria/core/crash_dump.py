@@ -16,7 +16,7 @@ import os
 import platform
 import sys
 import traceback
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -35,12 +35,12 @@ def write_crash_dump(
 ) -> Path:
     """Write a single crash dump file. Returns the path written."""
     crashes_dir(home).mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     pid = os.getpid()
     path = crashes_dir(home) / f"{timestamp}-{pid}.json"
 
     payload: dict[str, Any] = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "pid": pid,
         "argv": sys.argv,
         "cwd": os.getcwd(),

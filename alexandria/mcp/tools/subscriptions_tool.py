@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     @mcp.tool()
     def subscriptions(
         workspace: str | None = None,
@@ -25,8 +26,8 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         for use with the ``read`` tool. No credentials are exposed.
         """
         from alexandria.config import resolve_home
-        from alexandria.db.connection import connect, db_path
         from alexandria.core.adapters.subscription_repository import list_subscription_items
+        from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()

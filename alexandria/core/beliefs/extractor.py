@@ -11,7 +11,6 @@ an actual claim in the wiki page text with a footnote citation.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from alexandria.core.beliefs.model import Belief
 from alexandria.core.citations import extract_footnotes
@@ -113,7 +112,7 @@ def _try_extract_structured(
     ]
 
     lower = statement.lower()
-    for pattern, default_pred in patterns:
+    for pattern, _default_pred in patterns:
         match = re.match(pattern, lower)
         if match:
             belief.subject = match.group(1).strip()[:100]

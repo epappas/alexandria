@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -51,7 +51,7 @@ class Belief:
         if not self.belief_id:
             self.belief_id = f"b-{uuid.uuid4().hex[:16]}"
         if not self.created_at:
-            self.created_at = datetime.now(timezone.utc).isoformat()
+            self.created_at = datetime.now(UTC).isoformat()
         if not self.asserted_at:
             self.asserted_at = self.created_at
 
@@ -84,7 +84,7 @@ class Belief:
         }
 
     @classmethod
-    def from_dict(cls, data: dict, workspace: str = "") -> "Belief":
+    def from_dict(cls, data: dict, workspace: str = "") -> Belief:
         return cls(
             belief_id=data.get("belief_id", ""),
             workspace=workspace,

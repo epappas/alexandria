@@ -7,11 +7,11 @@ and the runs table arrive in Phase 2+). Returns parsed log entries.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 LOG_ENTRY_RE = re.compile(
@@ -19,7 +19,7 @@ LOG_ENTRY_RE = re.compile(
 )
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="history",

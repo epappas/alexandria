@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
-from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 from alexandria.db.connection import connect, db_path
 
 console = Console()
@@ -16,7 +14,7 @@ console = Console()
 
 def query_command(
     question: str = typer.Argument(..., help="The question to answer."),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
     save: bool = typer.Option(False, "--save", help="Save the answer as a wiki page."),
 ) -> None:
@@ -65,11 +63,11 @@ def query_command(
         console.print_json(json.dumps(result, default=str))
         return
 
-    console.print(f"\n[bold]Answer:[/bold]\n")
+    console.print("\n[bold]Answer:[/bold]\n")
     console.print(result["answer"])
 
     if result.get("sources"):
-        console.print(f"\n[bold]Sources:[/bold]")
+        console.print("\n[bold]Sources:[/bold]")
         for s in result["sources"]:
             console.print(f"  {s.get('title', '')} — {s.get('path', '')}")
 
@@ -81,6 +79,6 @@ def query_command(
         with connect(db_path(home)) as conn:
             sr = save_query_as_page(home, slug, ws.path, question, result, conn)
         if sr.committed:
-            console.print(f"\n[green]Saved to wiki[/green]")
+            console.print("\n[green]Saved to wiki[/green]")
             for p in sr.committed_paths:
                 console.print(f"  [cyan]wiki/{p}[/cyan]")

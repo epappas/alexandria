@@ -97,9 +97,7 @@ def _should_skip(domain: str, path: str) -> bool:
     if not domain:
         return True
     # Skip API/docs paths
-    if "/api/" in path or "/docs/" in path:
-        return True
-    return False
+    return bool("/api/" in path or "/docs/" in path)
 
 
 def _classify(domain: str, path: str, url: str) -> str:

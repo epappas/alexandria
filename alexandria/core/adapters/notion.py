@@ -8,11 +8,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 from alexandria.core.adapters.base import FetchedItem, SyncResult
 
@@ -67,7 +66,7 @@ class NotionAdapter:
                     title=title,
                     body=md[:500],
                     url=f"https://notion.so/{page_id.replace('-', '')}",
-                    occurred_at=page.get("last_edited_time", datetime.now(timezone.utc).isoformat()),
+                    occurred_at=page.get("last_edited_time", datetime.now(UTC).isoformat()),
                     event_data={"page_id": page_id, "content_hash": content_hash,
                                 "content_path": str(md_path.relative_to(workspace_path))},
                 ))

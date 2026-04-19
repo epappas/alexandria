@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
-from alexandria.db.connection import sanitize_fts_query
-
 from alexandria.core.adapters.base import FetchedItem
+from alexandria.db.connection import sanitize_fts_query
 
 
 @dataclass
@@ -53,7 +52,7 @@ def insert_event(
 ) -> str:
     """Insert a FetchedItem as an event row. Returns the event_id."""
     event_id = f"ev-{uuid.uuid4().hex[:16]}"
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO events
           (event_id, workspace, source_id, source_type, event_type,

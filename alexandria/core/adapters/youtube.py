@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -65,7 +65,7 @@ class YouTubeAdapter:
                     body=transcript[:500],
                     url=url,
                     author=metadata.get("author", ""),
-                    occurred_at=metadata.get("published", datetime.now(timezone.utc).isoformat()),
+                    occurred_at=metadata.get("published", datetime.now(UTC).isoformat()),
                     event_data={
                         "video_id": video_id,
                         "content_hash": content_hash,

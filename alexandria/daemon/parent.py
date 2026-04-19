@@ -6,12 +6,11 @@ support with adapter workers, MCP HTTP, and webhook receiver.
 
 from __future__ import annotations
 
-import json
+import contextlib
 import multiprocessing
 import os
 import signal
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +22,6 @@ from alexandria.daemon.heartbeat import (
 from alexandria.daemon.scheduler import SchedulerChild
 from alexandria.db.connection import connect, db_path
 from alexandria.observability.logger import StructuredLogger, init_logging
-
 
 PID_FILENAME = "daemon.pid"
 MAX_RESTART_ATTEMPTS = 5
@@ -93,10 +91,8 @@ class DaemonParent:
         }
 
         if self.pid_path.exists():
-            try:
+            with contextlib.suppress(ValueError, FileNotFoundError):
                 status["pid"] = int(self.pid_path.read_text().strip())
-            except (ValueError, FileNotFoundError):
-                pass
 
         try:
             with connect(db_path(self._home)) as conn:

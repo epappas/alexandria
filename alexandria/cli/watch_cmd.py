@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -16,7 +15,7 @@ console = Console()
 
 def watch_command(
     path: str = typer.Argument(".", help="Directory to watch."),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     debounce: int = typer.Option(500, "--debounce", help="Debounce interval in ms."),
 ) -> None:
     """Watch a directory and auto-ingest files on change.

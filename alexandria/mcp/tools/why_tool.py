@@ -6,7 +6,6 @@ No LLM calls — pure SQL over wiki_beliefs + wiki_beliefs_fts.
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from alexandria.config import resolve_home
@@ -15,10 +14,11 @@ from alexandria.db.connection import connect, db_path
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="why",

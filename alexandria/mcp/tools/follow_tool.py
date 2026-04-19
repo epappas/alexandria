@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 FOOTNOTE_RE = re.compile(r"\[\^(\d+)\]:\s*(.+?)(?:,\s*p\.?\s*(\d+))?$", re.MULTILINE)
 MAX_CONTENT = 8_000
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="follow",

@@ -14,17 +14,14 @@ Two binding modes per ``08_mcp_integration.md``:
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from alexandria.config import load_config, resolve_home
+from alexandria.config import resolve_home
 from alexandria.core.workspace import (
     WorkspaceNotFoundError,
     get_workspace,
-    list_workspaces,
-    workspaces_dir,
 )
 from alexandria.mcp.tools import register_all
 

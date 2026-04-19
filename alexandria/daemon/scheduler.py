@@ -10,7 +10,6 @@ import os
 import signal
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -87,7 +86,7 @@ class SchedulerChild:
     def _build_job_schedule(self) -> list[tuple[str, float, Any]]:
         """Build the list of scheduled jobs with intervals."""
         from alexandria.config import load_config
-        config = load_config(self._home)
+        load_config(self._home)
 
         return [
             ("sync_sources", 300.0, self._job_sync_sources),     # every 5 min
@@ -97,24 +96,24 @@ class SchedulerChild:
 
     def _run_job(self, name: str, fn: Any) -> None:
         """Execute a single job with error handling and logging."""
-        self._logger.info(f"job_started", data={"job": name})
+        self._logger.info("job_started", data={"job": name})
         try:
             fn()
-            self._logger.info(f"job_completed", data={"job": name})
+            self._logger.info("job_completed", data={"job": name})
         except Exception as exc:
             self._logger.error(
-                f"job_failed", data={"job": name, "error": str(exc)}
+                "job_failed", data={"job": name, "error": str(exc)}
             )
 
     def _job_sync_sources(self) -> None:
         """Sync all enabled source adapters."""
-        from alexandria.config import load_config, resolve_workspace
+        from alexandria.config import load_config
         from alexandria.core.adapters.sync import run_sync
         from alexandria.core.circuit_breaker import CircuitBreakerRegistry
-        from alexandria.core.ratelimit import RateLimiter, RateLimitConfig
+        from alexandria.core.ratelimit import RateLimitConfig, RateLimiter
         from alexandria.core.workspace import list_workspaces
 
-        config = load_config(self._home)
+        load_config(self._home)
         rate_limiter = RateLimiter()
         rate_limiter.register("github", RateLimitConfig(
             max_tokens=5000, refill_rate=5000 / 3600,
@@ -141,8 +140,8 @@ class SchedulerChild:
 
     def _job_poll_subs(self) -> None:
         """Poll all subscription sources, then auto-ingest pending items."""
-        from alexandria.core.adapters.subscription_poll import poll_subscriptions
         from alexandria.core.adapters.subscription_ingest import auto_ingest_pending
+        from alexandria.core.adapters.subscription_poll import poll_subscriptions
         from alexandria.core.workspace import list_workspaces
 
         with connect(db_path(self._home)) as conn:

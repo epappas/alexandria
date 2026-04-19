@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -28,10 +27,10 @@ console = Console()
 
 def create_command(
     name: str = typer.Argument(..., help="Workspace name (also used as slug)."),
-    slug: Optional[str] = typer.Option(
+    slug: str | None = typer.Option(
         None, "--slug", help="Override the slug derived from the name."
     ),
-    description: Optional[str] = typer.Option(
+    description: str | None = typer.Option(
         None, "--description", "-d", help="Short workspace description."
     ),
 ) -> None:

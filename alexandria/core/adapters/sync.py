@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from alexandria.core.adapters.base import AdapterKind, SyncResult
 from alexandria.core.adapters.events import insert_event
 from alexandria.core.adapters.source_repository import (
     SourceConfig,
@@ -24,7 +23,7 @@ from alexandria.core.adapters.source_repository import (
 )
 from alexandria.core.circuit_breaker import CircuitBreakerRegistry, CircuitOpenError
 from alexandria.core.ratelimit import RateLimiter
-from alexandria.core.runs import Run, RunStatus, insert_run_row, update_run_row, generate_run_id
+from alexandria.core.runs import Run, generate_run_id, insert_run_row, update_run_row
 
 
 @dataclass
@@ -56,7 +55,7 @@ def run_sync(
     report = SyncReport()
 
     # Orphan sweep (amendment I3)
-    swept = sweep_orphaned_source_runs(conn)
+    sweep_orphaned_source_runs(conn)
 
     # Create a parent run row for this sync cycle
     run_id = generate_run_id()
@@ -107,7 +106,7 @@ def run_sync(
         update_run_row(
             conn, run_id,
             status="committed" if report.total_errors == 0 else "rejected",
-            ended_at=datetime.now(timezone.utc).isoformat(),
+            ended_at=datetime.now(UTC).isoformat(),
             verdict="pass" if report.total_errors == 0 else "partial",
         )
         conn.execute("COMMIT")
@@ -129,9 +128,9 @@ def _sync_one_source(
     secret_resolver: Any,
 ) -> dict[str, Any]:
     """Sync a single source. Returns a per-source report dict."""
-    from alexandria.core.adapters.local import LocalAdapter
     from alexandria.core.adapters.git_local import GitLocalAdapter
     from alexandria.core.adapters.github_api import GitHubAdapter
+    from alexandria.core.adapters.local import LocalAdapter
 
     # Circuit breaker check
     if circuit_breakers:

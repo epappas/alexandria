@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
@@ -14,7 +12,7 @@ SUPPORTED_CLIENTS = ("claude-code", "codex")
 
 def hooks_install_command(
     client: str = typer.Argument(..., help="Client: claude-code | codex"),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
 ) -> None:
     """Install Stop + PreCompact hooks into a client."""
     if client not in SUPPORTED_CLIENTS:
@@ -56,7 +54,7 @@ def hooks_uninstall_command(
 
 
 def hooks_verify_command(
-    client: Optional[str] = typer.Argument(None, help="Client to verify (default: all)."),
+    client: str | None = typer.Argument(None, help="Client to verify (default: all)."),
 ) -> None:
     """Verify hook installation and protocol version."""
     clients = [client] if client else list(SUPPORTED_CLIENTS)

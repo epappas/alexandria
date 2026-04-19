@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 
@@ -71,21 +73,20 @@ def reindex_callback(
         _rebuild_beliefs(home, workspace)
 
 
-def _rebuild_beliefs(home: "Path", workspace_slug: str | None) -> None:
+def _rebuild_beliefs(home: Path, workspace_slug: str | None) -> None:
     """Walk wiki pages and rebuild wiki_beliefs from content + sidecars.
 
     This is the B6 backfill path: retroactively processes Phase 2 wiki pages
     that were written before the belief extractor existed. Also serves as the
     disaster-recovery path for wiki_beliefs table corruption.
     """
-    from pathlib import Path
-    from alexandria.config import load_config, resolve_workspace
-    from alexandria.core.workspace import get_workspace, list_workspaces
+    from alexandria.config import load_config
     from alexandria.core.beliefs.extractor import extract_beliefs_from_page
-    from alexandria.core.beliefs.sidecar import read_sidecar, write_sidecar
     from alexandria.core.beliefs.repository import insert_belief
+    from alexandria.core.beliefs.sidecar import read_sidecar, write_sidecar
+    from alexandria.core.workspace import get_workspace, list_workspaces
 
-    config = load_config(home)
+    load_config(home)
     if workspace_slug:
         workspaces_to_process = [get_workspace(home, workspace_slug)]
     else:

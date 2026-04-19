@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -17,7 +16,7 @@ console = Console()
 
 
 def serve_command(
-    workspace: Optional[str] = typer.Option(
+    workspace: str | None = typer.Option(
         None,
         "--workspace",
         "-w",
@@ -43,7 +42,7 @@ def serve_command(
 
 
 def serve_http_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(7219, "--port"),
 ) -> None:
@@ -63,7 +62,7 @@ def install_command(
         ...,
         help="Client to install into: claude-code | claude-desktop | cursor | codex | windsurf",
     ),
-    workspace: Optional[str] = typer.Option(
+    workspace: str | None = typer.Option(
         None,
         "--workspace",
         "-w",
@@ -90,7 +89,7 @@ def install_command(
 
 def status_command() -> None:
     """Show MCP server registration status."""
-    home = resolve_home()
+    resolve_home()
     configs = _detect_registrations()
     if not configs:
         console.print("[yellow]No alexandria MCP registrations detected.[/yellow]")

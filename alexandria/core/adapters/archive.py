@@ -7,11 +7,10 @@ through the standard ingest pipeline.
 from __future__ import annotations
 
 import hashlib
-import os
 import tarfile
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +71,7 @@ class ArchiveAdapter:
                         event_type="extracted_file",
                         title=str(rel),
                         body=content[:500] if content else None,
-                        occurred_at=datetime.now(timezone.utc).isoformat(),
+                        occurred_at=datetime.now(UTC).isoformat(),
                         event_data={
                             "archive": archive_path.name,
                             "content_hash": content_hash,

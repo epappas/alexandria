@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,10 +17,10 @@ console = Console()
 
 def why_command(
     query: str = typer.Argument(..., help="Topic, subject, or belief id to look up."),
-    workspace: Optional[str] = typer.Option(
+    workspace: str | None = typer.Option(
         None, "--workspace", "-w", help="Override the current workspace."
     ),
-    since: Optional[str] = typer.Option(
+    since: str | None = typer.Option(
         None, "--since", help="Only beliefs current at or after this date."
     ),
     include_history: bool = typer.Option(
@@ -38,7 +37,7 @@ def why_command(
     target_slug = workspace or resolve_workspace(config)
 
     try:
-        ws = get_workspace(home, target_slug)
+        get_workspace(home, target_slug)
     except WorkspaceNotFoundError as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -105,7 +104,7 @@ def why_command(
             _print_belief(b)
 
     if superseded:
-        console.print(f"\n[bold]Superseded beliefs (history):[/bold]\n")
+        console.print("\n[bold]Superseded beliefs (history):[/bold]\n")
         for b in superseded:
             _print_belief(b, superseded=True)
 

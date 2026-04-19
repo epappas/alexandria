@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from alexandria.core.capture.conversation import capture_conversation, CaptureError
+from alexandria.core.capture.conversation import CaptureError, capture_conversation
 
 
 def enqueue_capture(
@@ -24,7 +24,7 @@ def enqueue_capture(
 ) -> bool:
     """Enqueue a capture. Returns True if new, False if already queued with same hash."""
     content_hash = _file_hash(Path(transcript_path))
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Check if already processed with same hash
     row = conn.execute(
@@ -65,7 +65,7 @@ def process_capture_queue(
     processed = 0
     for row in rows:
         session_id = row["session_id"]
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         conn.execute(
             "UPDATE capture_queue SET status = 'processing', started_at = ? WHERE session_id = ?",
@@ -92,7 +92,7 @@ def process_capture_queue(
                     """UPDATE capture_queue
                     SET status = 'done', completed_at = ?, last_content_hash = ?
                     WHERE session_id = ?""",
-                    (datetime.now(timezone.utc).isoformat(), result["content_hash"], session_id),
+                    (datetime.now(UTC).isoformat(), result["content_hash"], session_id),
                 )
                 conn.execute("COMMIT")
             except Exception:
@@ -141,7 +141,7 @@ def _emit_capture_event(
         event_type="conversation",
         title=f"Conversation {session_id[:16]}",
         author=client,
-        occurred_at=datetime.now(timezone.utc).isoformat(),
+        occurred_at=datetime.now(UTC).isoformat(),
         event_data={"session_id": session_id, "client": client},
     )
     insert_event(conn, workspace, None, item)

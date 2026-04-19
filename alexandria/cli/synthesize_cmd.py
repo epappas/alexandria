@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
-from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 from alexandria.db.connection import connect, db_path
 
 console = Console()
 
 
 def synthesize_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     period: int = typer.Option(7, "--period", help="Period in days."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing."),
     force: bool = typer.Option(False, "--force", help="Skip eval gate check."),

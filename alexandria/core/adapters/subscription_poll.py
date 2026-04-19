@@ -8,11 +8,9 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from alexandria.core.adapters.base import FetchedItem, SyncResult
 from alexandria.core.adapters.events import insert_event
 from alexandria.core.adapters.source_repository import (
     SourceConfig,
@@ -70,8 +68,8 @@ def _poll_one(
     secret_resolver: Any = None,
 ) -> None:
     """Poll a single subscription source."""
-    from alexandria.core.adapters.rss import RSSAdapter
     from alexandria.core.adapters.imap_newsletter import IMAPNewsletterAdapter
+    from alexandria.core.adapters.rss import RSSAdapter
 
     adapter_map = {
         "rss": RSSAdapter,

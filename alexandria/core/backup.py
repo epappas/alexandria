@@ -21,7 +21,7 @@ from __future__ import annotations
 import sqlite3
 import tarfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from alexandria.db.connection import db_path
@@ -43,7 +43,7 @@ class BackupError(Exception):
 
 def default_backup_filename() -> str:
     """Return a timestamped backup archive filename."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"alexandria-backup-{ts}.tar.gz"
 
 
@@ -110,7 +110,7 @@ def _snapshot_sqlite(home: Path, backups_dir: Path) -> Path:
         )
         return marker
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     snapshot = backups_dir / f"snapshot-{ts}.db"
     if snapshot.exists():
         snapshot.unlink()

@@ -12,14 +12,14 @@ from __future__ import annotations
 import json
 import shutil
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     PENDING = "pending"
     VERIFYING = "verifying"
     COMMITTED = "committed"
@@ -50,12 +50,12 @@ class Run:
 
     def __post_init__(self) -> None:
         if not self.started_at:
-            self.started_at = datetime.now(timezone.utc).isoformat()
+            self.started_at = datetime.now(UTC).isoformat()
 
 
 def generate_run_id() -> str:
     """Generate a unique run ID: date prefix + short UUID."""
-    date = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date = datetime.now(UTC).strftime("%Y%m%d")
     short = uuid.uuid4().hex[:12]
     return f"{date}-{short}"
 
@@ -169,7 +169,7 @@ def commit_run(home: Path, run_id: str, workspace_path: Path) -> list[str]:
     # Write final metadata
     meta_path = get_run_path(home, run_id) / "meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    meta["ended_at"] = datetime.now(timezone.utc).isoformat()
+    meta["ended_at"] = datetime.now(UTC).isoformat()
     meta["status"] = "committed"
     meta["committed_paths"] = committed_paths
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -189,7 +189,7 @@ def reject_run(home: Path, run_id: str, reason: str) -> None:
 
     meta_path = run_path / "meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    meta["ended_at"] = datetime.now(timezone.utc).isoformat()
+    meta["ended_at"] = datetime.now(UTC).isoformat()
     meta["status"] = "rejected"
     meta["reject_reason"] = reason
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -211,7 +211,7 @@ def abandon_run(home: Path, run_id: str, reason: str = "daemon restart") -> None
     meta_path = run_path / "meta.json"
     if meta_path.exists():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        meta["ended_at"] = datetime.now(timezone.utc).isoformat()
+        meta["ended_at"] = datetime.now(UTC).isoformat()
         meta["status"] = "abandoned"
         meta["reject_reason"] = reason
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")

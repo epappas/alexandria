@@ -10,12 +10,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from alexandria.core.beliefs.model import Belief
-from alexandria.core.citations import verify_quote_anchor
-from alexandria.core.citations.anchors import create_anchor
 from alexandria.db.connection import sanitize_fts_query
 
 
@@ -202,7 +200,7 @@ def supersede_beliefs_for_document(
     reason: str = "document_reingested",
 ) -> int:
     """Supersede all current beliefs for a wiki document. Returns count."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     cur = conn.execute(
         """UPDATE wiki_beliefs SET superseded_at = ?, superseded_in_run = ?,
            supersession_reason = ?
@@ -220,7 +218,7 @@ def supersede_belief(
     reason: str = "contradicted_by_new_source",
 ) -> None:
     """Mark an existing belief as superseded by a new one."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """
         UPDATE wiki_beliefs
@@ -305,7 +303,7 @@ def delete_orphaned_beliefs(
     workspace_path: Path,
 ) -> int:
     """Supersede beliefs whose wiki page no longer exists on disk."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     paths = conn.execute(
         """SELECT DISTINCT wiki_document_path FROM wiki_beliefs
         WHERE workspace = ? AND superseded_at IS NULL AND wiki_document_path != ''""",
@@ -330,7 +328,7 @@ def dedup_current_beliefs(
     workspace: str,
 ) -> int:
     """Find and supersede duplicate current beliefs. Keeps oldest per group."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     groups = conn.execute(
         """SELECT MIN(rowid) as keep_rowid,
                   statement, wiki_document_path, subject, predicate, object

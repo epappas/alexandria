@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,11 +16,11 @@ console = Console()
 
 
 def capture_conversation_command(
-    transcript: Optional[str] = typer.Argument(None, help="Path to transcript file."),
+    transcript: str | None = typer.Argument(None, help="Path to transcript file."),
     client: str = typer.Option("claude-code", "--client", "-c"),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     detach: bool = typer.Option(False, "--detach", help="Return immediately, capture in background."),
-    reason: Optional[str] = typer.Option(None, "--reason", help="Capture reason (e.g., pre-compact)."),
+    reason: str | None = typer.Option(None, "--reason", help="Capture reason (e.g., pre-compact)."),
 ) -> None:
     """Capture a conversation transcript into the knowledge engine."""
     home = resolve_home()
@@ -41,7 +39,7 @@ def capture_conversation_command(
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return
 
-    from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+    from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 
     try:
         ws = get_workspace(home, slug)
@@ -57,7 +55,8 @@ def capture_conversation_command(
             raise typer.Exit(code=1)
 
     from pathlib import Path
-    from alexandria.core.capture.conversation import capture_conversation, CaptureError
+
+    from alexandria.core.capture.conversation import CaptureError, capture_conversation
 
     try:
         result = capture_conversation(
@@ -74,8 +73,8 @@ def capture_conversation_command(
 
 
 def captures_list_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    status: Optional[str] = typer.Option(None, "--status"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    status: str | None = typer.Option(None, "--status"),
 ) -> None:
     """List captured conversations."""
     home = resolve_home()

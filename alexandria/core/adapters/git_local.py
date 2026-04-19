@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -150,7 +150,7 @@ class GitLocalAdapter:
 
     def _write_last_sha(self, state_file: Path, sha: str) -> None:
         state_file.write_text(
-            json.dumps({"last_sha": sha, "synced_at": datetime.now(timezone.utc).isoformat()}),
+            json.dumps({"last_sha": sha, "synced_at": datetime.now(UTC).isoformat()}),
             encoding="utf-8",
         )
 

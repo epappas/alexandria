@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +49,7 @@ def save_query_as_page(
     run = create_run(home, workspace_slug, "cli:query-save", "query-save")
     staged = get_staged_dir(home, run.run_id)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stage_new_page(
         staged, topic="queries", slug=slug, title=title, body=body,
         sources_line=f"Query answer, {now.strftime('%Y-%m-%d')}",

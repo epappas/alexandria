@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     @mcp.tool()
     def git_log(
         workspace: str | None = None,
@@ -84,10 +86,9 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
 def _resolve_git_repo(
     workspace: str | None,
     source_name: str | None,
-    resolve: "WorkspaceResolver",
-) -> "str | Path":
+    resolve: WorkspaceResolver,
+) -> str | Path:
     """Find the git repo directory for a workspace/source. Returns path or error string."""
-    from pathlib import Path
 
     ws_path, slug = resolve(workspace)
     git_dir = ws_path / "raw" / "git"

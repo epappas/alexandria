@@ -8,9 +8,8 @@ event, level, data. Written to per-family JSONL files under
 from __future__ import annotations
 
 import json
-import os
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +24,7 @@ class StructuredLogger:
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
     def _log_path(self) -> Path:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
         return self._log_dir / f"{self._family}-{date}.jsonl"
 
     def log(
@@ -39,7 +38,7 @@ class StructuredLogger:
         data: dict[str, Any] | None = None,
     ) -> None:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "event": event,
             "level": level,
             "family": self._family,
@@ -54,9 +53,8 @@ class StructuredLogger:
             entry["data"] = data
 
         line = json.dumps(entry, default=str) + "\n"
-        with self._lock:
-            with self._log_path().open("a", encoding="utf-8") as f:
-                f.write(line)
+        with self._lock, self._log_path().open("a", encoding="utf-8") as f:
+            f.write(line)
 
     def info(self, event: str, **kwargs: Any) -> None:
         self.log(event, level="info", **kwargs)

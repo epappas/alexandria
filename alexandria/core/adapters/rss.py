@@ -9,15 +9,14 @@ from __future__ import annotations
 import hashlib
 import html
 import ipaddress
-import json
 import re
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 from alexandria.core.adapters.base import AdapterKind, FetchedItem, SyncResult
 
@@ -73,7 +72,7 @@ class RSSAdapter:
                 body=content_md[:500] if content_md else None,
                 url=entry.get("link"),
                 author=entry.get("author"),
-                occurred_at=pub_date or datetime.now(timezone.utc).isoformat(),
+                occurred_at=pub_date or datetime.now(UTC).isoformat(),
                 event_data={
                     "external_id": entry.get("id") or entry.get("link", ""),
                     "content_hash": content_hash,
@@ -152,13 +151,13 @@ def _parse_feed(raw_xml: str) -> list[dict[str, Any]]:
         published = ""
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             try:
-                dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                dt = datetime(*entry.published_parsed[:6], tzinfo=UTC)
                 published = dt.isoformat()
             except (ValueError, TypeError):
                 published = getattr(entry, "published", "")
         elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
             try:
-                dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
+                dt = datetime(*entry.updated_parsed[:6], tzinfo=UTC)
                 published = dt.isoformat()
             except (ValueError, TypeError):
                 published = getattr(entry, "updated", "")

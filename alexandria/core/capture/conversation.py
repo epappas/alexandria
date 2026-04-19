@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +95,7 @@ def capture_conversation(
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     # Write to raw/conversations/
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
     out_dir = workspace_path / "raw" / "conversations" / client
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{date_str}-{session_id[:16]}.md"
@@ -211,7 +211,7 @@ def _build_markdown(
         f"# Conversation — {client}",
         "",
         f"- session: {session_id}",
-        f"- captured: {datetime.now(timezone.utc).isoformat()}",
+        f"- captured: {datetime.now(UTC).isoformat()}",
         f"- messages: {len(messages)}",
         "", "---", "",
     ]

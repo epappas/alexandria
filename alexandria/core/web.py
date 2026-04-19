@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from datetime import UTC
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 
 class WebFetchError(Exception):
@@ -172,7 +173,7 @@ def _html_to_markdown(html: str) -> str:
     return "\n".join(cleaned).strip()
 
 
-def _extract_main_content(soup: "BeautifulSoup") -> "Tag | None":
+def _extract_main_content(soup: BeautifulSoup) -> Tag | None:  # noqa: F821
     """Extract the main content element using BeautifulSoup.
 
     Tries common content containers in priority order.
@@ -231,5 +232,5 @@ def _title_from_url(url: str) -> str:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    return datetime.now(UTC).isoformat()

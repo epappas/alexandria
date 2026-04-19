@@ -10,15 +10,12 @@ to reason over the primitives and produce grounded answers.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from alexandria.core.search import hybrid_search
-from alexandria.db.connection import sanitize_fts_query
-from alexandria.llm.base import CompletionRequest, CompletionResult, Message, ToolDefinition
-
+from alexandria.llm.base import CompletionRequest, Message, ToolDefinition
 
 # The tools the agent can call — mirrors the MCP surface
 AGENT_TOOLS = [
@@ -215,7 +212,7 @@ def _rag_query(
     # Gather context: FTS search + beliefs
     search_results = _tool_search(conn, workspace, question)
     belief_results = _tool_beliefs(conn, workspace)
-    grep_results = _tool_grep(workspace_path, question.split()[0] if question.split() else "")
+    _tool_grep(workspace_path, question.split()[0] if question.split() else "")
 
     # Hybrid search — BM25 + recency + belief support
     hits = hybrid_search(conn, workspace, question, limit=5)

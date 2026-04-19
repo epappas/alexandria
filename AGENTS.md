@@ -47,9 +47,10 @@ Alexandria is a local-first knowledge engine with three entry points: CLI (`alxi
 
 Every wiki write follows this exact sequence through `alexandria/core/ingest.py`:
 
-1. Read source (text, PDF via `core/pdf.py`, or URL via `core/web.py`)
-2. Copy to `raw/local/` with SHA-256 dedup (collision appends `-2`, `-3`, etc.)
-3. Create a **Run** (5-state machine: pending, verifying, committed, rejected, abandoned)
+1. Read source (text, PDF via `core/pdf.py`, URL via `core/web.py`, code via `core/code.py`, conversation via `core/capture/`)
+2. **Dedup check** — content hash compared against `documents` table. Unchanged files return immediately with zero overhead.
+3. Copy to `raw/local/` with SHA-256 dedup (collision appends `-2`, `-3`, etc.)
+4. Create a **Run** (5-state machine: pending, verifying, committed, rejected, abandoned)
 4. Stage wiki page in `~/.alexandria/runs/<run_id>/staged/` with citations
 5. Run `DeterministicVerifier` — checks footnotes, quote anchors (SHA-256 hashes), source existence
 6. Verdict must be exactly `"commit"` to proceed; anything else triggers rejection
@@ -74,7 +75,7 @@ except Exception:
 The migrator (`db/migrator.py`) uses `executescript()` for DDL (which auto-commits), then records metadata in a separate `BEGIN IMMEDIATE`/`COMMIT` block. All DDL uses `IF NOT EXISTS` for idempotency. Migrator checksums every applied migration with SHA-256 and refuses to proceed on tampering.
 
 - SQLite at `~/.alexandria/state.db`
-- 8 migrations in `alexandria/db/migrations/` (applied automatically)
+- 10 migrations in `alexandria/db/migrations/` (applied automatically)
 - Key tables: `workspaces`, `documents`, `documents_fts`, `runs`, `wiki_beliefs`, `wiki_beliefs_fts`, `source_adapters`, `source_runs`, `events`, `events_fts`, `subscription_items`, `capture_queue`, `eval_runs`
 
 ### MCP Server
@@ -83,7 +84,10 @@ Two binding modes in `mcp/server.py`:
 - **Open mode** (`alxia mcp serve`): all workspaces accessible, every tool requires explicit `workspace` argument
 - **Pinned mode** (`alxia mcp serve --workspace <slug>`): locked to one workspace, other values rejected
 
-16 tools registered in `mcp/tools/`. Each tool is a module with a `register(mcp, resolve_workspace)` function.
+20 tools registered in `mcp/tools/`. Each tool is a module with a `register(mcp, resolve_workspace)` function.
+
+Navigation: `guide`, `overview`, `list`, `grep`, `search`, `read`, `follow`, `history`, `why`, `timeline`, `events`, `sources`, `subscriptions`, `git_log`, `git_show`, `git_blame`.
+Write: `ingest` (files, dirs, URLs, repos, conversations), `belief_add`, `belief_supersede`, `query`.
 
 ### Source Adapters
 
@@ -95,6 +99,23 @@ All adapters in `core/adapters/` implement the same sync pattern: `sync(workspac
 2. **Filesystem is source of truth** for documents. SQLite is a materialized view for search/metadata/events.
 3. **Every wiki write goes through the verifier** — citations must link to real source quotes with SHA-256 hash anchors.
 4. **Beliefs are structured claims** with supersession chains, not just text. `alxia why <topic>` traces provenance.
+5. **Hybrid search** — BM25 (55%) + recency decay (30%) + belief support (15%) for composite scoring.
+6. **AST extraction** — Python, TypeScript, Rust, Go, Terraform, Ansible, YAML parsed into structured beliefs.
+7. **Conversation capture** — Claude Code JSONL sessions ingested with artifact extraction (papers, repos).
+8. **Self-awareness** — Alexandria can answer queries about its own state, capabilities, and ingested content.
+9. **Document dedup** — content-hash check skips re-ingest of unchanged files with zero overhead.
+10. **Belief integrity** — supersede-all-then-restore pattern prevents duplicates on re-ingest. `alxia beliefs cleanup` removes orphans and deduplicates.
+
+### Setup for Claude Code
+
+```bash
+pip install alexandria-wiki           # or: uv pip install alexandria-wiki
+alxia init                            # creates ~/.alexandria/
+alxia mcp install claude-code         # registers MCP server
+alxia hooks install claude-code       # auto-captures conversations on session end
+```
+
+Restart Claude Code. Alexandria tools appear as `mcp__alexandria__*`.
 
 ## Project Structure
 
@@ -114,14 +135,15 @@ alexandria/
   eval/           # M1-M5 quality metrics
   hooks/          # Hook installers for Claude Code, Codex
   llm/            # LLM provider abstraction (Anthropic, OpenAI, compatible)
-  mcp/            # MCP server (stdio + HTTP/SSE) with 16 tools
+  mcp/            # MCP server (stdio + HTTP/SSE) with 20 tools
   observability/  # Structured JSONL logger
-tests/            # 352 tests, no mocks of production code
+tests/            # 352+ tests, no mocks of production code
 scripts/          # build.sh, push.sh, publish.sh
 ```
 
 ## Key Constraints
 
+- **Never claim something works unless you have validated it and shown evidence.** Run the code, check actual output, verify database state, confirm files on disk. If you cannot test it (e.g. LLM path inside a Claude Code session), say so explicitly. Be ready to vouch for every result you report as delivered. Claims affect SLOs/SLA contracts and may be used as legal evidence — 100% accuracy required.
 - **Zero tolerance for stubs/fakes/mocks/TODOs/placeholders** in production code. Tests use real SQLite, real filesystem, real git repos.
 - **Every function under 50 lines.** Assert early, return fast. No deep if/else nesting.
 - **Typed throughout.** Every module starts with `from __future__ import annotations`.

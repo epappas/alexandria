@@ -16,11 +16,12 @@ Design rules from the architecture (``16_operations_and_reliability.md``):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from alexandria.db.connection import fetch_user_version, set_user_version
@@ -44,7 +45,7 @@ class Migration:
     sha256: str
 
     @classmethod
-    def from_path(cls, path: Path) -> "Migration":
+    def from_path(cls, path: Path) -> Migration:
         match = MIGRATION_FILE_RE.match(path.name)
         if not match:
             raise MigratorError(
@@ -153,17 +154,15 @@ class Migrator:
                     migration.name,
                     str(migration.path),
                     migration.sha256,
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                     "auto",
                 ),
             )
             set_user_version(conn, migration.version)
             conn.execute("COMMIT")
         except sqlite3.Error as exc:
-            try:
+            with contextlib.suppress(sqlite3.OperationalError):
                 conn.execute("ROLLBACK")
-            except sqlite3.OperationalError:
-                pass
             raise MigratorError(
                 f"migration {migration.version} ({migration.name}) metadata failed: {exc}"
             ) from exc

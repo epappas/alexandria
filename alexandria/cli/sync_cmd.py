@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
-from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 from alexandria.db.connection import connect, db_path
 
 console = Console()
 
 
 def sync_command(
-    source_id: Optional[str] = typer.Argument(None, help="Sync a specific source (by ID)."),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    source_id: str | None = typer.Argument(None, help="Sync a specific source (by ID)."),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
 ) -> None:
     """Pull from configured sources.
 
@@ -39,7 +37,7 @@ def sync_command(
 
     from alexandria.core.adapters.sync import run_sync
     from alexandria.core.circuit_breaker import CircuitBreakerRegistry
-    from alexandria.core.ratelimit import RateLimiter, RateLimitConfig
+    from alexandria.core.ratelimit import RateLimitConfig, RateLimiter
 
     rate_limiter = RateLimiter()
     rate_limiter.register("github", RateLimitConfig(

@@ -8,7 +8,6 @@ the standard ingest pipeline.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -21,10 +20,10 @@ console = Console()
 
 def ingest_command(
     source: str = typer.Argument(..., help="File, directory, URL, or git repo URL."),
-    workspace: Optional[str] = typer.Option(
+    workspace: str | None = typer.Option(
         None, "--workspace", "-w", help="Override the current workspace."
     ),
-    topic: Optional[str] = typer.Option(
+    topic: str | None = typer.Option(
         None, "--topic", help="Topic directory for the wiki page (default: inferred)."
     ),
     dry_run: bool = typer.Option(
@@ -130,7 +129,9 @@ def _ingest_conversation(
     home: Path, slug: str, ws_path: Path, jsonl_path: Path, topic: str | None,
 ) -> None:
     from alexandria.core.capture.conversation import (
-        capture_conversation, detect_format, CaptureError,
+        CaptureError,
+        capture_conversation,
+        detect_format,
     )
     from alexandria.core.ingest import IngestError, ingest_file
 
@@ -203,7 +204,7 @@ def _ingest_conversation(
 def _ingest_url(
     home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
 ) -> None:
-    from alexandria.core.web import fetch_and_save, WebFetchError
+    from alexandria.core.web import WebFetchError, fetch_and_save
 
     console.print(f"[dim]Fetching {url}...[/dim]")
     try:
@@ -219,7 +220,7 @@ def _ingest_url(
 def _ingest_directory(
     home: Path, slug: str, ws_path: Path, dir_path: Path, topic: str | None,
 ) -> None:
-    from alexandria.core.repo_ingest import ingest_repo, _collect_files, ALL_INGEST_EXTS
+    from alexandria.core.repo_ingest import ALL_INGEST_EXTS, _collect_files, ingest_repo
 
     files = _collect_files(dir_path, ALL_INGEST_EXTS)
     console.print(f"Found [bold]{len(files)}[/bold] files to ingest")
@@ -239,7 +240,11 @@ def _ingest_git_repo(
     home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
 ) -> None:
     from alexandria.core.repo_ingest import (
-        clone_repo, ingest_repo, _collect_files, ALL_INGEST_EXTS, IngestError,
+        ALL_INGEST_EXTS,
+        IngestError,
+        _collect_files,
+        clone_repo,
+        ingest_repo,
     )
 
     console.print(f"[dim]Cloning {url}...[/dim]")
@@ -274,9 +279,9 @@ def _print_progress(rel: str, status: str) -> None:
     console.print(f"  {sym} {rel}")
 
 
-def _print_summary(result: "RepoIngestResult") -> None:
+def _print_summary(result: RepoIngestResult) -> None:  # noqa: F821
     console.print()
-    console.print(f"[bold]Results:[/bold]")
+    console.print("[bold]Results:[/bold]")
     console.print(f"  Committed: [green]{len(result.committed)}[/green]")
     if result.skipped:
         console.print(f"  Skipped:   [dim]{len(result.skipped)}[/dim] (already ingested)")

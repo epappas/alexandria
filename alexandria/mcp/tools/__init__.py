@@ -9,30 +9,31 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
     from collections.abc import Callable
     from pathlib import Path
+
+    from mcp.server.fastmcp import FastMCP
 
     WorkspaceResolver = Callable[[str | None], tuple[Path, str]]
 
 
-def register_all(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register_all(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     """Register all implemented MCP tools on the given FastMCP instance."""
     from alexandria.mcp.tools import (
-        guide_tool,
-        overview_tool,
-        list_tool,
-        grep_tool,
-        search_tool,
-        read_tool,
-        follow_tool,
-        history_tool,
-        why_tool,
         events_tool,
-        timeline_tool,
+        follow_tool,
         git_tool,
+        grep_tool,
+        guide_tool,
+        history_tool,
+        list_tool,
+        overview_tool,
+        read_tool,
+        search_tool,
         sources_tool,
         subscriptions_tool,
+        timeline_tool,
+        why_tool,
         write_tool,
     )
 

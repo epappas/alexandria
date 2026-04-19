@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from alexandria.eval.metrics import ALL_METRICS, MetricResult
 
@@ -21,7 +20,7 @@ def run_metric(
     if metric is None:
         raise ValueError(f"unknown metric: {metric_name}. Available: {[m.name for m in ALL_METRICS]}")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     run_id = f"eval-{uuid.uuid4().hex[:12]}"
 
     result = metric.compute(conn, workspace)

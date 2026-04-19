@@ -7,15 +7,13 @@ Implements the LLMProvider protocol for OpenAI API and compatible endpoints
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from alexandria.llm.base import (
     CompletionRequest,
     CompletionResult,
-    Message,
     Usage,
 )
 

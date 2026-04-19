@@ -21,10 +21,8 @@ from alexandria.core.verifier.protocol import (
 )
 from alexandria.llm.base import (
     CompletionRequest,
-    CompletionResult,
     LLMProvider,
     Message,
-    Usage,
 )
 from alexandria.llm.budget import BudgetEnforcer
 

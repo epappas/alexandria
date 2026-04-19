@@ -14,14 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from alexandria.db.connection import connect, db_path
-
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
     @mcp.tool(
         name="guide",
@@ -80,7 +79,7 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
             log_text = log_path.read_text(encoding="utf-8")
             log_lines = log_text.strip().split("\n")
             recent = log_lines[-45:]  # ~3 lines per entry × 15
-            parts.append(f"\n### Recent log\n" + "\n".join(recent))
+            parts.append("\n### Recent log\n" + "\n".join(recent))
         else:
             parts.append("\n### Recent log\nNo log entries yet.")
 

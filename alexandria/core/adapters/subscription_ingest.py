@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from alexandria.core.ingest import IngestError, ingest_file
 

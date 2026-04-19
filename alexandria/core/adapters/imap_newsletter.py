@@ -7,13 +7,14 @@ Requires IMAPS or STARTTLS — plaintext IMAP is rejected.
 
 from __future__ import annotations
 
+import contextlib
 import email
 import email.policy
 import hashlib
 import imaplib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -95,7 +96,7 @@ class IMAPNewsletterAdapter:
                     body=content_md[:500] if content_md else None,
                     url=None,
                     author=parsed["from_name"] or parsed["from_addr"],
-                    occurred_at=parsed["date"] or datetime.now(timezone.utc).isoformat(),
+                    occurred_at=parsed["date"] or datetime.now(UTC).isoformat(),
                     event_data={
                         "external_id": parsed["message_id"],
                         "content_hash": content_hash,
@@ -110,10 +111,8 @@ class IMAPNewsletterAdapter:
 
             _save_seen_ids(state_file, seen_ids)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.logout()
-            except Exception:
-                pass
 
         return items, result
 
@@ -315,5 +314,5 @@ def _load_seen_ids(state_file: Path) -> set[str]:
 
 
 def _save_seen_ids(state_file: Path, seen_ids: set[str]) -> None:
-    data = {"seen_ids": sorted(seen_ids), "updated_at": datetime.now(timezone.utc).isoformat()}
+    data = {"seen_ids": sorted(seen_ids), "updated_at": datetime.now(UTC).isoformat()}
     state_file.write_text(json.dumps(data, indent=2), encoding="utf-8")

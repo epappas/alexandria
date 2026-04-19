@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -17,7 +16,7 @@ console = Console()
 
 def eval_run_command(
     metric: str = typer.Option("all", "--metric", "-m", help="Metric: M1|M2|M4|M5|all"),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Run evaluation metrics."""
@@ -58,7 +57,7 @@ def eval_run_command(
 
 
 def eval_report_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     since: str = typer.Option("30d", "--since"),
 ) -> None:
     """Show evaluation history."""

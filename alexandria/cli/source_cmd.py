@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
-from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
 from alexandria.db.connection import connect, db_path
 
 console = Console()
@@ -20,22 +18,22 @@ VALID_TYPES = ("local", "git-local", "github", "rss", "imap", "youtube", "notion
 def source_add_command(
     adapter_type: str = typer.Argument(..., help="Adapter type: local|git-local|github|rss|imap|youtube|notion|huggingface|folder|archive"),
     name: str = typer.Option(..., "--name", "-n", help="Human-readable name for this source."),
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    path: Optional[str] = typer.Option(None, "--path", help="Path (for local/folder/archive adapters)."),
-    repo_url: Optional[str] = typer.Option(None, "--repo-url", help="Git repo URL."),
-    owner: Optional[str] = typer.Option(None, "--owner", help="GitHub owner."),
-    repo: Optional[str] = typer.Option(None, "--repo", help="GitHub repo name."),
-    token_ref: Optional[str] = typer.Option(None, "--token-ref", help="Secret vault ref for token."),
-    feed_url: Optional[str] = typer.Option(None, "--feed-url", help="RSS/Atom feed URL."),
-    urls: Optional[str] = typer.Option(None, "--urls", help="Comma-separated URLs (youtube)."),
-    repos: Optional[str] = typer.Option(None, "--repos", help="Comma-separated repo IDs (huggingface)."),
-    page_ids: Optional[str] = typer.Option(None, "--page-ids", help="Comma-separated Notion page IDs."),
-    database_ids: Optional[str] = typer.Option(None, "--database-ids", help="Comma-separated Notion DB IDs."),
-    imap_host: Optional[str] = typer.Option(None, "--imap-host", help="IMAP server host."),
-    imap_user: Optional[str] = typer.Option(None, "--imap-user", help="IMAP username."),
-    imap_pass_ref: Optional[str] = typer.Option(None, "--imap-pass-ref", help="Vault ref for IMAP password."),
-    imap_folder: Optional[str] = typer.Option("INBOX", "--imap-folder", help="IMAP folder."),
-    from_allowlist: Optional[str] = typer.Option(None, "--from-allowlist", help="Comma-separated sender filter."),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    path: str | None = typer.Option(None, "--path", help="Path (for local/folder/archive adapters)."),
+    repo_url: str | None = typer.Option(None, "--repo-url", help="Git repo URL."),
+    owner: str | None = typer.Option(None, "--owner", help="GitHub owner."),
+    repo: str | None = typer.Option(None, "--repo", help="GitHub repo name."),
+    token_ref: str | None = typer.Option(None, "--token-ref", help="Secret vault ref for token."),
+    feed_url: str | None = typer.Option(None, "--feed-url", help="RSS/Atom feed URL."),
+    urls: str | None = typer.Option(None, "--urls", help="Comma-separated URLs (youtube)."),
+    repos: str | None = typer.Option(None, "--repos", help="Comma-separated repo IDs (huggingface)."),
+    page_ids: str | None = typer.Option(None, "--page-ids", help="Comma-separated Notion page IDs."),
+    database_ids: str | None = typer.Option(None, "--database-ids", help="Comma-separated Notion DB IDs."),
+    imap_host: str | None = typer.Option(None, "--imap-host", help="IMAP server host."),
+    imap_user: str | None = typer.Option(None, "--imap-user", help="IMAP username."),
+    imap_pass_ref: str | None = typer.Option(None, "--imap-pass-ref", help="Vault ref for IMAP password."),
+    imap_folder: str | None = typer.Option("INBOX", "--imap-folder", help="IMAP folder."),
+    from_allowlist: str | None = typer.Option(None, "--from-allowlist", help="Comma-separated sender filter."),
 ) -> None:
     """Configure a new source adapter."""
     if adapter_type not in VALID_TYPES:
@@ -47,7 +45,7 @@ def source_add_command(
     slug = workspace or resolve_workspace(config)
 
     try:
-        ws = get_workspace(home, slug)
+        get_workspace(home, slug)
     except WorkspaceNotFoundError as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -79,7 +77,7 @@ def source_add_command(
 
 
 def source_list_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
 ) -> None:
     """List configured source adapters."""
     home = resolve_home()

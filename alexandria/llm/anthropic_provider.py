@@ -12,8 +12,8 @@ Per ``11_inference_endpoint.md`` and ``PLAN_AMENDMENTS.md`` B2:
 from __future__ import annotations
 
 import os
-import time
 import random
+import time
 from typing import Any
 
 from alexandria.llm.base import (

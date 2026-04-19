@@ -5,9 +5,8 @@ from __future__ import annotations
 import hashlib
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -26,16 +25,16 @@ SLUG_CHARS_RE = re.compile(r"[^a-z0-9]+")
 
 
 def paste_command(
-    title: Optional[str] = typer.Option(
+    title: str | None = typer.Option(
         None,
         "--title",
         "-t",
         help="Title for the captured note. Used as the filename slug.",
     ),
-    workspace: Optional[str] = typer.Option(
+    workspace: str | None = typer.Option(
         None, "--workspace", "-w", help="Override the current workspace."
     ),
-    content: Optional[str] = typer.Option(
+    content: str | None = typer.Option(
         None,
         "--content",
         help="Inline content (otherwise stdin is read).",
@@ -62,7 +61,7 @@ def paste_command(
         console.print("[red]error:[/red] empty content (provide --content or pipe to stdin)")
         raise typer.Exit(code=1)
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     slug = _slugify(title or "untitled")
     local_dir = ws.raw_dir / "local"
     local_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +99,7 @@ def paste_command(
         f"# {title or slug.replace('-', ' ').title()}\n"
         f"\n"
         f"> Source: paste\n"
-        f"> Collected: {datetime.now(timezone.utc).isoformat()}\n"
+        f"> Collected: {datetime.now(UTC).isoformat()}\n"
         f"> Workspace: {ws.slug}\n"
         f"\n"
     )
@@ -139,7 +138,7 @@ def _record_document(home: Path, ws: Workspace, target: Path, body_sha: str) -> 
     sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
     doc_id = sha[:32]
     size = target.stat().st_size
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with connect(db_path(home)) as conn:
         conn.execute("BEGIN IMMEDIATE")

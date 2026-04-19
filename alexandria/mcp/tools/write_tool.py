@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
     from alexandria.mcp.tools import WorkspaceResolver
 
 
-def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
+def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     @mcp.tool()
     def belief_add(
         statement: str,
@@ -28,9 +29,9 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         be stored with provenance linking it to the source.
         """
         from alexandria.config import resolve_home
-        from alexandria.db.connection import connect, db_path
         from alexandria.core.beliefs.model import Belief
         from alexandria.core.beliefs.repository import insert_belief
+        from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -72,11 +73,13 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         marked as superseded with the reason, and a new belief is created.
         """
         from alexandria.config import resolve_home
-        from alexandria.db.connection import connect, db_path
         from alexandria.core.beliefs.model import Belief
         from alexandria.core.beliefs.repository import (
-            get_belief, insert_belief, supersede_belief,
+            get_belief,
+            insert_belief,
+            supersede_belief,
         )
+        from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -129,9 +132,10 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         - Local directory path (ingests all supported files)
         """
         from pathlib import Path
+
+        from alexandria.cli.ingest_cmd import _is_bare_url, _is_git_url, _is_github_shorthand
         from alexandria.config import resolve_home
-        from alexandria.core.ingest import ingest_file, IngestError
-        from alexandria.cli.ingest_cmd import _is_git_url, _is_github_shorthand
+        from alexandria.core.ingest import IngestError, ingest_file
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -159,7 +163,7 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
 
         # HTTP URL (non-git)
         if source.startswith(("http://", "https://")):
-            from alexandria.core.web import fetch_and_save, WebFetchError
+            from alexandria.core.web import WebFetchError, fetch_and_save
             try:
                 source_path = fetch_and_save(source, ws_path)
             except WebFetchError as exc:
@@ -189,7 +193,9 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         # JSONL conversation transcript
         if local.suffix == ".jsonl":
             from alexandria.core.capture.conversation import (
-                capture_conversation, detect_format, CaptureError,
+                CaptureError,
+                capture_conversation,
+                detect_format,
             )
             fmt = detect_format(local)
             if fmt != "unknown":
@@ -212,7 +218,7 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
                 # Ingest referenced artifacts
                 from alexandria.core.capture.artifacts import extract_artifacts
                 from alexandria.core.capture.conversation import _parse_claude_code_jsonl
-                from alexandria.core.web import fetch_and_save, WebFetchError
+                from alexandria.core.web import WebFetchError, fetch_and_save
 
                 raw_msgs = _parse_claude_code_jsonl(local) if fmt == "claude-code" else []
                 artifacts = extract_artifacts(raw_msgs)
@@ -252,8 +258,8 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
         a wiki page for future reference.
         """
         from alexandria.config import resolve_home
-        from alexandria.db.connection import connect, db_path
         from alexandria.core.agent_loop import run_agent_query
+        from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -281,8 +287,7 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
 
         return answer + source_text
 
-    def _format_repo_result(source: str, result: "RepoIngestResult") -> str:
-        from alexandria.core.repo_ingest import RepoIngestResult
+    def _format_repo_result(source: str, result: RepoIngestResult) -> str:  # noqa: F821
         lines = [f"Ingested: {source}", f"Committed: {len(result.committed)} files"]
         if result.rejected:
             lines.append(f"Rejected: {len(result.rejected)}")

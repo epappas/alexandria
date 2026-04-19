@@ -7,7 +7,7 @@ Supports incremental sync via content hashing.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +63,7 @@ class LocalAdapter:
                     event_type="file_sync",
                     title=path.name,
                     body=None,
-                    occurred_at=datetime.now(timezone.utc).isoformat(),
+                    occurred_at=datetime.now(UTC).isoformat(),
                     raw_content=content,
                     raw_filename=rel,
                     event_data={"path": rel, "size": len(content), "hash": content_hash},

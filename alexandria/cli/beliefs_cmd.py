@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -24,8 +23,8 @@ console = Console()
 
 
 def list_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
-    topic: Optional[str] = typer.Option(None, "--topic", help="Filter by topic."),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    topic: str | None = typer.Option(None, "--topic", help="Filter by topic."),
     current_only: bool = typer.Option(True, "--current/--all", help="Show only current beliefs."),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -110,7 +109,7 @@ def history_command(
 
 
 def verify_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Re-validate every belief's quote anchors against live raw sources."""
@@ -146,7 +145,7 @@ def verify_command(
 
 
 def export_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     format: str = typer.Option("json", "--format", help="json or csv"),
 ) -> None:
     """Export beliefs to JSON or CSV."""
@@ -174,7 +173,7 @@ def export_command(
 
 
 def cleanup_command(
-    workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview without applying."),
 ) -> None:
     """Dedup beliefs and supersede orphans whose wiki pages no longer exist."""
@@ -182,7 +181,7 @@ def cleanup_command(
     config = load_config(home)
     slug = workspace or resolve_workspace(config)
 
-    from alexandria.core.workspace import get_workspace, WorkspaceNotFoundError
+    from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
     try:
         ws = get_workspace(home, slug)
     except WorkspaceNotFoundError as exc:

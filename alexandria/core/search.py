@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import math
 import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from alexandria.db.connection import sanitize_fts_query
 
@@ -87,7 +87,7 @@ def hybrid_search(
     )
 
     # 4. Score each hit
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hits: list[SearchHit] = []
 
     for row in rows:
@@ -132,7 +132,7 @@ def _recency_score(
     try:
         updated = datetime.fromisoformat(updated_at)
         if updated.tzinfo is None:
-            updated = updated.replace(tzinfo=timezone.utc)
+            updated = updated.replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return 0.0
     age_hours = max(0.0, (now - updated).total_seconds() / 3600)

@@ -6,7 +6,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -49,7 +49,7 @@ def insert_source(
 ) -> str:
     """Insert a new source adapter. Returns source_id."""
     source_id = f"src-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO source_adapters
           (source_id, workspace, adapter_type, name, config_json, created_at, updated_at)
@@ -89,7 +89,7 @@ def remove_source(conn: sqlite3.Connection, source_id: str) -> bool:
 def toggle_source(conn: sqlite3.Connection, source_id: str, enabled: bool) -> None:
     conn.execute(
         "UPDATE source_adapters SET enabled = ?, updated_at = ? WHERE source_id = ?",
-        (int(enabled), datetime.now(timezone.utc).isoformat(), source_id),
+        (int(enabled), datetime.now(UTC).isoformat(), source_id),
     )
 
 
@@ -104,7 +104,7 @@ def create_source_run(
 ) -> str:
     """Create a new source_run row. Returns source_run_id."""
     source_run_id = f"srun-{uuid.uuid4().hex[:12]}"
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """INSERT INTO source_runs
           (source_run_id, source_id, run_id, status, started_at, triggered_by)
@@ -129,7 +129,7 @@ def complete_source_run(
         WHERE source_run_id = ?""",
         (
             status,
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(UTC).isoformat(),
             items_synced,
             items_errored,
             error_message,
@@ -144,7 +144,7 @@ def sweep_orphaned_source_runs(conn: sqlite3.Connection) -> int:
         """UPDATE source_runs
         SET status = 'abandoned', ended_at = ?, error_message = 'orphan sweep'
         WHERE status IN ('running', 'pending')""",
-        (datetime.now(timezone.utc).isoformat(),),
+        (datetime.now(UTC).isoformat(),),
     )
     return cur.rowcount
 
