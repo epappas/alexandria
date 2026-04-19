@@ -11,6 +11,7 @@ Phase 2b ships the basic ingest for local markdown files. Source adapters
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,26 +52,62 @@ class IngestResult:
         self.source_path = source_path
 
 
-def document_unchanged(
+@dataclass
+class DedupResult:
+    """Result of dedup check — unchanged, changed (with diff), or new."""
+
+    status: str  # "unchanged" | "changed" | "new"
+    added: int = 0
+    removed: int = 0
+    diff_preview: str = ""
+
+
+def check_dedup(
     conn: sqlite3.Connection,
     workspace: str,
     content_hash: str,
+    new_content: str,
     source_path: str = "",
-) -> bool:
-    """Check if a document was already ingested (by hash or source path)."""
+) -> DedupResult:
+    """Check if a document was already ingested. Returns diff info if changed."""
+    # Exact hash match — unchanged
     if conn.execute(
         "SELECT 1 FROM documents WHERE workspace = ? AND content_hash = ? LIMIT 1",
         (workspace, content_hash),
     ).fetchone():
-        return True
-    # Also check by raw source path (URLs produce different hashes on re-fetch)
+        return DedupResult(status="unchanged")
+
+    # Path match with different hash — content changed
     if source_path:
         row = conn.execute(
-            "SELECT 1 FROM documents WHERE workspace = ? AND path = ? LIMIT 1",
+            "SELECT content FROM documents WHERE workspace = ? AND path = ? LIMIT 1",
             (workspace, source_path),
         ).fetchone()
-        return row is not None
-    return False
+        if row:
+            old_content = row["content"] or ""
+            return _compute_diff(old_content, new_content)
+
+    return DedupResult(status="new")
+
+
+def _compute_diff(old: str, new: str) -> DedupResult:
+    """Compute a diff summary between old and new content."""
+    import difflib
+    old_lines = old.splitlines(keepends=True)
+    new_lines = new.splitlines(keepends=True)
+    diff = list(difflib.unified_diff(old_lines, new_lines, n=1))
+
+    added = sum(1 for l in diff if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
+
+    if added == 0 and removed == 0:
+        return DedupResult(status="unchanged")
+
+    preview_lines = [l.rstrip() for l in diff[:10] if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))]
+    return DedupResult(
+        status="changed", added=added, removed=removed,
+        diff_preview="\n".join(preview_lines[:5]),
+    )
 
 
 def ingest_file(
@@ -108,14 +145,16 @@ def ingest_file(
     if not source_content.strip():
         raise IngestError(f"Source file is empty: {source_file}")
 
-    # Dedup: skip if identical content already ingested (or same source path)
+    # Dedup: check if content changed since last ingest
     content_hash = hashlib.sha256(source_content.encode()).hexdigest()
     raw_rel = ""
     if source_file.resolve().is_relative_to((workspace_path / "raw").resolve()):
         raw_rel = str(source_file.relative_to(workspace_path))
+    dedup = DedupResult(status="new")
     if db_path(home).exists():
         with connect(db_path(home)) as conn:
-            if document_unchanged(conn, workspace_slug, content_hash, raw_rel):
+            dedup = check_dedup(conn, workspace_slug, content_hash, source_content, raw_rel)
+            if dedup.status == "unchanged":
                 return IngestResult(
                     run_id="",
                     committed=False,

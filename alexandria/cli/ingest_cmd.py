@@ -119,7 +119,7 @@ def _ingest_single_file(
             console.print(f"  [cyan]wiki/{path}[/cyan]")
         console.print(f"[dim]Verifier: {result.verdict_reasoning}[/dim]")
     elif "content unchanged" in (result.verdict_reasoning or ""):
-        console.print(f"[dim]Already ingested (skipped)[/dim]")
+        console.print("[dim]Already ingested (skipped)[/dim]")
     else:
         console.print(f"[red]Ingest rejected[/red] (run {result.run_id})")
         console.print(f"[yellow]Reason:[/yellow] {result.verdict_reasoning}")

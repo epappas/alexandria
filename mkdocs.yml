@@ -1,0 +1,62 @@
+site_name: Alexandria
+site_description: Local-first single-user knowledge engine
+site_url: https://epappas.github.io/alexandria
+repo_url: https://github.com/epappas/alexandria
+repo_name: epappas/alexandria
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Getting Started: guide.md
+  - CLI Reference: cli.md
+  - Architecture:
+      - Overview: architecture/README.md
+      - Vision & Principles: architecture/01_vision_and_principles.md
+      - System Architecture: architecture/02_system_architecture.md
+      - Workspaces & Scopes: architecture/03_workspaces_and_scopes.md
+      - Guardian Agent: architecture/04_guardian_agent.md
+      - Source Integrations: architecture/05_source_integrations.md
+      - Data Model: architecture/06_data_model.md
+      - Open Questions: architecture/07_open_questions.md
+      - MCP Integration: architecture/08_mcp_integration.md
+      - Subscriptions & Feeds: architecture/09_subscriptions_and_feeds.md
+      - Event Streams: architecture/10_event_streams.md
+      - Inference Endpoint: architecture/11_inference_endpoint.md
+      - Conversation Capture: architecture/12_conversation_capture.md
+      - Hostile Verifier: architecture/13_hostile_verifier.md
+      - Evaluation Scaffold: architecture/14_evaluation_scaffold.md
+      - Cascade & Convergence: architecture/15_cascade_and_convergence.md
+      - Operations & Reliability: architecture/16_operations_and_reliability.md
+      - Observability: architecture/17_observability.md
+      - Secrets & Hooks: architecture/18_secrets_and_hooks.md
+      - Belief Revision: architecture/19_belief_revision.md
+      - CLI Surface: architecture/20_cli_surface.md
+
+strict: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
