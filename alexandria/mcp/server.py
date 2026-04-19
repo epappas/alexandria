@@ -88,6 +88,10 @@ def create_server(
         return ws.path, slug
 
     register_all(mcp, resolve_workspace)
+
+    from alexandria.mcp.resources import register_resources
+    register_resources(mcp, resolve_workspace)
+
     return mcp
 
 

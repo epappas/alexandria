@@ -92,6 +92,7 @@ class SchedulerChild:
             ("sync_sources", 300.0, self._job_sync_sources),     # every 5 min
             ("poll_subscriptions", 3600.0, self._job_poll_subs),  # every 1 hour
             ("drain_captures", 60.0, self._job_drain_captures),   # every 1 min
+            ("reingest_urls", 86400.0, self._job_reingest_urls),  # every 24 hours
         ]
 
     def _run_job(self, name: str, fn: Any) -> None:
@@ -182,5 +183,27 @@ class SchedulerChild:
                 except Exception as exc:
                     self._logger.error(
                         "drain_captures_failed",
+                        data={"workspace": ws.slug, "error": str(exc)},
+                    )
+
+    def _job_reingest_urls(self) -> None:
+        """Re-fetch URL sources and re-ingest if content changed."""
+        from alexandria.core.reingest import reingest_url_sources
+        from alexandria.core.workspace import list_workspaces
+
+        with connect(db_path(self._home)) as conn:
+            for ws in list_workspaces(self._home):
+                try:
+                    report = reingest_url_sources(
+                        conn, self._home, ws.slug, ws.path, limit=10,
+                    )
+                    if report.updated > 0:
+                        self._logger.info(
+                            "reingest_completed",
+                            data={"workspace": ws.slug, "updated": report.updated},
+                        )
+                except Exception as exc:
+                    self._logger.error(
+                        "reingest_failed",
                         data={"workspace": ws.slug, "error": str(exc)},
                     )

@@ -15,8 +15,10 @@ from alexandria.cli import (
     capture_cmd,
     daemon_cmd,
     db_cmd,
+    diff_cmd,
     doctor_cmd,
     eval_cmd,
+    export_cmd,
     hooks_cmd,
     ingest_cmd,
     init_cmd,
@@ -150,6 +152,14 @@ app.command("ingest", help="Compile a source into the wiki (staged + verified)."
 
 app.command("query", help="Answer from the wiki by searching all knowledge sources.")(
     query_cmd.query_command
+)
+
+app.command("diff", help="Show what changed since last ingest.")(
+    diff_cmd.diff_command
+)
+
+app.command("export", help="Export wiki to Obsidian, Markdown, or JSON.")(
+    export_cmd.export_command
 )
 
 app.command("watch", help="Watch a directory and auto-ingest on changes.")(
