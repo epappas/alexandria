@@ -18,6 +18,7 @@ def query_command(
     question: str = typer.Argument(..., help="The question to answer."),
     workspace: Optional[str] = typer.Option(None, "--workspace", "-w"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
+    save: bool = typer.Option(False, "--save", help="Save the answer as a wiki page."),
 ) -> None:
     """Answer a question by navigating your knowledge base.
 
@@ -74,3 +75,12 @@ def query_command(
 
     if result.get("tool_calls"):
         console.print(f"\n[dim]Agent used {len(result['tool_calls'])} tool call(s)[/dim]")
+
+    if save and result:
+        from alexandria.core.query_save import save_query_as_page
+        with connect(db_path(home)) as conn:
+            sr = save_query_as_page(home, slug, ws.path, question, result, conn)
+        if sr.committed:
+            console.print(f"\n[green]Saved to wiki[/green]")
+            for p in sr.committed_paths:
+                console.print(f"  [cyan]wiki/{p}[/cyan]")

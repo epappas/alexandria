@@ -35,6 +35,7 @@ from alexandria.cli import (
     subscriptions_cmd,
     sync_cmd,
     synthesize_cmd,
+    watch_cmd,
     why_cmd,
     workspace_cmd,
 )
@@ -151,6 +152,10 @@ app.command("ingest", help="Compile a source into the wiki (staged + verified)."
 
 app.command("query", help="Answer from the wiki by searching all knowledge sources.")(
     query_cmd.query_command
+)
+
+app.command("watch", help="Watch a directory and auto-ingest on changes.")(
+    watch_cmd.watch_command
 )
 
 app.command("lint", help="Find wiki rot: stale citations, missing sources.")(

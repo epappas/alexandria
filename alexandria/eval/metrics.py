@@ -164,9 +164,36 @@ class M5SelfConsistency:
         )
 
 
+class M3VerifierPassRate:
+    """Ratio of committed runs to total completed runs."""
+
+    name = "M3"
+
+    def compute(self, conn: sqlite3.Connection, workspace: str) -> MetricResult:
+        row = conn.execute(
+            """SELECT
+                COUNT(CASE WHEN status = 'committed' THEN 1 END) as committed,
+                COUNT(CASE WHEN status IN ('committed', 'rejected') THEN 1 END) as total
+            FROM runs""",
+        ).fetchone()
+        committed = row["committed"] or 0
+        total = row["total"] or 0
+        if total == 0:
+            return MetricResult(
+                metric=self.name, score=1.0, passed=True,
+                detail={"committed": 0, "total": 0},
+            )
+        score = committed / total
+        return MetricResult(
+            metric=self.name, score=score, passed=score >= 0.7,
+            detail={"committed": committed, "rejected": total - committed, "total": total},
+        )
+
+
 ALL_METRICS: list[Metric] = [
     M1CitationFidelity(),
     M2CascadeCoverage(),
+    M3VerifierPassRate(),
     M4Cost(),
     M5SelfConsistency(),
 ]

@@ -242,13 +242,14 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
     def query(
         question: str,
         workspace: str | None = None,
+        save: bool = False,
     ) -> str:
         """Answer a question by navigating the knowledge base.
 
         Spawns Alexandria's internal agent loop which uses search, grep,
         read, and beliefs to find relevant content and synthesize an
-        answer with citations. Use this for complex questions that
-        require exploring multiple sources.
+        answer with citations. Set save=true to persist the answer as
+        a wiki page for future reference.
         """
         from alexandria.config import resolve_home
         from alexandria.db.connection import connect, db_path
@@ -270,6 +271,14 @@ def register(mcp: "FastMCP", resolve: "WorkspaceResolver") -> None:
             source_text = "\n\nSources:\n" + "\n".join(
                 f"- {s.get('title', '')} ({s.get('path', '')})" for s in sources
             )
+
+        if save and result:
+            from alexandria.core.query_save import save_query_as_page
+            with connect(db_path(home)) as conn:
+                sr = save_query_as_page(home, slug, ws_path, question, result, conn)
+            if sr.committed:
+                source_text += f"\n\nSaved to: wiki/{sr.committed_paths[0]}"
+
         return answer + source_text
 
     def _format_repo_result(source: str, result: "RepoIngestResult") -> str:

@@ -140,8 +140,9 @@ class SchedulerChild:
                     )
 
     def _job_poll_subs(self) -> None:
-        """Poll all subscription sources."""
+        """Poll all subscription sources, then auto-ingest pending items."""
         from alexandria.core.adapters.subscription_poll import poll_subscriptions
+        from alexandria.core.adapters.subscription_ingest import auto_ingest_pending
         from alexandria.core.workspace import list_workspaces
 
         with connect(db_path(self._home)) as conn:
@@ -152,6 +153,21 @@ class SchedulerChild:
                 except Exception as exc:
                     self._logger.error(
                         "poll_workspace_failed",
+                        data={"workspace": ws.slug, "error": str(exc)},
+                    )
+                # Auto-ingest pending items from sources with auto_ingest enabled
+                try:
+                    report = auto_ingest_pending(
+                        conn, self._home, ws.slug, ws.path, limit=10,
+                    )
+                    if report.ingested > 0:
+                        self._logger.info(
+                            "auto_ingest_completed",
+                            data={"workspace": ws.slug, "ingested": report.ingested},
+                        )
+                except Exception as exc:
+                    self._logger.error(
+                        "auto_ingest_failed",
                         data={"workspace": ws.slug, "error": str(exc)},
                     )
 
