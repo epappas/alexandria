@@ -66,11 +66,21 @@ def export_github(
 
 
 def _copy_canonical(workspace_path: Path, dest: Path) -> None:
-    """Copy raw/ and wiki/ verbatim as the backup layer."""
+    """Copy raw/ and wiki/ as the backup layer.
+
+    Strips nested ``.git`` directories from git-adapter clones so the outer
+    repo records actual files rather than opaque gitlinks (mode 160000).
+    """
+    def _ignore(_src: str, names: list[str]) -> list[str]:
+        return [n for n in names if n == ".git"]
+
     for sub in ("raw", "wiki"):
         src = workspace_path / sub
         if src.exists():
-            shutil.copytree(str(src), str(dest / sub), dirs_exist_ok=False)
+            shutil.copytree(
+                str(src), str(dest / sub),
+                dirs_exist_ok=False, ignore=_ignore,
+            )
 
 
 # --- Wiki projection --------------------------------------------------------

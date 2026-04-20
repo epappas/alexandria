@@ -42,8 +42,8 @@ fi
 # 3. refresh the exported vault (wiki/ + journal/ + .alexandria/ backup)
 "$ALXIA" export "$VAULT" --format github -w "$WORKSPACE"
 
-# 4. commit + push if anything changed
-if ! git diff --quiet || ! git diff --cached --quiet; then
+# 4. commit + push if anything changed (includes untracked files)
+if [ -n "$(git status --porcelain)" ]; then
   git add -A
   git commit -m "sync: $(date -u +%Y-%m-%dT%H:%MZ)"
   git push origin main

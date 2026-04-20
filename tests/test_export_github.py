@@ -128,3 +128,27 @@ def test_export_github_rewrites_internal_links(
     # Old link: ../research/arxivorg-abs-1.md → new title-slug, same relative form
     assert "../research/long-context-performance-degradation.md" in body
     assert "arxivorg-abs-1.md" not in body
+
+
+def test_export_github_strips_nested_git_dirs(
+    initialized_home: Path, tmp_path: Path,
+) -> None:
+    """Git-adapter clones under raw/git/ must not become gitlinks in .alexandria/."""
+    ws = get_workspace(initialized_home, GLOBAL_SLUG)
+    _seed_workspace(ws.path)
+
+    # simulate a cloned repo with its own .git directory + content
+    cloned = ws.path / "raw" / "git" / "sample-repo"
+    (cloned / ".git").mkdir(parents=True)
+    (cloned / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (cloned / "README.md").write_text("# Sample repo\n", encoding="utf-8")
+
+    with connect(db_path(initialized_home)) as conn:
+        _insert_documents(conn, GLOBAL_SLUG)
+        export_github(ws.path, tmp_path / "vault", conn, GLOBAL_SLUG)
+
+    backup_clone = tmp_path / "vault" / ".alexandria" / "raw" / "git" / "sample-repo"
+    assert backup_clone.exists()
+    assert (backup_clone / "README.md").exists()
+    assert not (backup_clone / ".git").exists(), \
+        "nested .git must be stripped so outer git commits actual files"
