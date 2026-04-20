@@ -27,6 +27,8 @@ nav:
   - Home: index.md
   - Getting Started: guide.md
   - CLI Reference: cli.md
+  - Guides:
+      - Mobile vault via GitHub: guides/mobile_vault_github.md
   - Architecture:
       - Overview: architecture/README.md
       - Vision & Principles: architecture/01_vision_and_principles.md
