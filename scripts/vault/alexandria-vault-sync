@@ -39,8 +39,8 @@ archives the entries to `inbox-archive.md`.
 EOF
 fi
 
-# 3. refresh the exported wiki
-"$ALXIA" export "$VAULT" --format markdown -w "$WORKSPACE"
+# 3. refresh the exported vault (wiki/ + journal/ + .alexandria/ backup)
+"$ALXIA" export "$VAULT" --format github -w "$WORKSPACE"
 
 # 4. commit + push if anything changed
 if ! git diff --quiet || ! git diff --cached --quiet; then

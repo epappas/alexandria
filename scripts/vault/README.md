@@ -111,8 +111,31 @@ To change cadence: edit `OnUnitActiveSec=` in
 3. For each URL: `alxia ingest "$url"`; append result to
    `inbox-archive.md` (success or `FAILED`).
 4. Rewrites `inbox.md` to its clean baseline (header only).
-5. `alxia export` — refreshes every topic folder in the vault.
+5. `alxia export --format github` — refreshes the three-layer vault:
+   `wiki/` (human projection), `journal/` (chronological activity), and
+   `.alexandria/` (canonical backup for disaster recovery).
 6. If anything changed: `git add -A && git commit -m "sync: <ts>" && git push`.
+
+## Vault layout
+
+```
+<vault>/
+├── .alexandria/          canonical backup (raw/ + wiki/)
+├── wiki/                 human-facing projection
+│   ├── README.md         topic index
+│   └── <topic>/
+│       ├── README.md     page list with titles + previews
+│       └── <title-slug>.md
+├── journal/              chronological activity
+│   ├── README.md
+│   └── YYYY-MM.md        per-month entries with wiki + raw links
+├── inbox.md              write surface for mobile captures
+└── inbox-archive.md      ingested URLs history
+```
+
+The `wiki/`, `journal/`, and `.alexandria/` trees are regenerated every
+run — do not hand-edit anything in them. The only hand-writable files are
+`inbox.md` (next capture) and `inbox-archive.md` (history).
 
 ## Caveats
 

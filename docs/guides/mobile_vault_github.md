@@ -7,15 +7,35 @@ no extra daemons on your phone.
 
 ## Architecture
 
-One private GitHub repo holds two surfaces:
+One private GitHub repo with a three-layer layout produced by
+`alxia export --format github`:
 
 ```
 alexandria-vault/              (private GitHub repo)
-├── wiki/                      exported from alexandria — read only
-├── MOC.md                     map of content (auto-generated)
+├── .alexandria/               canonical backup — raw/ + wiki/ in native form
+├── wiki/                      human-readable projection
+│   ├── README.md              topic index
+│   └── <topic>/
+│       ├── README.md          page list with titles + previews
+│       └── <title-slug>.md
+├── journal/                   chronological activity log
+│   ├── README.md
+│   └── YYYY-MM.md             per-month ingest entries
 ├── inbox.md                   you append URLs here from your phone
 └── inbox-archive.md           ingested URLs, kept for history
 ```
+
+The three generated layers serve distinct purposes:
+
+- **`.alexandria/`** is the disaster-recovery artifact. Lose your
+  desktop, clone this repo, copy `.alexandria/raw/` and
+  `.alexandria/wiki/` back into `~/.alexandria/workspaces/<slug>/`, run
+  `alxia reindex --rebuild-beliefs`, and the knowledge base is whole.
+  SQLite is not committed (it regenerates and would cause binary churn).
+- **`wiki/`** is what you read. Title-based filenames, per-folder
+  READMEs, resolved footnote links, deduplicated citations.
+- **`journal/`** is the "what did past-me add" timeline. Every ingest
+  lands as a dated entry with links into `wiki/` and `.alexandria/raw/`.
 
 Two independent loops run on your desktop:
 
@@ -69,7 +89,7 @@ git branch -M main
 git remote add origin git@github.com:"$(gh api user -q .login)"/alexandria-vault.git
 
 # seed: first export + empty inbox
-alxia export . --format markdown -w global
+alxia export . --format github -w global
 cat > inbox.md <<'EOF'
 # Inbox
 
@@ -84,7 +104,19 @@ git push -u origin main
 
 ### 3. The sync script
 
-Create `~/bin/alexandria-vault-sync`:
+A production-ready version ships in the alexandria repo — copy from
+there rather than hand-typing:
+
+```bash
+# assuming you have the alexandria source checked out
+cp /path/to/alexandria/scripts/vault/alexandria-vault-sync \
+   ~/bin/alexandria-vault-sync
+chmod +x ~/bin/alexandria-vault-sync
+```
+
+Or, if you prefer to hand-author, the full script looks like this
+(reads `ALEXANDRIA_VAULT`, `ALEXANDRIA_VAULT_WORKSPACE`, and `ALXIA`
+env vars with sensible defaults):
 
 ```bash
 #!/usr/bin/env bash
@@ -123,8 +155,8 @@ EOF
 fi
 rm -f "$URL_LIST"
 
-# 3. refresh wiki/ with the latest alexandria state
-alxia export "$VAULT" --format markdown -w global
+# 3. refresh the three-layer vault (wiki/ + journal/ + .alexandria/ backup)
+alxia export "$VAULT" --format github -w global
 
 # 4. commit + push if anything changed
 if ! git diff --quiet || ! git diff --cached --quiet; then
