@@ -62,7 +62,7 @@ app = typer.Typer(
 )
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def root(
     ctx: typer.Context,
     version: bool | None = typer.Option(
