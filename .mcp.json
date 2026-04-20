@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "alexandria": {
+      "command": "/home/epappas/workspace/spacejar/llmwiki/.venv/bin/alexandria",
+      "args": [
+        "mcp",
+        "serve",
+        "--workspace",
+        "global"
+      ],
+      "_alexandria_managed": true
+    }
+  }
+}
