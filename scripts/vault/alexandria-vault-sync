@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# alexandria vault sync: pull phone-side inbox edits, ingest URLs,
+# re-export the wiki, commit + push. See
+# https://epappas.github.io/alexandria/guides/mobile_vault_github/
+set -euo pipefail
+
+VAULT="${ALEXANDRIA_VAULT:-$HOME/knowledgebase}"
+WORKSPACE="${ALEXANDRIA_VAULT_WORKSPACE:-global}"
+ALXIA="${ALXIA:-$HOME/.local/bin/alxia}"
+
+cd "$VAULT"
+
+# 1. pull any phone-side appends to inbox.md
+git pull --rebase --autostash
+
+# 2. extract URLs from inbox.md and ingest each
+INBOX="$VAULT/inbox.md"
+ARCHIVE="$VAULT/inbox-archive.md"
+URL_LIST=$(mktemp)
+trap 'rm -f "$URL_LIST"' EXIT
+
+grep -oE 'https?://[^ )]+' "$INBOX" > "$URL_LIST" || true
+
+if [ -s "$URL_LIST" ]; then
+  while IFS= read -r url; do
+    echo ">> ingesting $url"
+    if "$ALXIA" ingest "$url" -w "$WORKSPACE"; then
+      echo "- $(date -u +%Y-%m-%d) $url" >> "$ARCHIVE"
+    else
+      echo "- $(date -u +%Y-%m-%d) FAILED $url" >> "$ARCHIVE"
+    fi
+  done < "$URL_LIST"
+
+  cat > "$INBOX" <<'EOF'
+# Inbox
+
+Append URLs below, one per line. The desktop sync job ingests them and
+archives the entries to `inbox-archive.md`.
+EOF
+fi
+
+# 3. refresh the exported wiki
+"$ALXIA" export "$VAULT" --format markdown -w "$WORKSPACE"
+
+# 4. commit + push if anything changed
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git add -A
+  git commit -m "sync: $(date -u +%Y-%m-%dT%H:%MZ)"
+  git push origin main
+fi
