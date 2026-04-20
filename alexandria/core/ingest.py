@@ -346,14 +346,17 @@ def ingest_file(
                                 subj, pred, obj,
                             )
                             if dup_id:
-                                # Restore the identical belief
+                                # Restore the identical belief and refresh source_kind
+                                # in case the AST path produces a more precise value.
+                                restored_kind = b.get("source_kind") or src_kind
                                 conn.execute(
                                     """UPDATE wiki_beliefs SET superseded_at = NULL,
                                        superseded_by_belief_id = NULL,
                                        superseded_in_run = NULL,
-                                       supersession_reason = NULL
+                                       supersession_reason = NULL,
+                                       source_kind = ?
                                     WHERE belief_id = ?""",
-                                    (dup_id,),
+                                    (restored_kind, dup_id),
                                 )
                                 continue
 
@@ -369,10 +372,12 @@ def ingest_file(
                                 asserted_in_run=run.run_id,
                             )
                             insert_belief(conn, belief)
-                            # Tag with source provenance
+                            # Tag with source provenance. AST-extracted beliefs carry
+                            # their own source_kind='code' and override the file kind.
+                            belief_kind = b.get("source_kind") or src_kind
                             conn.execute(
                                 "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?",
-                                (src_kind, belief.belief_id),
+                                (belief_kind, belief.belief_id),
                             )
 
                     conn.execute("COMMIT")

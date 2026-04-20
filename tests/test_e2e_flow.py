@@ -180,10 +180,10 @@ class TestEndToEndFlow:
         assert "renamed-project" not in [ws.slug for ws in workspaces]
 
     def test_migrations_all_apply(self, home: Path) -> None:
-        """Verify all 8 migrations applied cleanly."""
+        """Verify all migrations applied cleanly."""
         with connect(db_path(home)) as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            assert version == 11
+            assert version == 12
 
             # Check key tables exist
             tables = {

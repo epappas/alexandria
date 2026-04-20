@@ -133,6 +133,7 @@ class CodeStructure:
                 "predicate": "is_a",
                 "object": "type",
                 "footnote_ids": fn_ids,
+                "source_kind": "code",
             })
 
         for fn in self.functions:
@@ -143,6 +144,7 @@ class CodeStructure:
                 "predicate": "is_a",
                 "object": "function",
                 "footnote_ids": fn_ids,
+                "source_kind": "code",
             })
 
         for res in self.resources:
@@ -153,6 +155,7 @@ class CodeStructure:
                 "predicate": "is_a",
                 "object": res.kind,
                 "footnote_ids": fn_ids,
+                "source_kind": "code",
             })
 
         for imp in self.imports[:20]:
@@ -163,6 +166,7 @@ class CodeStructure:
                 "predicate": "depends_on",
                 "object": imp,
                 "footnote_ids": fn_ids,
+                "source_kind": "code",
             })
 
         return beliefs
