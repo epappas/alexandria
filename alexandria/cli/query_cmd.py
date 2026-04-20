@@ -74,6 +74,11 @@ def query_command(
     if result.get("tool_calls"):
         console.print(f"\n[dim]Agent used {len(result['tool_calls'])} tool call(s)[/dim]")
 
+    # Log the query
+    from alexandria.core.wiki_log import append_log_entry
+    sources_count = len(result.get("sources", []))
+    append_log_entry(ws.path, "query", f"{question[:80]} ({sources_count} sources)")
+
     if save and result:
         from alexandria.core.query_save import save_query_as_page
         with connect(db_path(home)) as conn:

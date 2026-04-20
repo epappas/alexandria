@@ -75,8 +75,21 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
         if current:
             parts.append("### Current beliefs\n")
+            # Get source_kind for each belief
+            kind_map: dict[str, str] = {}
+            try:
+                rows = conn.execute(
+                    "SELECT belief_id, source_kind FROM wiki_beliefs WHERE workspace = ? AND superseded_at IS NULL",
+                    (slug,),
+                ).fetchall()
+                kind_map = {r["belief_id"]: r["source_kind"] or "unknown" for r in rows}
+            except Exception:
+                pass
+
             for b in current:
-                parts.append(f"**{b.statement}**")
+                kind = kind_map.get(b.belief_id, "")
+                kind_label = f" [{kind}]" if kind and kind != "unknown" else ""
+                parts.append(f"**{b.statement}**{kind_label}")
                 parts.append(f"  topic: {b.topic} | page: {b.wiki_document_path}")
                 if b.footnote_ids:
                     parts.append(f"  citations: {', '.join(f'[^{f}]' for f in b.footnote_ids)}")

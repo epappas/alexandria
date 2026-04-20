@@ -275,6 +275,11 @@ def ingest_file(
                         ended_at=datetime.now(UTC).isoformat(),
                     )
 
+                    # Determine source provenance
+                    from alexandria.core.source_kind import infer_source_kind, is_ai_authored
+                    src_kind = infer_source_kind(source_file, str(raw_dest.relative_to(workspace_path)))
+                    ai_flag = 1 if is_ai_authored(source_file, str(raw_dest.relative_to(workspace_path))) else 0
+
                     # Register committed wiki pages in documents table (populates FTS)
                     for rel_path in committed_paths:
                         wiki_file = workspace_path / "wiki" / rel_path
@@ -285,13 +290,15 @@ def ingest_file(
                             conn.execute(
                                 """INSERT OR REPLACE INTO documents
                                   (id, workspace, layer, path, filename, file_type, content,
-                                   content_hash, size_bytes, title, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                   content_hash, size_bytes, title, ai_authored,
+                                   created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                                         datetime('now'), datetime('now'))""",
                                 (
                                     doc_id, workspace_slug, "wiki",
                                     f"wiki/{rel_path}", Path(rel_path).name, "md",
                                     wiki_content, wiki_hash, len(wiki_content), title,
+                                    ai_flag,
                                 ),
                             )
 
@@ -301,15 +308,16 @@ def ingest_file(
                     conn.execute(
                         """INSERT OR REPLACE INTO documents
                           (id, workspace, layer, path, filename, file_type, content,
-                           content_hash, size_bytes, title, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           content_hash, size_bytes, title, ai_authored,
+                           created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                                 datetime('now'), datetime('now'))""",
                         (
                             raw_doc_id, workspace_slug, "raw",
                             str(raw_rel), raw_dest.name,
                             source_file.suffix.lstrip(".") or "md",
                             source_content, hashlib.sha256(source_content.encode()).hexdigest(),
-                            len(source_content), title,
+                            len(source_content), title, ai_flag,
                         ),
                     )
 
@@ -361,6 +369,11 @@ def ingest_file(
                                 asserted_in_run=run.run_id,
                             )
                             insert_belief(conn, belief)
+                            # Tag with source provenance
+                            conn.execute(
+                                "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?",
+                                (src_kind, belief.belief_id),
+                            )
 
                     conn.execute("COMMIT")
                 except Exception:
@@ -387,6 +400,14 @@ def ingest_file(
                             continue
             except Exception:
                 pass  # cross-refs are best-effort
+
+        # Append to operation log
+        from alexandria.core.wiki_log import append_log_entry
+        pages = ", ".join(committed_paths[:3])
+        append_log_entry(
+            workspace_path, "ingest", f"Committed {title} -> {pages}",
+            run_id=run.run_id,
+        )
 
         return IngestResult(
             run_id=run.run_id,
