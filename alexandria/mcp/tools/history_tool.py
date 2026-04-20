@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from alexandria.mcp.tools import WorkspaceResolver
 
 LOG_ENTRY_RE = re.compile(
-    r"^## \[(\d{4}-\d{2}-\d{2})\] (\w+) \| (.+)$", re.MULTILINE
+    r"^## \[(\d{4}-\d{2}-\d{2}[\d: ]*)\] (\w+)(?:\s*\||\s*\()(.+)$", re.MULTILINE
 )
 
 
@@ -77,10 +77,8 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 for detail in entry["details"][:5]:
                     lines.append(f"  {detail}")
 
-        # Phase marker
         lines.append(
-            "\n*Note: structured run history (runs table, verifier verdicts) "
-            "arrives in Phase 2.*"
+            "\n*Run `alxia eval run` for quality metrics.*"
         )
 
         return "\n".join(lines)

@@ -65,6 +65,17 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                         from alexandria.core.beliefs.repository import _row_to_belief
                         history.append(_row_to_belief(row))
 
+            # Get source_kind for beliefs while connection is open
+            kind_map: dict[str, str] = {}
+            try:
+                sk_rows = conn.execute(
+                    "SELECT belief_id, source_kind FROM wiki_beliefs WHERE workspace = ? AND superseded_at IS NULL",
+                    (slug,),
+                ).fetchall()
+                kind_map = {r["belief_id"]: r["source_kind"] or "unknown" for r in sk_rows}
+            except Exception:
+                pass
+
         if not beliefs and not history:
             return f"No beliefs found for `{query}` in workspace `{slug}`."
 
@@ -75,16 +86,6 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
         if current:
             parts.append("### Current beliefs\n")
-            # Get source_kind for each belief
-            kind_map: dict[str, str] = {}
-            try:
-                rows = conn.execute(
-                    "SELECT belief_id, source_kind FROM wiki_beliefs WHERE workspace = ? AND superseded_at IS NULL",
-                    (slug,),
-                ).fetchall()
-                kind_map = {r["belief_id"]: r["source_kind"] or "unknown" for r in rows}
-            except Exception:
-                pass
 
             for b in current:
                 kind = kind_map.get(b.belief_id, "")

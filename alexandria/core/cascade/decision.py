@@ -18,7 +18,7 @@ from alexandria.core.cascade.discovery import (
 )
 
 # Score thresholds for FTS-only fallback (no LLM)
-MERGE_THRESHOLD = 0.7   # above this -> merge (elaboration)
+MERGE_THRESHOLD = 0.85  # above this -> merge (conservative without LLM)
 CROSSREF_THRESHOLD = 0.4  # above this -> cross_ref
 # below CROSSREF_THRESHOLD -> new_page
 
