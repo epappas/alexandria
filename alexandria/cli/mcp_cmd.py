@@ -142,21 +142,24 @@ def _install_claude_code(workspace: str | None) -> None:
         f"in [bold]{project_config}[/bold]"
     )
 
-    # Also update global registration via claude CLI
+    # Update Claude Code's internal registration (handles local + project scopes)
     try:
-        subprocess.run(
-            ["claude", "mcp", "remove", "alexandria"],
-            capture_output=True, text=True, check=False,
-        )
+        # Remove from all scopes to avoid "already exists" error
+        for scope in ("local", "project"):
+            subprocess.run(
+                ["claude", "mcp", "remove", "alexandria", "-s", scope],
+                capture_output=True, text=True, check=False,
+            )
+        # Re-add with correct args
         subprocess.run(
             ["claude", "mcp", "add", "alexandria", "--", alexandria_bin, *args],
             capture_output=True, text=True, check=True,
         )
-        console.print("[green]Global registration updated[/green]")
+        console.print("[green]Claude Code registration updated[/green]")
     except (FileNotFoundError, subprocess.CalledProcessError):
         pass  # claude CLI not available — project .mcp.json is enough
 
-    # Re-write .mcp.json (claude mcp remove may have cleared it)
+    # Also write .mcp.json as fallback (claude mcp remove clears it)
     config = _read_json(project_config) or {}
     if "mcpServers" not in config:
         config["mcpServers"] = {}
