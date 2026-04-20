@@ -72,7 +72,7 @@ jobs:
       - name: Generate SBOM
         run: |
           uv pip install cyclonedx-bom
-          uv run cyclonedx-py environment -o sbom.json --format json
+          uv run cyclonedx-py environment -o sbom.json --of json
           echo "SBOM generated: $(wc -l < sbom.json) lines"
 
       - name: Upload SBOM artifact
