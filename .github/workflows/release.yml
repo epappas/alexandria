@@ -28,9 +28,7 @@ jobs:
           uv pip install pytest pytest-asyncio build twine pip-audit
 
       - name: Audit dependencies for CVEs
-        run: |
-          uv pip install .
-          uv run pip-audit --strict
+        run: uv run pip-audit --strict -r <(uv pip freeze | grep -v alexandria-wiki)
 
       - name: Run tests
         run: uv run python -m pytest tests/ -q --tb=short

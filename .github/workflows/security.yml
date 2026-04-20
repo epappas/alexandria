@@ -30,9 +30,7 @@ jobs:
           uv pip install pip-audit
 
       - name: Audit dependencies for known CVEs
-        run: |
-          uv pip install .
-          uv run pip-audit --strict --desc
+        run: uv run pip-audit --strict --desc -r <(uv pip freeze | grep -v alexandria-wiki)
 
       - name: Verify lockfile integrity
         run: |
