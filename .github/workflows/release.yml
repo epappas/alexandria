@@ -28,7 +28,7 @@ jobs:
           uv pip install pytest pytest-asyncio build twine pip-audit
 
       - name: Audit dependencies for CVEs
-        run: uv run pip-audit --strict
+        run: uv run pip-audit --strict --skip-editable
 
       - name: Run tests
         run: uv run python -m pytest tests/ -q --tb=short

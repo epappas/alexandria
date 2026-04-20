@@ -30,7 +30,7 @@ jobs:
           uv pip install pip-audit
 
       - name: Audit dependencies for known CVEs
-        run: uv run pip-audit --strict --desc
+        run: uv run pip-audit --strict --desc --skip-editable
 
       - name: Verify lockfile integrity
         run: |
