@@ -110,11 +110,14 @@ def _install_claude_code(workspace: str | None) -> None:
 
     # Auto-pin when only one workspace exists
     if not workspace:
-        from alexandria.core.workspace import list_workspaces
-        workspaces = list_workspaces(resolve_home())
-        if len(workspaces) == 1:
-            workspace = workspaces[0].slug
-            console.print(f"[dim]Auto-pinning to workspace: {workspace}[/dim]")
+        try:
+            from alexandria.core.workspace import list_workspaces
+            workspaces = list_workspaces(resolve_home())
+            if len(workspaces) == 1:
+                workspace = workspaces[0].slug
+                console.print(f"[dim]Auto-pinning to workspace: {workspace}[/dim]")
+        except Exception:
+            pass  # no DB yet — proceed in open mode
 
     if workspace:
         args.extend(["--workspace", workspace])
@@ -125,42 +128,40 @@ def _install_claude_code(workspace: str | None) -> None:
         "_alexandria_managed": True,
     }
 
-    # Claude Code uses ~/.claude.json or project-scoped .mcp.json
-    if workspace:
-        # Pinned mode → project-scoped .mcp.json in cwd
-        config_path = Path.cwd() / ".mcp.json"
-        config = _read_json(config_path) or {}
-        if "mcpServers" not in config:
-            config["mcpServers"] = {}
-        config["mcpServers"]["alexandria"] = entry
-        _write_json(config_path, config)
-        console.print(
-            f"[green]Installed[/green] alexandria MCP server (pinned: {workspace}) "
-            f"in [bold]{config_path}[/bold]"
+    # Write to project-scoped .mcp.json
+    project_config = Path.cwd() / ".mcp.json"
+    config = _read_json(project_config) or {}
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+    config["mcpServers"]["alexandria"] = entry
+    _write_json(project_config, config)
+
+    mode = f"pinned: {workspace}" if workspace else "open mode"
+    console.print(
+        f"[green]Installed[/green] alexandria MCP server ({mode}) "
+        f"in [bold]{project_config}[/bold]"
+    )
+
+    # Also update global registration via claude CLI
+    try:
+        subprocess.run(
+            ["claude", "mcp", "remove", "alexandria"],
+            capture_output=True, text=True, check=False,
         )
-    else:
-        # Open mode → user-level config
-        # Claude Code reads from multiple locations; use the CLI approach
-        console.print("[dim]Running: claude mcp add alexandria ...[/dim]")
-        cmd = ["claude", "mcp", "add", "alexandria", "--", alexandria_bin] + args
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            console.print("[green]Installed[/green] alexandria MCP server via `claude mcp add`.")
-        except FileNotFoundError:
-            # claude CLI not found — fall back to writing .mcp.json
-            config_path = Path.home() / ".claude.json"
-            config = _read_json(config_path) or {}
-            if "mcpServers" not in config:
-                config["mcpServers"] = {}
-            config["mcpServers"]["alexandria"] = entry
-            _write_json(config_path, config)
-            console.print(
-                f"[green]Installed[/green] alexandria MCP server (open mode) "
-                f"in [bold]{config_path}[/bold]"
-            )
-        except subprocess.CalledProcessError as exc:
-            console.print(f"[red]`claude mcp add` failed:[/red] {exc.stderr}")
-            raise typer.Exit(code=2) from exc
+        subprocess.run(
+            ["claude", "mcp", "add", "alexandria", "--", alexandria_bin, *args],
+            capture_output=True, text=True, check=True,
+        )
+        console.print("[green]Global registration updated[/green]")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass  # claude CLI not available — project .mcp.json is enough
+
+    # Re-write .mcp.json (claude mcp remove may have cleared it)
+    config = _read_json(project_config) or {}
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+    config["mcpServers"]["alexandria"] = entry
+    _write_json(project_config, config)
 
     console.print("[dim]Restart your MCP client to pick up the change.[/dim]")
 
