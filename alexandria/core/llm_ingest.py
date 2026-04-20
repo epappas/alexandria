@@ -218,8 +218,14 @@ class _ClaudeCodeSDKProvider:
         if not claude_bin:
             raise RuntimeError("claude CLI not found in PATH")
 
+        cmd = [claude_bin, "-p", "--output-format", "text"]
+        model = os.environ.get("ALEXANDRIA_CLAUDE_MODEL", "").strip()
+        if model:
+            cmd.extend(["--model", model])
+        cmd.append(full_prompt)
+
         result = subprocess.run(
-            [claude_bin, "-p", "--output-format", "text", full_prompt],
+            cmd,
             capture_output=True,
             text=True,
             timeout=300,
