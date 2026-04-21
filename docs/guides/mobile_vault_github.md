@@ -263,16 +263,119 @@ Beliefs extracted from your shared URL should appear.
 
 ## Caveats to know up front
 
+### Privacy and scope
+
 - **Private repo is non-negotiable.** Anything else leaks your wiki to
-  the public internet.
-- **`wiki/` is overwritten every sync.** Only `inbox.md` and
-  `inbox-archive.md` are safe to hand-edit. Don't edit wiki pages on
-  GitHub expecting them to survive the next export.
-- **Latency matches the timer.** Lower `OnUnitActiveSec` if you want
-  tighter loops; raise it if git push noise bothers you.
+  the public internet. Verify with
+  `gh repo view <repo> --json visibility`.
+- **Credential scope for mobile capture.** If you ever automate capture
+  from mobile via the GitHub API, use a fine-grained personal access
+  token scoped only to this one repo. Do not put a full-access token on
+  a phone.
+
+### Write surfaces
+
+- **Only `inbox.md` and `inbox-archive.md` are hand-writable.** The
+  `.alexandria/`, `wiki/`, and `journal/` trees are fully regenerated on
+  every sync — editing pages inside them gets clobbered on the next
+  export.
+- **Treat GitHub's web editor as write-only on `inbox.md`.** Don't try
+  to fix typos in exported wiki pages from the mobile UI; make changes
+  in your source (the local file you originally ingested, or the URL's
+  content) and let the next ingest regenerate the page.
+
+### Latency and scheduling
+
+- **Phone-to-wiki latency matches the timer cadence.** Default is 10
+  minutes. Lower `OnUnitActiveSec` in
+  `alexandria-vault-sync.timer` if you want tighter loops; raise it if
+  the commit noise bothers you.
+- **Ingests are slow-but-not-stalled.** Each URL ingest takes roughly
+  30–90 seconds because the pipeline runs an LLM call, a deterministic
+  verifier, and belief extraction. Sequential batches of N URLs take
+  roughly N minutes — check the journal log rather than giving up if a
+  batch seems slow. See also the speed knob
+  [ALEXANDRIA_CLAUDE_MODEL](#faster-ingest-with-haiku) below.
+
+### Cascade merge behavior (important if you batch-ingest)
+
+- **Same-topic ingests merge into shared wiki pages by design.** The
+  cascade classifier (see
+  `architecture/15_cascade_and_convergence.md`) decides new-page vs
+  merge vs hedge based on topical similarity. If you ingest 10 URLs
+  that all cover "long-context degradation", several will merge into
+  the same page rather than getting 10 separate pages.
+- **Merged pages use per-source sections since 0.34.0.** Each merged
+  source lands under its own `## From: <title>` heading so the page
+  stays navigable. Pages created with older versions may show merged
+  content under a generic `Overview` — re-ingest those sources to get
+  the attributed layout.
+- **Use `--no-merge` for batch URL ingests.** If you want one wiki page
+  per URL (no topical collapse), pass
+  `alxia ingest <url> --no-merge` or, from an MCP-connected agent,
+  `ingest(source=..., no_merge=True)`.
+- **Re-exporting doesn't fix collapsed pages.** The export is a pure
+  projection of alexandria's internal wiki state. If a page collapsed
+  under the pre-0.34.0 merge behavior, a fresh export mirrors it as-is.
+  The fix is to re-ingest those sources so the cascade creates clean
+  pages, not to re-run the export.
+
+### Systemd and push auth
+
 - **Push auth on the timer.** The systemd service needs the same SSH
   agent or credential helper your shell uses. Verify by running the
-  script once manually before enabling the timer.
-- **Credential scope for mobile**: if you ever automate capture from
-  mobile via the API, use a fine-grained personal access token scoped
-  only to this one repo. Do not put a full-access token on a phone.
+  script once manually with `~/bin/alexandria-vault-sync` before
+  enabling the timer.
+- **Commits are signed if your git config says so.** The script never
+  passes `-c commit.gpgsign=false` or `--no-gpg-sign`. If signing fails
+  (locked gpg agent, no tty), the script exits non-zero — fix the
+  signing environment rather than bypassing it.
+- **The sync script checks for untracked files, not just tracked
+  diffs.** Earlier versions used `git diff --quiet` which missed newly
+  added directories on first run after an upgrade. Make sure your
+  `scripts/vault/alexandria-vault-sync` matches the current shipped
+  version.
+
+### `.alexandria/` backup gotchas
+
+- **Nested `.git` directories are stripped.** When alexandria's
+  git-adapter ingests a repo, it clones it under `raw/git/<repo>/` with
+  the repo's own `.git/` dir. The export strips those so the outer
+  vault repo records real files rather than opaque gitlinks (mode
+  160000). If you upgraded from 0.33.0 and still see `160000 commit`
+  entries under `.alexandria/raw/git/`, do a one-time
+  `git rm --cached <path>` on those paths and let the next sync
+  commit the real content.
+- **SQLite state is not committed.** The `.alexandria/` backup
+  intentionally excludes `state.db` — it's regenerable from `raw/`
+  and `wiki/` via `alxia reindex --rebuild-beliefs`, and tracking a
+  binary database would cause massive git churn.
+
+### Dependabot noise
+
+- **Private repo dependabot alerts from ingested upstream repos are
+  expected.** When you ingest public repos under `.alexandria/raw/git/`
+  (e.g. `openai-agents-python`, `clearwing`), GitHub scans their
+  dependency manifests and flags vulnerabilities. Those are **upstream
+  content**, not code you own. Silence them by adding
+  `.github/dependabot.yml` to the vault with
+  `open-pull-requests-limit: 0` for those paths, or dismiss alerts as
+  "won't fix, mirror of upstream."
+
+### Faster ingest with Haiku
+
+If your MCP server is calling the Claude Code SDK (the default when no
+`ANTHROPIC_API_KEY` env var is set and `claude` is installed), set the
+`ALEXANDRIA_CLAUDE_MODEL` env var on the server registration to choose
+a faster/cheaper model. This only affects the ingest-time LLM calls,
+not the CLI's shell prompt.
+
+```bash
+# remove any existing registrations, then re-add with haiku pinned
+claude mcp remove alexandria -s user 2>/dev/null
+claude mcp add -s user alexandria \
+  -e ALEXANDRIA_CLAUDE_MODEL=haiku \
+  -- "$(which alexandria)" mcp serve --workspace global
+```
+
+Haiku is roughly 3–5× faster than Sonnet on the ingest workload.
