@@ -87,6 +87,13 @@ open ~/alexandria-graph/graph.html
 # Optional: install as a Claude Code / Cursor / Codex skill for an
 # always-on "/alexandria" command that orients your agent before grep
 alxia skill install claude-code
+
+# Optional: chat with your knowledge base from your phone via Telegram
+pip install "alexandria-wiki[bot]"
+alxia secrets set telegram_bot_token         # paste BotFather token
+# then add your Telegram user ID to ~/.alexandria/config.toml under
+# [bot].telegram_allowlist = [123456789]
+alxia bot start
 ```
 
 ## Sources

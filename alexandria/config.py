@@ -66,6 +66,17 @@ class SecretsConfig(BaseModel):
     keyring_service: str = "alexandria"
 
 
+class BotConfig(BaseModel):
+    """Chat-bot runtime configuration (Telegram, etc.)."""
+
+    telegram_token_ref: str = "telegram_bot_token"
+    telegram_allowlist: list[int] = Field(default_factory=list)
+    workspace: str = ""  # empty = current workspace
+    model: str = "haiku"  # passed to `claude -p --model`
+    max_reply_chars: int = 3500  # stay under Telegram's 4096 limit
+    agent_timeout_s: int = 180
+
+
 class Config(BaseModel):
     """The complete alexandria configuration."""
 
@@ -75,6 +86,7 @@ class Config(BaseModel):
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     secrets: SecretsConfig = Field(default_factory=SecretsConfig)
+    bot: BotConfig = Field(default_factory=BotConfig)
 
 
 def resolve_home() -> Path:
@@ -150,4 +162,6 @@ def _format_toml_value(value: Any) -> str:
         return repr(value)
     if value is None:
         return '""'
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_toml_value(v) for v in value) + "]"
     return f'"{str(value)}"'

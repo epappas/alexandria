@@ -13,6 +13,7 @@ from alexandria.cli import (
     backup_cmd,
     beliefs_cmd,
     bench_cmd,
+    bot_cmd,
     capture_cmd,
     daemon_cmd,
     db_cmd,
@@ -283,6 +284,20 @@ skill_app.command(
     help="Install into claude-code | cursor | codex.",
 )(skill_cmd.install_command)
 app.add_typer(skill_app, name="skill")
+
+bot_app = typer.Typer(
+    help="Chat bot adapter that puts alexandria in your pocket via Telegram.",
+    no_args_is_help=True,
+)
+bot_app.command(
+    "start",
+    help="Start the Telegram bot (blocks until killed).",
+)(bot_cmd.start_command)
+bot_app.command(
+    "status",
+    help="Show bot configuration and dependency availability.",
+)(bot_cmd.status_command)
+app.add_typer(bot_app, name="bot")
 
 
 def main() -> None:
