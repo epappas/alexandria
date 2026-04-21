@@ -16,15 +16,16 @@ def export_command(
     output: str = typer.Argument(..., help="Output directory."),
     format: str = typer.Option(
         "markdown", "--format", "-f",
-        help="obsidian | markdown | json | github",
+        help="obsidian | markdown | json | github | graph",
     ),
     workspace: str | None = typer.Option(None, "--workspace", "-w"),
 ) -> None:
-    """Export wiki content to Obsidian, Markdown, JSON, or GitHub layout."""
+    """Export wiki content to Obsidian, Markdown, JSON, GitHub, or Graph."""
     from pathlib import Path
 
     from alexandria.core.export import export_json, export_markdown, export_obsidian
     from alexandria.core.export_github import export_github
+    from alexandria.core.export_graph import export_graph
 
     home = resolve_home()
     config = load_config(home)
@@ -59,9 +60,14 @@ def export_command(
         fmt_label = (
             f"github ({gh.topics} topics, {gh.journal_months} journal months)"
         )
+    elif format == "graph":
+        with connect(db_path(home)) as conn:
+            gr = export_graph(output_dir, conn, slug)
+        files, out = gr.nodes, gr.output_path
+        fmt_label = f"graph ({gr.nodes} nodes, {gr.edges} edges)"
     else:
         console.print(f"[red]error:[/red] unknown format: {format}")
-        console.print("[dim]Supported: obsidian, markdown, json, github[/dim]")
+        console.print("[dim]Supported: obsidian, markdown, json, github, graph[/dim]")
         raise typer.Exit(code=1)
 
     console.print(f"[green]Exported[/green] {files} files ({fmt_label})")

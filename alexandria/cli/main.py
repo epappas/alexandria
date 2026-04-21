@@ -12,6 +12,7 @@ from alexandria import __version__
 from alexandria.cli import (
     backup_cmd,
     beliefs_cmd,
+    bench_cmd,
     capture_cmd,
     daemon_cmd,
     db_cmd,
@@ -30,6 +31,7 @@ from alexandria.cli import (
     query_cmd,
     reindex_cmd,
     secrets_cmd,
+    skill_cmd,
     source_cmd,
     status_cmd,
     subscriptions_cmd,
@@ -93,6 +95,9 @@ app.command("paste", help="One-shot capture from stdin into raw/local/.")(
 )
 app.command("doctor", help="Run health checks across the install.")(
     doctor_cmd.doctor_command
+)
+app.command("bench", help="Print a one-line capability metric (docs, beliefs, search latency).")(
+    bench_cmd.bench_command
 )
 
 # -- Workspace and project groups -------------------------------------------
@@ -268,6 +273,16 @@ app.add_typer(daemon_app, name="daemon")
 logs_app = typer.Typer(help="Structured log viewer.", no_args_is_help=True)
 logs_app.command("show", help="Show structured logs.")(logs_cmd.logs_show_command)
 app.add_typer(logs_app, name="logs")
+
+skill_app = typer.Typer(
+    help="Install the alexandria skill into AI coding agents.",
+    no_args_is_help=True,
+)
+skill_app.command(
+    "install",
+    help="Install into claude-code | cursor | codex.",
+)(skill_cmd.install_command)
+app.add_typer(skill_app, name="skill")
 
 
 def main() -> None:

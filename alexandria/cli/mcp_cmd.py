@@ -77,6 +77,8 @@ def install_command(
     installers = {
         "claude-code": _install_claude_code,
         "claude-desktop": _install_claude_desktop,
+        "codex": _install_codex,
+        "cursor": _install_cursor,
     }
     handler = installers.get(client)
     if not handler:
@@ -203,6 +205,77 @@ def _install_claude_desktop(workspace: str | None) -> None:
         f"[bold]{config_path}[/bold]"
     )
     console.print("[dim]Restart Claude Desktop to pick up the change.[/dim]")
+
+
+def _install_codex(workspace: str | None) -> None:
+    """Register alexandria as an MCP server in Codex's config.toml."""
+    alexandria_bin = _find_alexandria_bin()
+    args = ["mcp", "serve"]
+    if workspace:
+        args.extend(["--workspace", workspace])
+
+    config_path = Path.home() / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    marker = "# _alexandria_managed"
+    entry = (
+        f"\n{marker}\n"
+        f"[mcp.servers.alexandria]\n"
+        f'command = "{alexandria_bin}"\n'
+        f"args = {args!r}\n"
+    )
+    # Replace any prior alexandria-managed block to stay idempotent
+    lines = existing.split("\n")
+    cleaned: list[str] = []
+    skip = False
+    for line in lines:
+        if line.strip() == marker:
+            skip = True
+            continue
+        if skip and line.startswith("[") and not line.startswith("[mcp.servers.alexandria"):
+            skip = False
+        if skip and line.startswith("[mcp.servers.alexandria"):
+            continue
+        if skip:
+            continue
+        cleaned.append(line)
+    rewritten = "\n".join(cleaned).rstrip() + entry
+    config_path.write_text(rewritten, encoding="utf-8")
+
+    mode = f"pinned: {workspace}" if workspace else "open mode"
+    console.print(
+        f"[green]Installed[/green] alexandria MCP server ({mode}) in "
+        f"[bold]{config_path}[/bold]"
+    )
+    console.print("[dim]Restart Codex to pick up the change.[/dim]")
+
+
+def _install_cursor(workspace: str | None) -> None:
+    """Register alexandria as an MCP server in Cursor's ~/.cursor/mcp.json."""
+    alexandria_bin = _find_alexandria_bin()
+    args = ["mcp", "serve"]
+    if workspace:
+        args.extend(["--workspace", workspace])
+
+    entry = {
+        "command": alexandria_bin,
+        "args": args,
+        "_alexandria_managed": True,
+    }
+
+    config_path = Path.home() / ".cursor" / "mcp.json"
+    config = _read_json(config_path) or {}
+    config.setdefault("mcpServers", {})
+    config["mcpServers"]["alexandria"] = entry
+    _write_json(config_path, config)
+
+    mode = f"pinned: {workspace}" if workspace else "open mode"
+    console.print(
+        f"[green]Installed[/green] alexandria MCP server ({mode}) in "
+        f"[bold]{config_path}[/bold]"
+    )
+    console.print("[dim]Restart Cursor to pick up the change.[/dim]")
 
 
 def _find_alexandria_bin() -> str:

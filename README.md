@@ -1,8 +1,35 @@
 # Alexandria
 
-Local-first single-user knowledge engine. Accumulates your gathered knowledge (raw sources, compiled wiki pages, event streams, AI conversations) and exposes it via MCP to connected agents like Claude Code for retroactive query, retrieval, and synthesis.
+**Give your AI coding agent a persistent, citable knowledge base.**
+alexandria ingests papers, articles, code, and conversations into a
+local wiki with verified quote citations — and exposes it over MCP so
+Claude Code, Cursor, Codex, and other MCP-capable agents can
+retroactively query, cross-reference, and synthesize everything you've
+ever fed it.
 
-Alexandria is **not** a chat client. Interactive conversations happen in your existing MCP-capable agent (Claude Code, Cursor, Codex). Alexandria is the knowledge engine those agents connect to.
+```bash
+pip install alexandria-wiki && alxia init
+alxia ingest https://arxiv.org/abs/2307.03172
+alxia mcp install claude-code
+# now ask your agent — the knowledge is there, with citations back to source
+```
+
+Three things alexandria does that most "feed-your-LLM-a-folder" tools
+don't:
+
+- **Durable across sessions.** Knowledge accumulates in
+  `~/.alexandria/`; every ingest is a staged, verified write, not a
+  regenerate-from-scratch pass.
+- **Every claim has a citation.** A deterministic verifier checks that
+  each footnote maps to a verbatim quote in the original source via
+  SHA-256 anchors — no hallucinated references.
+- **Belief revision, not just retrieval.** Structured claims with
+  supersession chains. Ask `alxia why <topic>` and you get what was
+  believed, what superseded it, and why.
+
+alexandria is **not** a chat client. Interactive conversations happen
+in your existing MCP-capable agent (Claude Code, Cursor, Codex).
+alexandria is the knowledge engine those agents connect to.
 
 ## Install
 
@@ -41,6 +68,19 @@ alxia ingest ~/.claude/projects/*/session.jsonl    # conversation
 
 # 5. Query your knowledge
 alxia query "What do you know?"
+
+# Bonus: one-line capability report (paste-ready for a README badge)
+alxia bench
+#  → 864 pages · 15,589 beliefs across 3,804 topics · 1,664 verified
+#    ingests · search 41ms / 386ms P95 · citation-verified rate: 99.9%
+
+# Optional: interactive belief-graph viewer (zero-CDN, self-contained HTML)
+alxia export ~/alexandria-graph --format graph
+open ~/alexandria-graph/graph.html
+
+# Optional: install as a Claude Code / Cursor / Codex skill for an
+# always-on "/alexandria" command that orients your agent before grep
+alxia skill install claude-code
 ```
 
 ## Sources
