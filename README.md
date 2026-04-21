@@ -14,6 +14,12 @@ alxia mcp install claude-code
 # now ask your agent — the knowledge is there, with citations back to source
 ```
 
+![alexandria belief graph](docs/assets/graph.png)
+
+*Live belief graph from a real vault — 668 nodes, 500 edges. Blue =
+code-derived, yellow = topic hubs, orange = web, green = papers.
+Generate your own with `alxia export <dir> --format graph`.*
+
 Three things alexandria does that most "feed-your-LLM-a-folder" tools
 don't:
 
