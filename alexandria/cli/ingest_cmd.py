@@ -29,6 +29,10 @@ def ingest_command(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview without running (single file only)."
     ),
+    no_merge: bool = typer.Option(
+        False, "--no-merge",
+        help="Force a new wiki page per source; skip cascade merge/hedge planning.",
+    ),
 ) -> None:
     """Compile sources into the wiki via staged writes + verification.
 
@@ -69,12 +73,12 @@ def ingest_command(
 
     # Git repo URL
     if _is_git_url(source):
-        _ingest_git_repo(home, target_slug, ws.path, source, topic)
+        _ingest_git_repo(home, target_slug, ws.path, source, topic, no_merge)
         return
 
     # HTTP/HTTPS URL (non-git)
     if source.startswith(("http://", "https://")):
-        _ingest_url(home, target_slug, ws.path, source, topic)
+        _ingest_url(home, target_slug, ws.path, source, topic, no_merge)
         return
 
     # Local path
@@ -85,7 +89,7 @@ def ingest_command(
 
     # Directory -> repo ingest
     if local.is_dir():
-        _ingest_directory(home, target_slug, ws.path, local, topic)
+        _ingest_directory(home, target_slug, ws.path, local, topic, no_merge)
         return
 
     # JSONL conversation transcript -> capture + ingest
@@ -94,11 +98,12 @@ def ingest_command(
         return
 
     # Single file
-    _ingest_single_file(home, target_slug, ws.path, local, topic)
+    _ingest_single_file(home, target_slug, ws.path, local, topic, no_merge)
 
 
 def _ingest_single_file(
-    home: Path, slug: str, ws_path: Path, source_path: Path, topic: str | None,
+    home: Path, slug: str, ws_path: Path, source_path: Path,
+    topic: str | None, no_merge: bool = False,
 ) -> None:
     from alexandria.core.ingest import IngestError, ingest_file
 
@@ -106,7 +111,7 @@ def _ingest_single_file(
     try:
         result = ingest_file(
             home=home, workspace_slug=slug, workspace_path=ws_path,
-            source_file=source_path, topic=topic,
+            source_file=source_path, topic=topic, no_merge=no_merge,
         )
     except IngestError as exc:
         console.print(f"[red]Ingest failed:[/red] {exc}")
@@ -203,6 +208,7 @@ def _ingest_conversation(
 
 def _ingest_url(
     home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
+    no_merge: bool = False,
 ) -> None:
     from alexandria.core.web import WebFetchError, fetch_and_save
 
@@ -214,11 +220,12 @@ def _ingest_url(
         raise typer.Exit(code=1) from exc
 
     console.print(f"[dim]Saved to {source_path.relative_to(ws_path)}[/dim]")
-    _ingest_single_file(home, slug, ws_path, source_path, topic)
+    _ingest_single_file(home, slug, ws_path, source_path, topic, no_merge)
 
 
 def _ingest_directory(
-    home: Path, slug: str, ws_path: Path, dir_path: Path, topic: str | None,
+    home: Path, slug: str, ws_path: Path, dir_path: Path,
+    topic: str | None, no_merge: bool = False,
 ) -> None:
     from alexandria.core.repo_ingest import ALL_INGEST_EXTS, _collect_files, ingest_repo
 
@@ -231,13 +238,14 @@ def _ingest_directory(
     result = ingest_repo(
         home=home, workspace_slug=slug, workspace_path=ws_path,
         repo_path=dir_path, topic=topic,
-        on_progress=_print_progress,
+        on_progress=_print_progress, no_merge=no_merge,
     )
     _print_summary(result)
 
 
 def _ingest_git_repo(
     home: Path, slug: str, ws_path: Path, url: str, topic: str | None,
+    no_merge: bool = False,
 ) -> None:
     from alexandria.core.repo_ingest import (
         ALL_INGEST_EXTS,
@@ -265,7 +273,7 @@ def _ingest_git_repo(
     result = ingest_repo(
         home=home, workspace_slug=slug, workspace_path=ws_path,
         repo_path=repo_path, topic=topic,
-        on_progress=_print_progress,
+        on_progress=_print_progress, no_merge=no_merge,
     )
     _print_summary(result)
 

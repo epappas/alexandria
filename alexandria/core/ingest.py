@@ -116,6 +116,7 @@ def ingest_file(
     *,
     topic: str | None = None,
     verifier: DeterministicVerifier | None = None,
+    no_merge: bool = False,
 ) -> IngestResult:
     """Ingest a single raw source file into the wiki.
 
@@ -250,7 +251,7 @@ def ingest_file(
         topic=resolved_topic, slug=slug, title=title, body=body,
         sources_line=sources_line, raw_line=raw_line,
         footnotes=footnote_lines, beliefs=llm_beliefs,
-        cite_path=cite_path,
+        cite_path=cite_path, no_merge=no_merge,
     )
 
     # Run the verifier
@@ -466,13 +467,14 @@ def _execute_cascade(
     footnotes: str,
     beliefs: list[dict],
     cite_path: str,
+    no_merge: bool = False,
 ) -> Path:
     """Decide merge/hedge/new_page and execute the cascade operation."""
     from alexandria.core.cascade.decision import plan_cascade
 
-    # Try cascade planning if DB exists
+    # Try cascade planning if DB exists and merge is allowed
     own_wiki_path = f"wiki/{topic}/{slug}.md"
-    if db_path(home).exists():
+    if db_path(home).exists() and not no_merge:
         try:
             with connect(db_path(home)) as conn:
                 plan = plan_cascade(
@@ -486,9 +488,13 @@ def _execute_cascade(
 
     if plan and plan.action == "merge" and plan.target_page:
         rel = plan.target_page.removeprefix("wiki/")
+        # Always route the merged content into a dedicated per-source section so
+        # sequential merges stack as distinct, attributable blocks rather than
+        # accumulating into one generic Overview.
+        section_heading = _per_source_section_heading(title, slug)
         return stage_merge(
             staged, workspace_path, rel,
-            plan.section_heading, body,
+            section_heading, body,
             f'[^src]: {cite_path}' if cite_path else "",
         )
 
@@ -510,6 +516,19 @@ def _execute_cascade(
             except Exception:
                 continue
     return path
+
+
+def _per_source_section_heading(title: str, slug: str) -> str:
+    """Build a unique, attributable section heading for a merge operation.
+
+    Using the source title (not the cascade's topical section name) ensures
+    sequential merges stack into distinct sections instead of piling into
+    one undifferentiated block.
+    """
+    label = (title or "").strip() or slug
+    if len(label) > 80:
+        label = label[:77].rstrip() + "..."
+    return f"From: {label}"
 
 
 def _execute_hedge(

@@ -122,6 +122,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         source: str,
         workspace: str | None = None,
         topic: str | None = None,
+        no_merge: bool = False,
     ) -> str:
         """Ingest a source into the knowledge base.
 
@@ -130,6 +131,10 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         - Git repo URL or GitHub shorthand ``owner/repo`` (clones and ingests all files)
         - Local file path
         - Local directory path (ingests all supported files)
+
+        Set ``no_merge=True`` to force a brand-new wiki page per source and
+        skip the cascade's merge/hedge planning — useful when batch-ingesting
+        multiple related sources that you want to stay on separate pages.
         """
         from pathlib import Path
 
@@ -157,7 +162,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 return f"Clone failed: {exc}"
             result = ingest_repo(
                 home=home, workspace_slug=slug, workspace_path=ws_path,
-                repo_path=repo_path, topic=topic,
+                repo_path=repo_path, topic=topic, no_merge=no_merge,
             )
             return _format_repo_result(source, result)
 
@@ -169,7 +174,10 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             except WebFetchError as exc:
                 return f"Fetch failed: {exc}"
             try:
-                r = ingest_file(home, slug, ws_path, source_path, topic=topic)
+                r = ingest_file(
+                    home, slug, ws_path, source_path,
+                    topic=topic, no_merge=no_merge,
+                )
             except IngestError as exc:
                 return f"Ingest failed: {exc}"
             if r.committed:
@@ -186,7 +194,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             from alexandria.core.repo_ingest import ingest_repo
             result = ingest_repo(
                 home=home, workspace_slug=slug, workspace_path=ws_path,
-                repo_path=local, topic=topic,
+                repo_path=local, topic=topic, no_merge=no_merge,
             )
             return _format_repo_result(source, result)
 
@@ -237,7 +245,10 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
         # Single file
         try:
-            r = ingest_file(home, slug, ws_path, local, topic=topic)
+            r = ingest_file(
+                home, slug, ws_path, local,
+                topic=topic, no_merge=no_merge,
+            )
         except IngestError as exc:
             return f"Ingest failed: {exc}"
         if r.committed:

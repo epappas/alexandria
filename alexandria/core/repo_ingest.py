@@ -91,6 +91,7 @@ def ingest_repo(
     topic: str | None = None,
     extensions: set[str] | None = None,
     on_progress: Any = None,
+    no_merge: bool = False,
 ) -> RepoIngestResult:
     """Walk a repo directory and ingest all supported files.
 
@@ -121,6 +122,7 @@ def ingest_repo(
                     workspace_path=workspace_path,
                     source_file=file_path,
                     topic=file_topic,
+                    no_merge=no_merge,
                 )
         except (IngestError, Exception) as exc:
             result.errors.append(f"{rel}: {exc}")
