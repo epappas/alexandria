@@ -91,13 +91,32 @@ calls with the default `wait_s=60` — that makes the conversation wait
 for the slowest one. Instead:
 
 1. Enqueue them all with `wait_s=0`, collect the `job_id`s.
-2. Tell the user what you queued and their totals-so-far.
-3. Poll `jobs_list` or `jobs_status` in subsequent turns; report
-   progress as jobs finish.
+2. Tell the user what you queued with a one-line summary.
+3. **Return control. Stop.** Do not poll. Do not set up bash loops
+   waiting on job state. Do not call `jobs_status` repeatedly within
+   the same turn.
+4. On the *next* user turn, or when the user asks "are those done?",
+   call `jobs_list` once and summarize.
 
 For repository URLs (especially `github.com/org/repo`), default to
 `scope="docs"` unless the user has asked for the whole codebase. Large
 repos take hours to fully ingest.
+
+## Anti-patterns to avoid
+
+These waste the user's wall time and token budget:
+
+- **Bash polling loops**: `until grep -q completed ...; do sleep 5; done`
+  blocks the agent indefinitely. The ingest daemon is already working;
+  nothing about polling speeds it up.
+- **Serial `jobs_status` calls in one turn**: calling `jobs_status` 3
+  times in a row with sleeps between them does nothing useful and
+  reads just as slow as the first call did. One call, then stop.
+- **"Proving" it works before retrying**: don't fetch the URL via
+  bash/curl to verify it works, then re-call `ingest`. Just call
+  `ingest`. If it fails, the job's `error` field tells you why.
+- **Waiting on `wait_s=60` for batches**: use `wait_s=0` when you're
+  enqueuing more than one thing.
 
 ## Citation discipline
 

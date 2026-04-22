@@ -258,7 +258,10 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             f"Job {job.job_id} {job.status.value} — {job.message or 'waiting'}\n"
             f"Progress: {job.files_done}/{job.files_total} "
             f"({job.progress_pct}%)\n"
-            f"Poll with: jobs_status(job_id='{job.job_id}')"
+            f"The job runs in the background. Return control to the "
+            f"user and report progress. Do NOT spin-poll jobs_status "
+            f"or set up a bash polling loop — call jobs_status once on "
+            f"a later user turn, or when the user asks for an update."
         )
 
     def _format_job_final(job: object) -> str:  # noqa: ANN001
