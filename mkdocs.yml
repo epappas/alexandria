@@ -31,6 +31,7 @@ nav:
       - MCP integration: guides/mcp_integration.md
       - Mobile vault via GitHub: guides/mobile_vault_github.md
       - Telegram bot: guides/telegram_bot.md
+      - Async ingest jobs: guides/jobs.md
   - Architecture:
       - Overview: architecture/README.md
       - Vision & Principles: architecture/01_vision_and_principles.md

@@ -183,7 +183,7 @@ class TestEndToEndFlow:
         """Verify all migrations applied cleanly."""
         with connect(db_path(home)) as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            assert version == 12
+            assert version == 13
 
             # Check key tables exist
             tables = {

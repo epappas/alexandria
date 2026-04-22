@@ -26,6 +26,7 @@ def register_all(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         grep_tool,
         guide_tool,
         history_tool,
+        jobs_tool,
         list_tool,
         overview_tool,
         read_tool,
@@ -52,3 +53,4 @@ def register_all(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
     sources_tool.register(mcp, resolve)
     subscriptions_tool.register(mcp, resolve)
     write_tool.register(mcp, resolve)
+    jobs_tool.register(mcp, resolve)

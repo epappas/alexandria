@@ -92,6 +92,9 @@ def ingest_repo(
     extensions: set[str] | None = None,
     on_progress: Any = None,
     no_merge: bool = False,
+    scope: str = "all",
+    should_cancel: Any = None,
+    on_start: Any = None,
 ) -> RepoIngestResult:
     """Walk a repo directory and ingest all supported files.
 
@@ -99,13 +102,31 @@ def ingest_repo(
         repo_path: Path to the repo root (local or cloned).
         topic: Override topic for all files. Default: inferred from path.
         extensions: Override set of extensions to include.
-        on_progress: Callable(file_path, status) for progress reporting.
+        on_progress: Callable(file_path, status) for per-file progress.
+        scope: 'all' (default) or 'docs' — docs limits to README/*.md +
+            top-level markdown + docs/**/*.md only.
+        should_cancel: Callable() -> bool. Checked between files; when
+            True, the loop exits cleanly leaving committed files in place.
+        on_start: Callable(total_files) invoked once with the file count
+            after filtering. Lets callers populate a progress bar or
+            persist the expected total before the first file runs.
     """
     allowed = extensions or ALL_INGEST_EXTS
     result = RepoIngestResult(repo_path=str(repo_path))
 
     files = _collect_files(repo_path, allowed)
+    if scope == "docs":
+        files = _filter_docs_scope(files, repo_path)
+    if on_start:
+        try:
+            on_start(len(files))
+        except Exception:
+            pass
+
     for file_path in files:
+        if should_cancel and should_cancel():
+            result.errors.append("cancelled by user request")
+            break
         rel = str(file_path.relative_to(repo_path))
         file_topic = topic or _infer_topic_from_path(file_path, repo_path)
 
@@ -150,6 +171,32 @@ def ingest_repo(
             on_progress(rel, "committed" if ir.committed else "rejected")
 
     return result
+
+
+def _filter_docs_scope(files: list[Path], repo_path: Path) -> list[Path]:
+    """Restrict a file list to documentation surfaces.
+
+    Matches README*, LICENSE, top-level *.md / *.rst, and anything under
+    docs/ (case-insensitive). Used by scope='docs' ingests to keep
+    repository ingestion tractable.
+    """
+    kept: list[Path] = []
+    for f in files:
+        rel = f.relative_to(repo_path)
+        parts = [p.lower() for p in rel.parts]
+        name = f.name.lower()
+        if parts and parts[0] in ("docs", "doc", "documentation"):
+            kept.append(f)
+            continue
+        if len(parts) == 1 and (
+            name.startswith("readme")
+            or name.startswith("changelog")
+            or name.startswith("contributing")
+            or f.suffix.lower() in (".md", ".rst", ".txt")
+        ):
+            kept.append(f)
+            continue
+    return kept
 
 
 def _collect_files(repo_path: Path, allowed_exts: set[str]) -> list[Path]:

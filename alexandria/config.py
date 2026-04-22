@@ -77,6 +77,21 @@ class BotConfig(BaseModel):
     agent_timeout_s: int = 180
 
 
+class JobsConfig(BaseModel):
+    """Background job worker configuration.
+
+    The worker runs ingest work async so the interactive agent is not
+    blocked. ``model`` controls which Claude model the worker pins for
+    its LLM calls — it is always set on the worker subprocess env
+    regardless of what the surrounding session uses, so ingests never
+    consume Opus quota unintentionally.
+    """
+
+    model: str = "haiku"          # pinned for ingest LLM calls
+    poll_interval_s: float = 1.0  # how often the worker polls the queue
+    default_wait_s: int = 60      # default `ingest(wait_s=...)` in MCP tool
+
+
 class Config(BaseModel):
     """The complete alexandria configuration."""
 
@@ -87,6 +102,7 @@ class Config(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     secrets: SecretsConfig = Field(default_factory=SecretsConfig)
     bot: BotConfig = Field(default_factory=BotConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
 
 
 def resolve_home() -> Path:

@@ -123,24 +123,36 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         workspace: str | None = None,
         topic: str | None = None,
         no_merge: bool = False,
+        scope: str = "all",
+        wait_s: int = 60,
     ) -> str:
-        """Ingest a source into the knowledge base.
+        """Enqueue an ingest job and optionally wait for it.
 
         Accepts any of:
         - URL (fetches page/PDF, extracts content)
-        - Git repo URL or GitHub shorthand ``owner/repo`` (clones and ingests all files)
+        - Git repo URL or GitHub shorthand ``owner/repo`` (clones and
+          ingests files)
         - Local file path
         - Local directory path (ingests all supported files)
 
-        Set ``no_merge=True`` to force a brand-new wiki page per source and
-        skip the cascade's merge/hedge planning — useful when batch-ingesting
-        multiple related sources that you want to stay on separate pages.
-        """
-        from pathlib import Path
+        ``scope='all'`` (default) ingests everything; ``scope='docs'``
+        restricts repository ingests to README, top-level markdown, and
+        ``docs/`` trees — recommended for large codebases where you only
+        want the documentation surfaces.
 
-        from alexandria.cli.ingest_cmd import _is_bare_url, _is_git_url, _is_github_shorthand
+        ``no_merge=True`` forces a brand-new wiki page per source and
+        skips cascade merge/hedge planning.
+
+        ``wait_s`` caps how long the call blocks for the job to finish.
+        Short ingests return their full result; long ones return a
+        ``job_id`` that the agent should poll via ``jobs_status``.
+        Use ``wait_s=0`` to always return a job handle immediately.
+        """
+        from alexandria.cli.ingest_cmd import (
+            _is_bare_url,
+            _is_github_shorthand,
+        )
         from alexandria.config import resolve_home
-        from alexandria.core.ingest import IngestError, ingest_file
 
         ws_path, slug = resolve(workspace)
         home = resolve_home()
@@ -153,107 +165,10 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         if _is_bare_url(source):
             source = f"https://{source}"
 
-        # Git repo
-        if _is_git_url(source):
-            from alexandria.core.repo_ingest import clone_repo, ingest_repo
-            try:
-                repo_path = clone_repo(source, ws_path / "raw" / "git")
-            except IngestError as exc:
-                return f"Clone failed: {exc}"
-            result = ingest_repo(
-                home=home, workspace_slug=slug, workspace_path=ws_path,
-                repo_path=repo_path, topic=topic, no_merge=no_merge,
-            )
-            return _format_repo_result(source, result)
-
-        # HTTP URL (non-git)
-        if source.startswith(("http://", "https://")):
-            from alexandria.core.web import WebFetchError, fetch_and_save
-            try:
-                source_path = fetch_and_save(source, ws_path)
-            except WebFetchError as exc:
-                return f"Fetch failed: {exc}"
-            try:
-                r = ingest_file(
-                    home, slug, ws_path, source_path,
-                    topic=topic, no_merge=no_merge,
-                )
-            except IngestError as exc:
-                return f"Ingest failed: {exc}"
-            if r.committed:
-                return f"Ingested: {source}\nWiki: {', '.join(r.committed_paths)}"
-            return f"Rejected: {r.verdict_reasoning}"
-
-        # Local path
-        local = Path(source).expanduser().resolve()
-        if not local.exists():
-            return f"Not found: {source}"
-
-        # Directory
-        if local.is_dir():
-            from alexandria.core.repo_ingest import ingest_repo
-            result = ingest_repo(
-                home=home, workspace_slug=slug, workspace_path=ws_path,
-                repo_path=local, topic=topic, no_merge=no_merge,
-            )
-            return _format_repo_result(source, result)
-
-        # JSONL conversation transcript
-        if local.suffix == ".jsonl":
-            from alexandria.core.capture.conversation import (
-                CaptureError,
-                capture_conversation,
-                detect_format,
-            )
-            fmt = detect_format(local)
-            if fmt != "unknown":
-                try:
-                    cap = capture_conversation(local, ws_path, client=fmt)
-                except CaptureError as exc:
-                    return f"Capture failed: {exc}"
-                md_path = Path(cap["absolute_path"])
-                try:
-                    r = ingest_file(home, slug, ws_path, md_path, topic=topic or "conversations")
-                except IngestError as exc:
-                    return f"Ingest failed: {exc}"
-                lines = []
-                if r.committed:
-                    lines.append(f"Conversation captured: {cap['message_count']} messages")
-                    lines.append(f"Wiki: {', '.join(r.committed_paths)}")
-                else:
-                    lines.append(f"Conversation rejected: {r.verdict_reasoning}")
-
-                # Ingest referenced artifacts
-                from alexandria.core.capture.artifacts import extract_artifacts
-                from alexandria.core.capture.conversation import _parse_claude_code_jsonl
-                from alexandria.core.web import WebFetchError, fetch_and_save
-
-                raw_msgs = _parse_claude_code_jsonl(local) if fmt == "claude-code" else []
-                artifacts = extract_artifacts(raw_msgs)
-                art_ok = 0
-                for art in artifacts:
-                    try:
-                        art_path = fetch_and_save(art.url, ws_path)
-                        ar = ingest_file(home, slug, ws_path, art_path, topic=topic or "research")
-                        if ar.committed:
-                            art_ok += 1
-                    except Exception:
-                        continue
-                if artifacts:
-                    lines.append(f"Artifacts: {art_ok}/{len(artifacts)} ingested")
-                return "\n".join(lines)
-
-        # Single file
-        try:
-            r = ingest_file(
-                home, slug, ws_path, local,
-                topic=topic, no_merge=no_merge,
-            )
-        except IngestError as exc:
-            return f"Ingest failed: {exc}"
-        if r.committed:
-            return f"Ingested: {local.name}\nWiki: {', '.join(r.committed_paths)}"
-        return f"Rejected: {r.verdict_reasoning}"
+        return _enqueue_and_maybe_wait(
+            home, slug, source,
+            topic=topic, no_merge=no_merge, scope=scope, wait_s=wait_s,
+        )
 
     @mcp.tool()
     def query(
@@ -298,14 +213,63 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
         return answer + source_text
 
-    def _format_repo_result(source: str, result: RepoIngestResult) -> str:  # noqa: F821
-        lines = [f"Ingested: {source}", f"Committed: {len(result.committed)} files"]
-        if result.rejected:
-            lines.append(f"Rejected: {len(result.rejected)}")
-        if result.errors:
-            lines.append(f"Errors: {len(result.errors)}")
-            for err in result.errors[:3]:
-                lines.append(f"  {err}")
-        if result.committed:
-            lines.append(f"\nPages: {', '.join(result.committed[:10])}")
+    def _enqueue_and_maybe_wait(
+        home: Path,  # noqa: F821
+        slug: str,
+        source: str,
+        *,
+        topic: str | None,
+        no_merge: bool,
+        scope: str,
+        wait_s: int,
+    ) -> str:
+        """Enqueue an ingest job; wait up to ``wait_s`` for completion."""
+        import time as _time
+
+        from alexandria.db.connection import connect, db_path
+        from alexandria.jobs.model import JobStatus
+        from alexandria.jobs.queue import enqueue_ingest, get_job
+
+        spec = {
+            "source": source,
+            "topic": topic,
+            "no_merge": no_merge,
+            "scope": scope,
+        }
+        with connect(db_path(home)) as conn:
+            job = enqueue_ingest(conn, slug, spec)
+
+        if wait_s <= 0:
+            return _format_job_handle(job)
+
+        deadline = _time.time() + wait_s
+        while _time.time() < deadline:
+            _time.sleep(1.0)
+            with connect(db_path(home)) as conn:
+                job = get_job(conn, job.job_id)
+            if job.status in (
+                JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED,
+            ):
+                return _format_job_final(job)
+        return _format_job_handle(job)
+
+    def _format_job_handle(job: object) -> str:  # noqa: ANN001
+        return (
+            f"Job {job.job_id} {job.status.value} — {job.message or 'waiting'}\n"
+            f"Progress: {job.files_done}/{job.files_total} "
+            f"({job.progress_pct}%)\n"
+            f"Poll with: jobs_status(job_id='{job.job_id}')"
+        )
+
+    def _format_job_final(job: object) -> str:  # noqa: ANN001
+        lines = [
+            f"Job {job.job_id} {job.status.value} — "
+            f"{job.message or 'done'}",
+            f"Files: {job.files_done} committed"
+            + (f", {job.files_failed} failed" if job.files_failed else ""),
+        ]
+        if job.error:
+            lines.append(f"Error: {job.error[:300]}")
+        if job.run_ids:
+            lines.append(f"Pages: {', '.join(job.run_ids[:10])}")
         return "\n".join(lines)

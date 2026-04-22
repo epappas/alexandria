@@ -84,6 +84,13 @@ alxia bench
 alxia export ~/alexandria-graph --format graph
 open ~/alexandria-graph/graph.html
 
+# Ingest is async and runs on Haiku regardless of your session model —
+# batch loads never block the conversation or burn Opus quota.
+# Inspect or control jobs from the CLI:
+alxia jobs list                 # what's running / queued / recent
+alxia jobs tail <job_id>        # stream a job's progress
+alxia jobs cancel <job_id>      # cooperative cancel; committed pages stay
+
 # Optional: install as a Claude Code / Cursor / Codex skill for an
 # always-on "/alexandria" command that orients your agent before grep
 alxia skill install claude-code

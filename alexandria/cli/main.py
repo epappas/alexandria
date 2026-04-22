@@ -24,6 +24,7 @@ from alexandria.cli import (
     hooks_cmd,
     ingest_cmd,
     init_cmd,
+    jobs_cmd,
     lint_cmd,
     logs_cmd,
     mcp_cmd,
@@ -298,6 +299,24 @@ bot_app.command(
     help="Show bot configuration and dependency availability.",
 )(bot_cmd.status_command)
 app.add_typer(bot_app, name="bot")
+
+jobs_app = typer.Typer(
+    help="Inspect and control the async ingest queue.",
+    no_args_is_help=True,
+)
+jobs_app.command("list", help="List recent ingest jobs.")(
+    jobs_cmd.list_command,
+)
+jobs_app.command("status", help="Full detail for one job.")(
+    jobs_cmd.status_command,
+)
+jobs_app.command("cancel", help="Request cooperative cancellation.")(
+    jobs_cmd.cancel_command,
+)
+jobs_app.command("tail", help="Stream a job's progress until it finishes.")(
+    jobs_cmd.tail_command,
+)
+app.add_typer(jobs_app, name="jobs")
 
 
 def main() -> None:

@@ -98,13 +98,35 @@ def create_server(
 def run_stdio(pinned_workspace: str | None = None) -> None:
     """Start the MCP server on stdio. Blocks until the client disconnects.
 
-    Logs to stderr only — stdout is the MCP protocol channel.
+    Logs to stderr only — stdout is the MCP protocol channel. A background
+    async task runs the job worker so long ingests execute outside the
+    interactive tool-call path.
     """
-    # The MCP server is a separate process — clear CLAUDECODE so the
-    # LLM provider detection allows using the Claude Code SDK.
     os.environ.pop("CLAUDECODE", None)
     server = create_server(pinned_workspace=pinned_workspace)
-    server.run(transport="stdio")
+    _run_with_worker(server.run_stdio_async())
+
+
+def _run_with_worker(server_coro) -> None:  # noqa: ANN001
+    """Drive the MCP server + the jobs worker on one event loop."""
+    import asyncio
+
+    from alexandria.jobs.worker import worker_loop
+
+    async def _main() -> None:
+        stop = asyncio.Event()
+        worker_task = asyncio.create_task(worker_loop(stop_event=stop))
+        try:
+            await server_coro
+        finally:
+            stop.set()
+            worker_task.cancel()
+            try:
+                await worker_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    asyncio.run(_main())
 
 
 def run_http(
@@ -167,4 +189,23 @@ def run_http(
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     app.mount("/mcp", mcp_app)
 
-    uvicorn.run(app, host=host, port=port)
+    import asyncio
+
+    from alexandria.jobs.worker import worker_loop
+
+    async def _serve() -> None:
+        stop = asyncio.Event()
+        worker_task = asyncio.create_task(worker_loop(stop_event=stop))
+        try:
+            cfg = uvicorn.Config(app, host=host, port=port, log_level="info")
+            server_ = uvicorn.Server(cfg)
+            await server_.serve()
+        finally:
+            stop.set()
+            worker_task.cancel()
+            try:
+                await worker_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    asyncio.run(_serve())

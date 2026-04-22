@@ -57,11 +57,47 @@ is answerable:
 When the user asks to remember or ingest new material:
 
 - **`mcp__alexandria__ingest`** accepts URLs, GitHub shorthand
-  (`owner/repo`), local paths, or directories. Pass `no_merge=True`
-  when batch-ingesting related sources that should stay on separate
-  wiki pages (e.g. 10 URLs on the same theme).
+  (`owner/repo`), local paths, or directories. **Ingest is async** — it
+  enqueues a background job and returns a `job_id`. A short job (single
+  URL) often finishes within the default `wait_s=60` and returns the
+  full result inline; a big job (repo, directory, many URLs) returns the
+  handle immediately so you are never blocked.
+
+  - Pass `no_merge=True` when batch-ingesting related sources that
+    should stay on separate wiki pages.
+  - Pass `scope="docs"` on a git/directory source to ingest only
+    README + top-level markdown + `docs/**/*.md`. Use this by default
+    for codebases where you don't need every source file indexed.
+  - Pass `wait_s=0` to always return a job handle immediately (useful
+    when you want to kick off many ingests in parallel).
+
+  Background ingests use Haiku regardless of the model powering your
+  conversation — calling `ingest` during an Opus session is cheap.
+
+- **`mcp__alexandria__jobs_list`**, **`mcp__alexandria__jobs_status`**,
+  **`mcp__alexandria__jobs_cancel`** let you check progress, inspect
+  results, or cancel long-running ingests. When a user asks "what are
+  you ingesting right now?" or "how far is that going?" — use these
+  tools, not speculation. When an ingest is taking longer than the user
+  expected, offer to cancel.
+
 - **`mcp__alexandria__belief_add`** / **`belief_supersede`** for
   structured claims with citations.
+
+## Handling batch ingest well
+
+If the user pastes a list of N sources, don't spawn N parallel `ingest`
+calls with the default `wait_s=60` — that makes the conversation wait
+for the slowest one. Instead:
+
+1. Enqueue them all with `wait_s=0`, collect the `job_id`s.
+2. Tell the user what you queued and their totals-so-far.
+3. Poll `jobs_list` or `jobs_status` in subsequent turns; report
+   progress as jobs finish.
+
+For repository URLs (especially `github.com/org/repo`), default to
+`scope="docs"` unless the user has asked for the whole codebase. Large
+repos take hours to fully ingest.
 
 ## Citation discipline
 
