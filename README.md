@@ -40,9 +40,8 @@ alexandria is the knowledge engine those agents connect to.
 ## Install
 
 ```bash
-pip install alexandria-wiki          # core
-pip install "alexandria-wiki[pdf]"   # + PDF support
-pip install "alexandria-wiki[all]"   # + PDF + YouTube transcripts
+pip install alexandria-wiki          # core (includes PDF)
+pip install "alexandria-wiki[all]"   # + YouTube transcripts, Telegram bot, watch
 ```
 
 Or with uv:

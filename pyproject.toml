@@ -33,12 +33,11 @@ dependencies = [
   "feedparser>=6.0.0",
   "markdownify>=0.12.0",
   "pyyaml>=6.0.0",
+  "pymupdf>=1.24.0",
 ]
 
 [project.optional-dependencies]
-pdf = [
-  "pymupdf>=1.24.0",
-]
+pdf = []                               # pymupdf is now core — extra kept for install-time back-compat
 youtube = [
   "youtube-transcript-api>=0.6.0",
 ]

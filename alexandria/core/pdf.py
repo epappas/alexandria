@@ -73,13 +73,7 @@ def extract_pdf(path: Path) -> PDFDocument:
     if not path.suffix.lower() == ".pdf":
         raise PDFExtractionError(f"not a PDF file: {path}")
 
-    try:
-        import pymupdf
-    except ImportError:
-        raise PDFExtractionError(
-            "pymupdf is required for PDF ingestion. Install with: "
-            "pip install pymupdf"
-        )
+    import pymupdf  # core dependency since 0.37.1
 
     try:
         doc = pymupdf.open(str(path))

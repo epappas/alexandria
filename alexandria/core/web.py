@@ -95,12 +95,7 @@ def _handle_html(url: str, data: bytes, content_type: str) -> dict[str, Any]:
 
 def _handle_pdf(url: str, data: bytes) -> dict[str, Any]:
     """Extract text from a fetched PDF."""
-    try:
-        import pymupdf
-    except ImportError:
-        raise WebFetchError(
-            "pymupdf required for PDF URLs. Install: pip install alexandria-wiki[pdf]"
-        )
+    import pymupdf  # core dependency since 0.37.1
 
     try:
         doc = pymupdf.open(stream=data, filetype="pdf")

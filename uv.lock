@@ -17,6 +17,7 @@ dependencies = [
     { name = "mcp" },
     { name = "platformdirs" },
     { name = "pydantic" },
+    { name = "pymupdf" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
@@ -46,9 +47,6 @@ dev = [
 hcl = [
     { name = "python-hcl2" },
 ]
-pdf = [
-    { name = "pymupdf" },
-]
 watch = [
     { name = "watchdog" },
 ]
@@ -68,8 +66,8 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pymupdf", specifier = ">=1.24.0" },
     { name = "pymupdf", marker = "extra == 'all'", specifier = ">=1.24.0" },
-    { name = "pymupdf", marker = "extra == 'pdf'", specifier = ">=1.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-hcl2", marker = "extra == 'all'", specifier = ">=4.0.0" },
