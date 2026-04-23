@@ -87,9 +87,11 @@ class JobsConfig(BaseModel):
     consume Opus quota unintentionally.
     """
 
-    model: str = "haiku"          # pinned for ingest LLM calls
-    poll_interval_s: float = 1.0  # how often the worker polls the queue
-    default_wait_s: int = 60      # default `ingest(wait_s=...)` in MCP tool
+    model: str = "haiku"           # pinned for ingest LLM calls
+    poll_interval_s: float = 1.0   # how often the worker polls the queue
+    default_wait_s: int = 60       # default `ingest(wait_s=...)` in MCP tool
+    heartbeat_s: float = 30.0      # touch updated_at every N seconds while busy
+    stale_after_s: int = 300       # reclaim 'running' jobs idle this long
 
 
 class Config(BaseModel):

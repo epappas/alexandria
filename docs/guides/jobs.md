@@ -150,10 +150,73 @@ alxia jobs cancel <job_id>        # cooperative cancel
 - **ETA shows `~XXh`.** Derived from files-done / elapsed-seconds; it
   gets more accurate as more files complete. Early ETAs are noisy.
 
+## Reliability (v0.37.3+)
+
+### Single worker per home — enforced by file lock
+
+The worker grabs an exclusive fcntl lock on `~/.alexandria/jobs.lock`
+at startup. If another worker is already running (e.g. a previous
+Claude Code session that didn't quit), the new process exits cleanly
+rather than spawning a second worker that would race on the queue.
+
+This removes the "N concurrent MCP servers → N workers hammering the
+queue → Claude rate-limit saturation" failure mode.
+
+### Heartbeat during long-running jobs
+
+Every `jobs.heartbeat_s` seconds (default 30) a background task
+touches `updated_at` on the in-progress job. So even a big ingest that
+spends minutes inside `claude -p` shows recent activity — no
+false-positive "stuck" reads from `jobs_status`.
+
+### Stale-job reclaim at worker startup
+
+After acquiring the lock, the worker checks for `running` jobs whose
+`updated_at` is older than `jobs.stale_after_s` (default 300). Those
+are from a previous worker that died without marking them terminal —
+they get reset to `queued` and picked up by the fresh worker.
+
+Combined with the heartbeat, a healthy worker never trips the stale
+threshold; only crashed/killed workers leave reclaimable jobs.
+
+### Stage-aware messages
+
+The job message field now advances through stages, not just "fetching"
+for the whole life of the job:
+
+```
+fetching <url>         ← before the HTTP request
+extracting <filename>   ← after fetch, during LLM + verify
+committed: <filename>   ← after successful commit
+```
+
+`jobs_status` and `alxia jobs list` show the current stage at a glance.
+
+### Mid-URL cancellation
+
+Cancel-before-side-effects works on single-URL ingests, not just repo
+ingests. The worker checks `should_cancel` before fetch and before the
+LLM extraction pass. A job cancelled between stages finalises as
+`cancelled` with committed-so-far recorded in `result`.
+
+The one place cancel still can't interrupt is inside the blocking LLM
+call itself — that's a future release (#4 in the TODO below).
+
+## Config knobs
+
+```toml
+[jobs]
+model           = "haiku"    # LLM model pinned on the ingest subprocess
+poll_interval_s = 1.0        # queue poll cadence when idle
+default_wait_s  = 60         # default `ingest(wait_s=...)` for MCP tool
+heartbeat_s     = 30.0       # how often updated_at gets touched while busy
+stale_after_s   = 300        # reclaim 'running' jobs idle longer than this
+```
+
 ## What's not yet built
 
 - Parallel workers (per-workspace or shared). Today it's one at a time.
-- Reclaim-stuck-running logic on server restart. A crashed worker
-  leaves the job as `running`; you can reset it with
-  `alxia jobs cancel <id>` and re-ingest.
+  The file lock guarantees this even when multiple MCP servers run.
+- Mid-LLM-call cancellation. Cancel requests honour stage boundaries,
+  not the inside of a `claude -p` invocation.
 - Priority queue. Jobs run strictly FIFO.

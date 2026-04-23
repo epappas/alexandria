@@ -1,13 +1,16 @@
 """Async job worker. Runs inside the MCP server process as a background
-asyncio task; claims queued jobs, runs them synchronously in a thread
-(ingest is blocking I/O + LLM), updates progress + handles cancellation.
+asyncio task; claims queued jobs, runs them in a thread (ingest is blocking
+I/O + LLM), updates progress, emits heartbeats, reclaims stale jobs,
+enforces single-worker-per-home via an fcntl lock.
 """
 
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from alexandria.config import load_config, resolve_home
@@ -30,8 +33,14 @@ async def worker_loop(
 ) -> None:
     """Long-running worker. Polls the queue and runs jobs one at a time.
 
-    The MCP server is expected to create this as a background task and
-    cancel it on shutdown. The loop exits when ``stop_event`` fires.
+    Only one worker per ``home`` ever runs; additional callers exit
+    immediately. Orphaned 'running' jobs are reclaimed back to 'queued'
+    on startup. A background heartbeat task touches each in-progress
+    job's ``updated_at`` every ``heartbeat_s`` seconds so stale
+    detection works for future workers.
+
+    The MCP server creates this as a background task and cancels it on
+    shutdown. The loop exits when ``stop_event`` fires.
     """
     home = home or resolve_home()
     stop = stop_event or asyncio.Event()
@@ -39,43 +48,177 @@ async def worker_loop(
     config = load_config(home)
     poll_s = config.jobs.poll_interval_s
     model = config.jobs.model
+    heartbeat_s = config.jobs.heartbeat_s
+    stale_after_s = config.jobs.stale_after_s
 
-    log.info("jobs worker started (model=%s, poll=%.1fs)", model, poll_s)
+    lock = await asyncio.to_thread(_acquire_lock, home)
+    if lock is None:
+        log.info(
+            "jobs worker not starting — another worker already holds "
+            "%s/jobs.lock", home,
+        )
+        return
 
-    while not stop.is_set():
-        if not db_path(home).exists():
-            await asyncio.sleep(poll_s)
-            continue
+    try:
+        reclaimed = await asyncio.to_thread(
+            _reclaim_stale, home, stale_after_s,
+        )
+        if reclaimed:
+            log.info("jobs worker reclaimed %d stale job(s) on startup",
+                     reclaimed)
+        log.info(
+            "jobs worker started (model=%s, poll=%.1fs, heartbeat=%.0fs, "
+            "stale_after=%ds)",
+            model, poll_s, heartbeat_s, stale_after_s,
+        )
 
-        job = await asyncio.to_thread(_claim_one, home)
-        if job is None:
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=poll_s)
-            except TimeoutError:
-                pass
-            continue
+        while not stop.is_set():
+            if not db_path(home).exists():
+                await asyncio.sleep(poll_s)
+                continue
 
-        log.info("jobs worker picked up %s (%s)", job.job_id, job.spec)
+            job = await asyncio.to_thread(_claim_one, home)
+            if job is None:
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=poll_s)
+                except TimeoutError:
+                    pass
+                continue
+
+            log.info("jobs worker picked up %s (%s)",
+                     job.job_id, job.spec.get("source", "?"))
+            await _run_with_heartbeat(home, job, model, heartbeat_s)
+
+    finally:
+        _release_lock(lock)
+        log.info("jobs worker stopping")
+
+
+# ---------------------------------------------------------------------------
+# Lock + reclaim
+# ---------------------------------------------------------------------------
+
+
+def _acquire_lock(home: Path):
+    """Try to acquire the per-home exclusive file lock.
+
+    Returns the open file object on success (caller owns it), or None
+    if another process already holds the lock. Non-blocking.
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    lock_path = home / "jobs.lock"
+    fd = lock_path.open("w")
+    try:
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fd.close()
+        return None
+    try:
+        fd.write(f"{os.getpid()}\n")
+        fd.flush()
+    except Exception:
+        pass
+    return fd
+
+
+def _release_lock(fd) -> None:  # noqa: ANN001
+    if fd is None:
+        return
+    try:
+        fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        fd.close()
+    except Exception:
+        pass
+
+
+def _reclaim_stale(home: Path, stale_after_s: int) -> int:
+    """Reset 'running' jobs with stale updated_at back to 'queued'.
+
+    Called once at worker startup — we only reach this code path after
+    acquiring the single-worker lock, so any 'running' jobs are from
+    a previous worker that exited without marking them complete.
+    """
+    cutoff = (datetime.now(UTC) - timedelta(seconds=stale_after_s)).isoformat()
+    with connect(db_path(home)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
         try:
-            await asyncio.to_thread(_run_job, home, job, model)
-        except Exception as exc:
-            log.exception("jobs worker fatal: %s", exc)
-            try:
-                with connect(db_path(home)) as conn:
-                    update_status(
-                        conn, job.job_id, JobStatus.FAILED,
-                        error=f"worker crash: {exc!r}",
-                    )
-            except Exception:
-                pass
-
-    log.info("jobs worker stopping")
+            cur = conn.execute(
+                """UPDATE jobs
+                   SET status = 'queued', started_at = NULL
+                   WHERE status = 'running'
+                     AND (updated_at IS NULL OR updated_at < ?)""",
+                (cutoff,),
+            )
+            reclaimed = cur.rowcount
+            # Aggressively reset any 'running' with no updated_at at all
+            # — these are from pre-heartbeat workers.
+            cur = conn.execute(
+                """UPDATE jobs
+                   SET status = 'queued', started_at = NULL
+                   WHERE status = 'running' AND updated_at IS NULL""",
+            )
+            reclaimed += cur.rowcount
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    return reclaimed
 
 
 def _claim_one(home: Path) -> Job | None:
     """Thread-safe queue claim."""
     with connect(db_path(home)) as conn:
         return claim_next_queued(conn)
+
+
+# ---------------------------------------------------------------------------
+# Job execution with heartbeat
+# ---------------------------------------------------------------------------
+
+
+async def _run_with_heartbeat(
+    home: Path, job: Job, model: str, heartbeat_s: float,
+) -> None:
+    """Run the job in a thread; in parallel, refresh updated_at regularly."""
+    stopped = asyncio.Event()
+
+    async def _beat() -> None:
+        while not stopped.is_set():
+            try:
+                await asyncio.wait_for(stopped.wait(), timeout=heartbeat_s)
+            except TimeoutError:
+                pass
+            if stopped.is_set():
+                return
+            try:
+                with connect(db_path(home)) as conn:
+                    update_progress(conn, job.job_id)  # touches updated_at
+            except Exception as exc:
+                log.debug("heartbeat failed for %s: %s", job.job_id, exc)
+
+    hb_task = asyncio.create_task(_beat())
+    try:
+        await asyncio.to_thread(_run_job, home, job, model)
+    except Exception as exc:
+        log.exception("jobs worker fatal on %s: %s", job.job_id, exc)
+        try:
+            with connect(db_path(home)) as conn:
+                update_status(
+                    conn, job.job_id, JobStatus.FAILED,
+                    error=f"worker crash: {exc!r}",
+                )
+        except Exception:
+            pass
+    finally:
+        stopped.set()
+        hb_task.cancel()
+        try:
+            await hb_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 def _run_job(home: Path, job: Job, model: str) -> None:
@@ -91,11 +234,11 @@ def _run_job(home: Path, job: Job, model: str) -> None:
 
 
 def _run_ingest(home: Path, job: Job, model: str) -> None:
-    """Execute an ingest job with progress + cancellation checks.
+    """Execute an ingest job with per-stage messages and cancel checks.
 
     Pins ``ALEXANDRIA_CLAUDE_MODEL`` to the configured jobs model for
-    the duration of the call. This keeps background ingest on Haiku
-    regardless of what the parent MCP server was registered with.
+    the duration of the call so background ingest always uses Haiku
+    regardless of the parent session.
     """
     from alexandria.core.ingest import IngestError, ingest_file
     from alexandria.core.repo_ingest import clone_repo, ingest_repo
@@ -154,10 +297,7 @@ def _run_ingest(home: Path, job: Job, model: str) -> None:
 
         if _is_git_url(source):
             set_message(f"cloning {source}")
-            try:
-                repo_path = clone_repo(source, ws_path / "raw" / "git")
-            except IngestError:
-                raise
+            repo_path = clone_repo(source, ws_path / "raw" / "git")
             if should_cancel():
                 _finalize_cancelled(home, job.job_id, committed_paths)
                 return
@@ -178,9 +318,14 @@ def _run_ingest(home: Path, job: Job, model: str) -> None:
             }
 
         elif source.startswith(("http://", "https://")):
-            set_message(f"fetching {source}")
+            if should_cancel():
+                _finalize_cancelled(home, job.job_id, committed_paths)
+                return
             with connect(db_path(home)) as conn:
-                update_progress(conn, job.job_id, files_total=1)
+                update_progress(
+                    conn, job.job_id,
+                    files_total=1, message=f"fetching {source}",
+                )
             try:
                 source_path = fetch_and_save(source, ws_path)
             except WebFetchError as exc:
@@ -188,6 +333,7 @@ def _run_ingest(home: Path, job: Job, model: str) -> None:
             if should_cancel():
                 _finalize_cancelled(home, job.job_id, committed_paths)
                 return
+            set_message(f"extracting {source_path.name}")
             ir = ingest_file(
                 home=home, workspace_slug=job.workspace,
                 workspace_path=ws_path, source_file=source_path,
@@ -220,8 +366,14 @@ def _run_ingest(home: Path, job: Job, model: str) -> None:
                     "kind": "directory",
                 }
             else:
+                if should_cancel():
+                    _finalize_cancelled(home, job.job_id, committed_paths)
+                    return
                 with connect(db_path(home)) as conn:
-                    update_progress(conn, job.job_id, files_total=1)
+                    update_progress(
+                        conn, job.job_id,
+                        files_total=1, message=f"extracting {local.name}",
+                    )
                 ir = ingest_file(
                     home=home, workspace_slug=job.workspace,
                     workspace_path=ws_path, source_file=local,
