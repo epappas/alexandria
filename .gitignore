@@ -40,3 +40,6 @@ env/
 .DS_Store
 
 llmwiki.egg-info/
+
+# mkdocs build output
+site/
