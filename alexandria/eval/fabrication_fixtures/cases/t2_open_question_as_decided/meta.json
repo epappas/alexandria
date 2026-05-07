@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "open_question_as_decided",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Source flags rotation as opt-in; claim asserts it is mandatory."
+}

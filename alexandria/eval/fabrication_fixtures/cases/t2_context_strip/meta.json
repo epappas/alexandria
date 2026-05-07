@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "context_strip",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Cited verbatim is the topic phrase; the full sentence says it is pending, claim states it is approved."
+}

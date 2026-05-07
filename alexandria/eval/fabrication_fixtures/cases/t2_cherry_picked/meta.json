@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "cherry_picked",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Quote is verbatim but is about OAuth tokens, used to back a claim about database connections."
+}

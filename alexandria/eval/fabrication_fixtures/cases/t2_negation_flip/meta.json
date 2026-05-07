@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "negation_flip",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Source declares /oauth/legacy deprecated; claim asserts it as the recommended endpoint."
+}

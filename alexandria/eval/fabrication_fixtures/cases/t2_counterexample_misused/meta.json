@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "counterexample_misused",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Source explicitly flags a result as the only case; claim treats it as the typical case."
+}

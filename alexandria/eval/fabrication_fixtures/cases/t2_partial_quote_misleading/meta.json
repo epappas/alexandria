@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "partial_quote_misleading",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Cited verbatim is a substring of the source; the surrounding qualifier ('only when client checks in') is dropped."
+}

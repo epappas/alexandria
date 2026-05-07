@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "recommendation_as_fact",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Source recommends caching JWKS; claim states clients already cache it as established practice."
+}

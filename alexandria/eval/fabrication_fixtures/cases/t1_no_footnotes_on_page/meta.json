@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "fabrication_type": "no_footnotes",
+  "expected_findings": ["no_quote_provided"],
+  "description": "Non-structural wiki page contains prose claims but no footnotes at all."
+}

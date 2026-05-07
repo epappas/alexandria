@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "fabrication_type": "source_missing",
+  "expected_findings": ["source_missing"],
+  "description": "Citation references a source file that does not exist in the workspace."
+}

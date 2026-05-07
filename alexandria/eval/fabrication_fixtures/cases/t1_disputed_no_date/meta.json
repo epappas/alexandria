@@ -1,0 +1,7 @@
+{
+  "tier": 1,
+  "fabrication_type": "convergence_violation",
+  "expected_findings": [],
+  "expected_convergence_violation": true,
+  "description": "Disputed block lacks the 'Updated YYYY-MM-DD' marker required by the convergence policy."
+}

@@ -1,0 +1,7 @@
+{
+  "tier": 1,
+  "fabrication_type": "convergence_violation",
+  "expected_findings": [],
+  "expected_convergence_violation": true,
+  "description": "Disputed block has 'Updated' but no 'per <source>' marker."
+}

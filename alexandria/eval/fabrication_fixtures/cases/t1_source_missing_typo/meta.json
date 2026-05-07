@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "fabrication_type": "source_missing",
+  "expected_findings": ["source_missing"],
+  "description": "Citation references a filename with a typo so the source cannot be found."
+}

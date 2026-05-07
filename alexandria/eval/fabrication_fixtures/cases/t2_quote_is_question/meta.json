@@ -1,0 +1,7 @@
+{
+  "tier": 2,
+  "fabrication_type": "question_as_fact",
+  "expected_findings": [],
+  "expected_llm_caught": true,
+  "description": "Source poses an open question; claim treats the question as if it were a stated fact."
+}

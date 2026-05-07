@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "fabrication_type": "quote_not_found",
+  "expected_findings": ["quote_not_found"],
+  "description": "Quote alters letter case ('Postgresql' instead of 'PostgreSQL') so the verbatim string differs."
+}

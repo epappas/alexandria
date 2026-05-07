@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "fabrication_type": "quote_not_found",
+  "expected_findings": ["quote_not_found"],
+  "description": "Quote inserts an extra word ('always') that does not appear in the source."
+}
