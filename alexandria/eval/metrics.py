@@ -6,9 +6,14 @@ M1: Citation fidelity — sample beliefs and run the deterministic verifier
 M2: Cascade coverage — do ingested sources propagate through the wiki?
 M3: Fabrication catch rate — runs the verifier_evasion corpus through the
     deterministic verifier and reports tier-1 catch rate. Tier-2 (semantic)
-    requires an LLM-backed hostile verifier.
+    requires an LLM-backed hostile verifier. Phase 2a placeholder per
+    PLAN_AMENDMENTS.md I2.
 M4: Cost tracking — cumulative LLM spend.
 M5: Self-consistency — do belief pairs agree?
+M6: Retroactive query benchmark — replays user-authored gold queries
+    through the agent loop and scores topic + citation overlap. Implements
+    doc 14's M3 ("can the wiki answer the same question today as last
+    month"); shipped as M6 to coexist with the Phase 2a M3 above.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from alexandria.core.citations import (
 )
 from alexandria.core.citations.anchors import create_anchor
 from alexandria.eval.fabrication_corpus import run_corpus
+from alexandria.eval.retroactive import QueryRunner, run_benchmark
 
 
 @dataclass(frozen=True)
@@ -298,10 +304,71 @@ class M5SelfConsistency:
         )
 
 
+class M6RetroactiveQuery:
+    """Retroactive query benchmark — implements doc 14 M3 under the M6 label.
+
+    Loads the user-authored gold queries (``alxia eval gold add ...``),
+    replays each through the configured agent loop, and scores
+    Jaccard topic overlap × expected-citation recall. With no gold
+    queries registered the metric reports score 1.0 with reason
+    ``no gold queries`` (vacuous truth, same pattern as M1 with no beliefs).
+    """
+
+    name = "M6"
+
+    def __init__(self, runner: QueryRunner | None = None) -> None:
+        self._runner = runner
+
+    def compute(self, conn: sqlite3.Connection, workspace: str) -> MetricResult:
+        ws_path = _workspace_path(conn, workspace)
+        if ws_path is None:
+            return MetricResult(metric=self.name, score=0.0, passed=False,
+                               detail={"error": f"workspace '{workspace}' not found"})
+
+        runner = self._runner or _default_runner()
+        if runner is None:
+            return MetricResult(metric=self.name, score=0.0, passed=False,
+                               detail={"error": "no LLM provider configured"})
+
+        result = run_benchmark(conn, workspace, ws_path, runner)
+        if result.sampled == 0 and result.skipped_no_llm == 0:
+            return MetricResult(
+                metric=self.name, score=1.0, passed=True,
+                detail={"sampled": 0, "reason": "no gold queries"},
+            )
+
+        score = result.composite_score
+        return MetricResult(
+            metric=self.name, score=score, passed=score >= 0.80,
+            detail={
+                "sampled": result.sampled,
+                "skipped_no_llm": result.skipped_no_llm,
+                "mean_topic_overlap": round(result.mean_topic_overlap, 4),
+                "mean_citation_overlap": round(result.mean_citation_overlap, 4),
+                "per_query": [
+                    {
+                        "query_id": s.query_id,
+                        "topic_overlap": round(s.topic_overlap, 4),
+                        "citation_overlap": round(s.citation_overlap, 4),
+                    } for s in result.per_query
+                ],
+            },
+        )
+
+
+def _default_runner() -> QueryRunner | None:
+    from alexandria.core.agent_loop import run_agent_query
+    from alexandria.core.llm_ingest import _get_provider
+    if _get_provider() is None:
+        return None
+    return run_agent_query
+
+
 ALL_METRICS: list[Metric] = [
     M1CitationFidelity(),
     M2CascadeCoverage(),
     M3FabricationCatch(),
     M4Cost(),
     M5SelfConsistency(),
+    M6RetroactiveQuery(),
 ]

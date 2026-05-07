@@ -1,4 +1,4 @@
-"""``alexandria eval`` — evaluation metrics."""
+"""``alexandria eval`` — evaluation metrics + gold-query management."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ console = Console()
 
 
 def eval_run_command(
-    metric: str = typer.Option("all", "--metric", "-m", help="Metric: M1|M2|M4|M5|all"),
+    metric: str = typer.Option("all", "--metric", "-m", help="Metric: M1|M2|M3|M4|M5|M6|all"),
     workspace: str | None = typer.Option(None, "--workspace", "-w"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -91,3 +91,102 @@ def eval_report_command(
             row["started_at"][:16] if row["started_at"] else "",
         )
     console.print(table)
+
+
+def gold_add_command(
+    query: str = typer.Option(..., "--query", "-q", help="The retroactive question to track."),
+    topics: str = typer.Option(
+        "", "--topics", "-t",
+        help="Comma-separated topic keywords expected to appear in the answer.",
+    ),
+    citations: str = typer.Option(
+        "", "--citations", "-c",
+        help="Comma-separated source paths expected in the answer's citations.",
+    ),
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+) -> None:
+    """Register a gold-standard query for the M6 retroactive benchmark."""
+    home = resolve_home()
+    config = load_config(home)
+    slug = workspace or resolve_workspace(config)
+
+    topic_list = [t.strip() for t in topics.split(",") if t.strip()]
+    citation_list = [c.strip() for c in citations.split(",") if c.strip()]
+
+    if not topic_list and not citation_list:
+        console.print("[red]error:[/red] provide at least --topics or --citations")
+        raise typer.Exit(code=1)
+
+    from alexandria.eval.gold import add_gold
+
+    with connect(db_path(home)) as conn:
+        try:
+            query_id = add_gold(conn, slug, query, topic_list, citation_list)
+        except ValueError as exc:
+            console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]added[/green] {query_id}")
+
+
+def gold_list_command(
+    workspace: str | None = typer.Option(None, "--workspace", "-w"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """List gold-standard queries for the workspace."""
+    home = resolve_home()
+    config = load_config(home)
+    slug = workspace or resolve_workspace(config)
+
+    from alexandria.eval.gold import list_gold
+
+    with connect(db_path(home)) as conn:
+        golds = list_gold(conn, slug)
+
+    if json_output:
+        console.print_json(json.dumps([
+            {
+                "query_id": g.query_id,
+                "query": g.query,
+                "expected_topics": g.expected_topics,
+                "expected_citations": g.expected_citations,
+                "created_at": g.created_at,
+            } for g in golds
+        ]))
+        return
+
+    if not golds:
+        console.print("[yellow]No gold queries registered.[/yellow]")
+        return
+
+    table = Table(title=f"Gold queries for {slug}")
+    table.add_column("ID")
+    table.add_column("Query")
+    table.add_column("Topics")
+    table.add_column("Citations")
+    for g in golds:
+        table.add_row(
+            g.query_id,
+            g.query[:60],
+            ", ".join(g.expected_topics)[:40],
+            ", ".join(g.expected_citations)[:40],
+        )
+    console.print(table)
+
+
+def gold_remove_command(
+    query_id: str = typer.Argument(..., help="The gold query id to remove."),
+) -> None:
+    """Remove a gold-standard query by id."""
+    home = resolve_home()
+
+    from alexandria.eval.gold import remove_gold
+
+    with connect(db_path(home)) as conn:
+        removed = remove_gold(conn, query_id)
+
+    if removed:
+        console.print(f"[green]removed[/green] {query_id}")
+    else:
+        console.print(f"[yellow]no gold query found with id[/yellow] {query_id}")
+        raise typer.Exit(code=1)

@@ -240,6 +240,13 @@ app.add_typer(mcp_app, name="mcp")
 eval_app = typer.Typer(help="Evaluation metrics.", no_args_is_help=True)
 eval_app.command("run", help="Run evaluation metrics.")(eval_cmd.eval_run_command)
 eval_app.command("report", help="Show evaluation history.")(eval_cmd.eval_report_command)
+
+gold_app = typer.Typer(help="Gold-query management for the M6 retroactive benchmark.", no_args_is_help=True)
+gold_app.command("add", help="Register a gold-standard query.")(eval_cmd.gold_add_command)
+gold_app.command("list", help="List gold queries for the workspace.")(eval_cmd.gold_list_command)
+gold_app.command("remove", help="Remove a gold query by id.")(eval_cmd.gold_remove_command)
+eval_app.add_typer(gold_app, name="gold")
+
 app.add_typer(eval_app, name="eval")
 
 
