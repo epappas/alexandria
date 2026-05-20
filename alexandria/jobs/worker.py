@@ -1,7 +1,13 @@
 """Async job worker. Runs inside the MCP server process as a background
 asyncio task; claims queued jobs, runs them in a thread (ingest is blocking
-I/O + LLM), updates progress, emits heartbeats, reclaims stale jobs,
-enforces single-worker-per-home via an fcntl lock.
+I/O + LLM), updates progress, emits heartbeats, reclaims stale jobs.
+
+Single-worker-per-home is enforced by an fcntl flock on ``jobs.lock``
+combined with an mtime heartbeat: the live holder bumps the lock file's
+mtime every ``LOCK_REFRESH_S`` seconds, and a new acquirer treats a lock
+older than ``LOCK_STALE_S`` as dead — it unlinks the file and retries,
+which lets it take over even when the holder process is alive but its
+worker coroutine has silently died.
 """
 
 from __future__ import annotations
@@ -10,6 +16,7 @@ import asyncio
 import fcntl
 import logging
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -26,6 +33,10 @@ from alexandria.jobs.queue import (
 )
 
 log = logging.getLogger(__name__)
+
+LOCK_REFRESH_S = 10.0
+LOCK_STALE_S = 60.0
+RECLAIM_INTERVAL_S = 30.0
 
 
 async def worker_loop(
@@ -54,10 +65,16 @@ async def worker_loop(
     lock = await asyncio.to_thread(_acquire_lock, home)
     if lock is None:
         log.info(
-            "jobs worker not starting — another worker already holds "
+            "jobs worker not starting — another live worker holds "
             "%s/jobs.lock", home,
         )
         return
+
+    bg_stop = asyncio.Event()
+    refresh_task = asyncio.create_task(_lock_refresh_loop(lock, bg_stop))
+    reclaim_task = asyncio.create_task(
+        _reclaim_loop(home, stale_after_s, bg_stop),
+    )
 
     try:
         reclaimed = await asyncio.to_thread(
@@ -90,6 +107,13 @@ async def worker_loop(
             await _run_with_heartbeat(home, job, model, heartbeat_s)
 
     finally:
+        bg_stop.set()
+        for t in (refresh_task, reclaim_task):
+            t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
         _release_lock(lock)
         log.info("jobs worker stopping")
 
@@ -100,25 +124,95 @@ async def worker_loop(
 
 
 def _acquire_lock(home: Path):
-    """Try to acquire the per-home exclusive file lock.
+    """Try to acquire the per-home exclusive worker lock.
 
-    Returns the open file object on success (caller owns it), or None
-    if another process already holds the lock. Non-blocking.
+    Returns the open file object on success (caller owns it and must
+    bump its mtime via ``_refresh_lock`` regularly), or None if a live
+    worker already holds it.
+
+    A lock is treated as stale — and forcibly taken over — when the
+    file's mtime is older than ``LOCK_STALE_S``. fcntl arbitrates the
+    actual hand-off: after we unlink the stale path, the next ``open``
+    creates a fresh inode that only one racing acquirer can flock.
     """
     home.mkdir(parents=True, exist_ok=True)
     lock_path = home / "jobs.lock"
-    fd = lock_path.open("w")
-    try:
-        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        fd.close()
-        return None
-    try:
-        fd.write(f"{os.getpid()}\n")
+    for _ in range(3):
+        fd = lock_path.open("a+")
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fd.close()
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age < LOCK_STALE_S:
+                return None
+            log.warning(
+                "jobs worker stealing stale lock (mtime age %.0fs > %.0fs)",
+                age, LOCK_STALE_S,
+            )
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            continue
+        fd.seek(0)
+        fd.truncate(0)
+        fd.write(f"{os.getpid()}\n{int(time.time())}\n")
         fd.flush()
-    except Exception:
-        pass
-    return fd
+        return fd
+    return None
+
+
+def _refresh_lock(fd) -> None:  # noqa: ANN001
+    """Bump the lock file's mtime via the open fd (POSIX futimes).
+
+    Touching by fd, not path, survives the unlink race where another
+    acquirer has already stolen this lock: our refresh lands on the
+    unlinked inode and does not interfere with the new holder.
+    """
+    try:
+        os.utime(fd.fileno(), None)
+    except OSError as exc:
+        log.debug("lock refresh failed: %s", exc)
+
+
+async def _lock_refresh_loop(fd, stop: asyncio.Event) -> None:  # noqa: ANN001
+    """Refresh the lock mtime every LOCK_REFRESH_S until ``stop`` fires."""
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=LOCK_REFRESH_S)
+        except TimeoutError:
+            pass
+        if stop.is_set():
+            return
+        _refresh_lock(fd)
+
+
+async def _reclaim_loop(
+    home: Path, stale_after_s: int, stop: asyncio.Event,
+) -> None:
+    """Periodically reclaim in-flight 'running' rows whose heartbeat went
+    stale. Runs as a sibling of the main poll loop so its cadence is
+    independent of ``poll_interval_s``.
+    """
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=RECLAIM_INTERVAL_S)
+        except TimeoutError:
+            pass
+        if stop.is_set():
+            return
+        try:
+            r = await asyncio.to_thread(_reclaim_stale, home, stale_after_s)
+            if r:
+                log.info(
+                    "jobs worker reclaimed %d stale job(s) mid-loop", r,
+                )
+        except Exception as exc:
+            log.warning("periodic reclaim failed: %s", exc)
 
 
 def _release_lock(fd) -> None:  # noqa: ANN001

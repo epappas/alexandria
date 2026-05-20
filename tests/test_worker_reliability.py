@@ -5,6 +5,8 @@ single-worker lock, stale-job reclaim, heartbeat, mid-URL cancel.
 from __future__ import annotations
 
 import asyncio
+import os
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,12 +16,12 @@ from alexandria.jobs.queue import (
     enqueue_ingest,
     get_job,
     list_jobs,
-    update_progress,
     update_status,
 )
 from alexandria.jobs.worker import (
     _acquire_lock,
     _reclaim_stale,
+    _refresh_lock,
     _release_lock,
     worker_loop,
 )
@@ -143,6 +145,136 @@ def test_heartbeat_touches_updated_at_during_long_ingest(
 
     assert after.updated_at
     assert after.updated_at > before.updated_at
+
+
+def test_acquire_lock_steals_stale_lock(
+    initialized_home: Path, monkeypatch,
+) -> None:
+    """A lock whose mtime is older than LOCK_STALE_S must be takeover-able
+    even while the original fd is still open (i.e. the holder process is
+    alive but its worker died). This is the May 7 / May 18 failure mode.
+    """
+    import alexandria.jobs.worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "LOCK_STALE_S", 1.0)
+
+    first = _acquire_lock(initialized_home)
+    assert first is not None
+
+    lock_path = initialized_home / "jobs.lock"
+    backdated = time.time() - 5.0
+    os.utime(lock_path, (backdated, backdated))
+
+    second = _acquire_lock(initialized_home)
+    assert second is not None, "stale lock must be stealable"
+
+    assert lock_path.stat().st_mtime > backdated + 1
+    _release_lock(second)
+    _release_lock(first)
+
+
+def test_acquire_lock_respects_freshly_refreshed_lock(
+    initialized_home: Path, monkeypatch,
+) -> None:
+    """A lock that is being refreshed (fresh mtime) must NOT be stolen."""
+    import alexandria.jobs.worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "LOCK_STALE_S", 1.0)
+
+    first = _acquire_lock(initialized_home)
+    assert first is not None
+    try:
+        _refresh_lock(first)
+        second = _acquire_lock(initialized_home)
+        assert second is None, "fresh lock must not be stolen"
+    finally:
+        _release_lock(first)
+
+
+def test_refresh_lock_advances_mtime(initialized_home: Path) -> None:
+    """_refresh_lock(fd) must bump mtime even after the path is unlinked
+    — confirming we are using futimes (fd-based), not utime (path-based).
+    """
+    fd = _acquire_lock(initialized_home)
+    assert fd is not None
+    try:
+        lock_path = initialized_home / "jobs.lock"
+        backdated = time.time() - 100.0
+        os.utime(fd.fileno(), (backdated, backdated))
+        assert lock_path.stat().st_mtime < backdated + 1
+
+        lock_path.unlink()
+        _refresh_lock(fd)
+        # Path no longer exists — verify we wrote to the underlying fd by
+        # stat'ing it directly.
+        st = os.fstat(fd.fileno())
+        assert st.st_mtime > backdated + 1
+    finally:
+        _release_lock(fd)
+
+
+def test_worker_loop_periodic_reclaim_inside_running_session(
+    initialized_home: Path, monkeypatch,
+) -> None:
+    """A 'running' row with stale updated_at must be reclaimed by the
+    periodic tick inside an already-running worker loop — not just at
+    startup. This is the in-flight job leak path.
+    """
+    import alexandria.jobs.worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "RECLAIM_INTERVAL_S", 0.2)
+
+    fresh_running_id = ""
+    with connect(db_path(initialized_home)) as conn:
+        job = enqueue_ingest(conn, "global", {"source": "stuck"})
+        fresh_running_id = job.job_id
+        # Mark running with a brand-new updated_at; the startup reclaim
+        # will not touch it.
+        conn.execute(
+            """UPDATE jobs SET status = 'running',
+               started_at = ?, updated_at = ?
+               WHERE job_id = ?""",
+            (datetime.now(UTC).isoformat(),
+             datetime.now(UTC).isoformat(),
+             fresh_running_id),
+        )
+
+    backdate_holder: dict[str, str] = {"ts": ""}
+
+    async def _run_then_age_then_stop() -> None:
+        stop = asyncio.Event()
+        worker = asyncio.create_task(
+            worker_loop(home=initialized_home, stop_event=stop),
+        )
+        await asyncio.sleep(0.4)
+        stale_ts = (datetime.now(UTC) - timedelta(seconds=600)).isoformat()
+        backdate_holder["ts"] = stale_ts
+        with connect(db_path(initialized_home)) as conn:
+            conn.execute(
+                "UPDATE jobs SET updated_at = ? WHERE job_id = ?",
+                (stale_ts, fresh_running_id),
+            )
+        await asyncio.sleep(0.6)
+        stop.set()
+        await asyncio.wait_for(worker, timeout=3.0)
+
+    asyncio.run(_run_then_age_then_stop())
+
+    with connect(db_path(initialized_home)) as conn:
+        final = get_job(conn, fresh_running_id)
+
+    # The "stuck" state we're guarding against: status='running' with
+    # the exact stale updated_at we backdated to. Any worker action
+    # (reclaim → 'queued', subsequent claim → fresh updated_at,
+    # processing → 'failed') breaks this conjunction.
+    stuck = (
+        final.status == JobStatus.RUNNING
+        and final.updated_at == backdate_holder["ts"]
+    )
+    assert not stuck, (
+        f"row left stuck: status={final.status}, "
+        f"updated_at={final.updated_at} (= backdate value)"
+    )
 
 
 def test_should_cancel_short_circuits_url_ingest(

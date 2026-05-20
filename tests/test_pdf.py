@@ -70,6 +70,34 @@ class TestPDFExtraction:
         with pytest.raises(PDFExtractionError, match="not found"):
             extract_pdf(tmp_path / "missing.pdf")
 
+    def test_pdf_suffix_but_html_body_rejected_by_magic(
+        self, tmp_path: Path,
+    ) -> None:
+        """A .pdf-named file whose body is actually an HTML 404 page (the
+        arxiv-bad-id failure mode) must be rejected before pymupdf is
+        invoked, by the magic-byte gate.
+        """
+        pytest.importorskip("pymupdf")
+        from alexandria.core.pdf import extract_pdf, PDFExtractionError
+
+        fake = tmp_path / "arxivorg-pdf-bad.pdf"
+        fake.write_bytes(b"<!DOCTYPE html><html><body>404 not found</body></html>")
+        with pytest.raises(PDFExtractionError, match="magic bytes"):
+            extract_pdf(fake)
+
+    def test_pdf_extraction_timeout_raises(self, tmp_path: Path) -> None:
+        """Extraction with a near-zero budget must raise PDFExtractionError
+        promptly (cannot complete in <0.05s) instead of hanging — confirms
+        the subprocess timeout path actually fires and the parser process
+        is killed.
+        """
+        pytest.importorskip("pymupdf")
+        from alexandria.core.pdf import extract_pdf, PDFExtractionError
+
+        pdf = _create_test_pdf(tmp_path / "tinybudget.pdf", "any text")
+        with pytest.raises(PDFExtractionError, match="timed out"):
+            extract_pdf(pdf, timeout_s=0)
+
     def test_ingest_pdf(self, tmp_path: Path) -> None:
         """End-to-end: ingest a PDF through the pipeline."""
         pymupdf = pytest.importorskip("pymupdf")
