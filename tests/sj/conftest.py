@@ -2,9 +2,9 @@
 certificates generated per test, and an Alexandria home configured to publish into it.
 
 Every test in this package is marked ``sj``. They run in the local gate against real SJ
-builds named by SJ_TEST_SJCTL, SJ_TEST_SJD and SJ_TEST_HOOKS_SJD, with the ``sj`` extra
+builds named by SJ_TEST_SJCTL, SJ_TEST_SJD and SJ_TEST_HOOKS_SJD, with sj-client
 installed. Public CI deselects them explicitly with ``-m "not sj"``. This module imports
-nothing from sj_client at import time, so deselection works without the extra.
+nothing from sj_client at import time, so deselection works without sj-client.
 """
 
 from __future__ import annotations

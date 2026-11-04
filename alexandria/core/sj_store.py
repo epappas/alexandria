@@ -45,9 +45,19 @@ DOCUMENT_NOTE: Final = (
     "path and SHA-256",
 )
 
+# sj-client is not on PyPI and is installed separately; the README's SJ section says the same.
+SJ_CLIENT_REQUIREMENT: Final = (
+    "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git"
+    "@74594441783519b4f23f315bd50cba91d51cdc8f#subdirectory=sdk/python"
+)
+
 
 class SjWriteError(IngestError):
     """SJ refused or failed the write; the operation did not update the local index."""
+
+
+class SjClientMissing(SjWriteError):
+    """[sj] is configured but the sj-client package cannot be imported; nothing was sent."""
 
 
 class SjUnavailable(SjWriteError):
@@ -119,6 +129,22 @@ def sj_config(home: Path) -> SjConfig | None:
     return config.model_copy(update=paths)
 
 
+def _configured(home: Path) -> SjConfig | None:
+    """The [sj] settings, or None; with [sj] but no importable sj-client, one clear error
+    saying how to install it, before anything else is done."""
+    config = sj_config(home)
+    if config is None:
+        return None
+    try:
+        import sj_client  # noqa: F401
+    except ImportError as error:
+        raise SjClientMissing(
+            "SJ is configured (the sj section of config.toml) but the sj-client package is not "
+            f'installed. Install it into this environment: pip install "{SJ_CLIENT_REQUIREMENT}"'
+        ) from error
+    return config
+
+
 def publish_ingest(
     home: Path,
     workspace: str,
@@ -132,7 +158,7 @@ def publish_ingest(
     """Publishes one ingested source revision: its Source and bytes, its Document and Page
     entities, the COMPILED_FROM link and the beliefs that quote this source on the page
     (`page_file` is the staged copy of `page_rel`). Assigns each belief its SJ-derived id."""
-    config = sj_config(home)
+    config = _configured(home)
     if config is None:
         return None
     from alexandria.core import sj_records as records
@@ -174,7 +200,7 @@ def publish_beliefs(
     """Publishes the cited beliefs of one wiki page as claims of its Page entity, skipping
     claims SJ already holds. `operation` names the Alexandria operation and fixes its token.
     With `derive_ids`, each belief gets its SJ-derived id; otherwise its stored id is kept."""
-    config = sj_config(home)
+    config = _configured(home)
     if config is None:
         return None
     from alexandria.core import sj_records as records
@@ -200,7 +226,7 @@ def publish_supersede(home: Path, old: Belief, new: Belief, reason: str) -> Publ
     """Publishes an explicit correction in the old belief's workspace: the new belief's claim,
     and a Retraction of the old belief's claim naming it as the replacement. Assigns the new
     belief its id."""
-    config = sj_config(home)
+    config = _configured(home)
     if config is None:
         return None
     from alexandria.core import sj_records as records
@@ -234,7 +260,7 @@ def publish_source(
     home: Path, workspace: str, workspace_path: Path, raw_file: Path,
 ) -> Publication | None:
     """Publishes one captured raw source: its Source and bytes and its Document entity."""
-    config = sj_config(home)
+    config = _configured(home)
     if config is None:
         return None
     from alexandria.core import sj_records as records
@@ -407,19 +433,15 @@ def _query(scope: Scope, **kind: Any) -> v3.QueryRequest:
 @contextmanager
 def _open(config: SjConfig) -> Iterator[StoreClient]:
     """A mutual-TLS client; every client failure inside becomes an SjWriteError."""
-    try:
-        from sj_client import (
-            ConfigurationError,
-            ConnectError,
-            MutualTls,
-            SjClientError,
-            StoreClient,
-            StoreError,
-        )
-    except ImportError as error:
-        raise SjWriteError(
-            "SJ is configured (sj section of config.toml) but the sj extra is not installed"
-        ) from error
+    from sj_client import (
+        ConfigurationError,
+        ConnectError,
+        MutualTls,
+        SjClientError,
+        StoreClient,
+        StoreError,
+    )
+
     tls = MutualTls(
         ca=Path(config.ca), certificate=Path(config.certificate),
         private_key=Path(config.private_key), server_name=config.server_name or None,

@@ -29,8 +29,8 @@ jobs:
           uv sync --dev
           uv pip install pytest pytest-asyncio ruff
 
-      # Tests marked `sj` publish into a real sjd. They need the private `sj` extra and SJ
-      # builds, so they run in the local gate only and are deselected here, explicitly.
+      # Tests marked `sj` publish into a real sjd. They need sj-client (installed separately)
+      # and SJ builds, so they run in the local gate only and are deselected here, explicitly.
       - name: Run tests (SJ-marked integration tests deselected; they run in the local gate)
         run: uv run python -m pytest tests/ -q --tb=short -m "not sj"
 

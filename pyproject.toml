@@ -53,11 +53,6 @@ watch = [
 bot = [
   "python-telegram-bot>=21.0",
 ]
-# Publishing into SJ (the [sj] section of config.toml). sj-client is a private git dependency
-# pinned to a commit; installs without access to it keep working without this extra.
-sj = [
-  "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git@74594441783519b4f23f315bd50cba91d51cdc8f#subdirectory=sdk/python",
-]
 all = [
   "pymupdf>=1.24.0",
   "youtube-transcript-api>=0.6.0",
@@ -86,9 +81,6 @@ path = "alexandria/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["alexandria"]
-
-[tool.hatch.metadata]
-allow-direct-references = true  # the sj extra's git dependency
 
 [tool.ruff]
 line-length = 100

@@ -1,5 +1,5 @@
 """Reads through SJ's own query interface, used to check what Alexandria published. sj_client
-is imported inside each function so that collecting this package needs no sj extra."""
+is imported inside each function so that collecting this package needs no sj-client."""
 
 from __future__ import annotations
 

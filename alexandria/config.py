@@ -97,9 +97,10 @@ class JobsConfig(BaseModel):
 class SjConfig(BaseModel):
     """Where knowledge writes are published: the optional ``[sj]`` section.
 
-    Needs the ``sj`` extra. When present, every knowledge write goes to SJ first and fails if
-    SJ refuses it or cannot be reached. ``certificate`` and ``private_key`` name the mutual-TLS
-    principal, which needs the writer and corrector roles in ``tenant``/``space``; ``ca`` is the
+    Needs the separately installed ``sj-client`` package (see the README). When present, every
+    knowledge write goes to SJ first and fails if SJ refuses it or cannot be reached.
+    ``certificate`` and ``private_key`` name the mutual-TLS principal, which needs the reader,
+    writer and corrector roles in ``tenant``/``space``; ``ca`` is the
     only authority trusted for the server; ``server_name`` is the name its certificate holds
     (empty: the address's IP). ``deadline_s`` bounds every call.
     """

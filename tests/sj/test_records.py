@@ -1,6 +1,6 @@
 """Evidence selection of the SJ mapping, on real files: a footnote defined twice on a merged or
 hedged page, or one that quotes another source than the one an ingest publishes, never
-becomes a citation. Needs the sj extra, so it is marked ``sj``; it starts no sjd."""
+becomes a citation. Needs sj-client installed, so it is marked ``sj``; it starts no sjd."""
 
 from __future__ import annotations
 

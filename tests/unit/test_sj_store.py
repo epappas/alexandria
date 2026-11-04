@@ -1,17 +1,21 @@
-"""The SJ write path when SJ is not configured, and the [sj] settings. These need neither the
-sj extra nor an sjd, so they run everywhere, public CI included."""
+"""The SJ write path when SJ is not configured or sj-client is missing, and the [sj]
+settings. These need neither sj-client nor an sjd, so they run everywhere, public CI included."""
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from alexandria.config import Config, config_path, load_config, save_config
+from alexandria.config import Config, SjConfig, config_path, load_config, save_config
 from alexandria.core.beliefs.model import Belief
+from alexandria.core.ingest import ingest_file
 from alexandria.core.sj_store import (
     SCHEMA_PATH,
+    SJ_CLIENT_REQUIREMENT,
+    SjClientMissing,
     SourceFacts,
     publish_beliefs,
     publish_ingest,
@@ -20,6 +24,9 @@ from alexandria.core.sj_store import (
     sj_config,
 )
 from alexandria.core.workspace import GLOBAL_SLUG, get_workspace
+from alexandria.db.connection import connect, db_path
+
+_LLM_KEYS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GOOGLE_API_KEY")
 
 
 def test_without_an_sj_section_nothing_is_configured_or_written(initialized_home: Path) -> None:
@@ -59,6 +66,44 @@ def test_an_sj_section_is_read_and_written_back(tmp_path: Path) -> None:
     assert (settings.tenant, settings.space, settings.server_name) == ("default", "default", "")
     save_config(home, load_config(home))
     assert load_config(home).sj == settings
+
+
+def test_relative_tls_paths_resolve_against_the_alexandria_home(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    config_path(home).write_text(
+        '[sj]\naddress = "127.0.0.1:50051"\nca = "sj/ca.pem"\ncertificate = "/abs/c.pem"\n'
+        'private_key = "sj/c.key"\n',
+        encoding="utf-8",
+    )
+    settings = sj_config(home)
+    assert settings is not None
+    assert (settings.ca, settings.certificate, settings.private_key) == (
+        str(home / "sj/ca.pem"), "/abs/c.pem", str(home / "sj/c.key"),
+    )
+
+
+def test_sj_configured_without_sj_client_stops_with_install_instructions(
+    initialized_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("CLAUDECODE", "1")  # no LLM: the deterministic extraction path
+    for key in _LLM_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    # Where sj-client is installed (the local gate), None in sys.modules makes the interpreter
+    # refuse the import exactly as it does where the package is absent (public CI).
+    monkeypatch.setitem(sys.modules, "sj_client", None)
+    config = load_config(initialized_home)
+    config.sj = SjConfig(address="127.0.0.1:1", ca="ca.pem", certificate="c.pem", private_key="c.key")
+    save_config(initialized_home, config)
+    note = tmp_path / "note.md"
+    note.write_text("# Tides\n\nTides rise twice a day along the survey coast.\n", encoding="utf-8")
+    workspace = get_workspace(initialized_home, GLOBAL_SLUG).path
+    with pytest.raises(SjClientMissing) as missing:
+        ingest_file(initialized_home, GLOBAL_SLUG, workspace, note, no_merge=True)
+    assert f'pip install "{SJ_CLIENT_REQUIREMENT}"' in str(missing.value)
+    with connect(db_path(initialized_home)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+    assert not list((workspace / "wiki").rglob("note.md"))
 
 
 def test_an_sj_section_without_an_address_is_refused(tmp_path: Path) -> None:
