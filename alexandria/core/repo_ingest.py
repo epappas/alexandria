@@ -14,6 +14,7 @@ from typing import Any
 
 from alexandria.core.code import LANG_EXTENSIONS
 from alexandria.core.ingest import IngestError, IngestResult, ingest_file
+from alexandria.core.sj_store import SjClientMissing, SjUnavailable, require_sj_client
 
 # Extensions we ingest from repos
 _CODE_EXTS = set(LANG_EXTENSIONS.keys())
@@ -111,6 +112,7 @@ def ingest_repo(
             after filtering. Lets callers populate a progress bar or
             persist the expected total before the first file runs.
     """
+    require_sj_client(home)  # a missing sj-client stops the whole ingest before any file
     allowed = extensions or ALL_INGEST_EXTS
     result = RepoIngestResult(repo_path=str(repo_path))
 
@@ -145,6 +147,8 @@ def ingest_repo(
                     topic=file_topic,
                     no_merge=no_merge,
                 )
+        except (SjClientMissing, SjUnavailable):
+            raise  # every further file would fail the same way: stop the whole ingest
         except (IngestError, Exception) as exc:
             result.errors.append(f"{rel}: {exc}")
             if on_progress:

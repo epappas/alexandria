@@ -56,10 +56,20 @@ def enqueue_capture(
 def process_capture_queue(
     conn: sqlite3.Connection,
     workspace_path: Path,
+    *,
+    home: Path,
+    workspace: str,
 ) -> int:
-    """Process all pending captures. Returns count processed."""
+    """Process the pending captures of `workspace` (whose files live in `workspace_path`).
+    Returns count processed.
+
+    With SJ configured in `home`, each captured file is published into SJ before it is
+    registered; a failed publication marks the capture failed with its error.
+    """
     rows = conn.execute(
-        "SELECT * FROM capture_queue WHERE status = 'pending' ORDER BY enqueued_at"
+        "SELECT * FROM capture_queue WHERE status = 'pending' AND workspace = ? "
+        "ORDER BY enqueued_at",
+        (workspace,),
     ).fetchall()
 
     processed = 0
@@ -79,6 +89,7 @@ def process_capture_queue(
                 client=row["client"],
                 session_id=session_id,
             )
+            _publish_capture(home, row["workspace"], workspace_path, result)
 
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -107,6 +118,22 @@ def process_capture_queue(
             )
 
     return processed
+
+
+def _publish_capture(
+    home: Path, workspace: str, workspace_path: Path, result: dict[str, Any],
+) -> None:
+    """Publishes the captured transcript into SJ when configured; raises on failure."""
+    from alexandria.core.sj_store import SourceFacts, publish_source
+    from alexandria.core.source_kind import infer_source_kind, is_ai_authored
+
+    path = Path(result["absolute_path"])
+    rel = str(result["output_path"])
+    facts = SourceFacts(
+        kind=infer_source_kind(path, rel), ai_authored=is_ai_authored(path, rel),
+        extracted_by_llm=False, original_pdf=False,
+    )
+    publish_source(home, workspace, workspace_path, path, facts)
 
 
 def _register_capture_doc(

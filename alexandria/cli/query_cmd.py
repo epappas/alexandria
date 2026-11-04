@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
 from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
@@ -80,10 +81,17 @@ def query_command(
     append_log_entry(ws.path, "query", f"{question[:80]} ({sources_count} sources)")
 
     if save and result:
+        from alexandria.core.ingest import IngestError
         from alexandria.core.query_save import save_query_as_page
-        with connect(db_path(home)) as conn:
-            sr = save_query_as_page(home, slug, ws.path, question, result, conn)
+        try:
+            with connect(db_path(home)) as conn:
+                sr = save_query_as_page(home, slug, ws.path, question, result, conn)
+        except IngestError as exc:
+            console.print(f"[red]Save failed:[/red] {escape(str(exc))}")
+            raise typer.Exit(code=2) from exc
         if sr.committed:
             console.print("\n[green]Saved to wiki[/green]")
             for p in sr.committed_paths:
                 console.print(f"  [cyan]wiki/{p}[/cyan]")
+            for line in sr.sj.lines() if sr.sj else []:
+                console.print(escape(line))

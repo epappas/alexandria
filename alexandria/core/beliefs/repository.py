@@ -41,11 +41,14 @@ class BeliefVerifyResult:
     message: str
 
 
-def insert_belief(conn: sqlite3.Connection, belief: Belief) -> None:
-    """Insert a belief row. Idempotent via INSERT OR REPLACE."""
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO wiki_beliefs
+def insert_belief(conn: sqlite3.Connection, belief: Belief, *, replace: bool = True) -> bool:
+    """Insert a belief row; returns whether a row was written. Idempotent via INSERT OR
+    REPLACE, or, with ``replace=False``, INSERT OR IGNORE: an existing row (a superseded one
+    included) is kept as it is."""
+    verb = "INSERT OR REPLACE" if replace else "INSERT OR IGNORE"
+    cursor = conn.execute(
+        f"""
+        {verb} INTO wiki_beliefs
           (belief_id, workspace, statement, topic, subject, predicate, object,
            wiki_document_path, wiki_section_anchor, footnote_ids, provenance_ids,
            asserted_at, asserted_in_run,
@@ -80,6 +83,7 @@ def insert_belief(conn: sqlite3.Connection, belief: Belief) -> None:
             belief.created_at,
         ),
     )
+    return cursor.rowcount == 1
 
 
 def get_belief(conn: sqlite3.Connection, belief_id: str) -> Belief | None:

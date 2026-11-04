@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from alexandria.config import resolve_home
 from alexandria.core.fts_integrity import check_fts_integrity, rebuild_fts
 from alexandria.db.connection import connect, db_path
+
+if TYPE_CHECKING:
+    from alexandria.core.beliefs.model import Belief
 
 console = Console()
 
@@ -117,39 +123,59 @@ def _rebuild_beliefs(home: Path, workspace_slug: str | None) -> None:
                 parts = md_file.relative_to(wiki_dir).parts
                 topic = parts[0] if len(parts) > 1 else "general"
 
-                # Try sidecar first; fall back to extraction
+                # Try sidecar first; fall back to extraction (the B6 backfill path)
                 sidecar_beliefs = read_sidecar(md_file, workspace=ws.slug)
-                if sidecar_beliefs:
-                    for belief in sidecar_beliefs:
-                        belief.wiki_document_path = rel_path
-                        conn.execute("BEGIN IMMEDIATE")
-                        try:
-                            insert_belief(conn, belief)
-                            conn.execute("COMMIT")
-                        except Exception:
-                            conn.execute("ROLLBACK")
-                            raise
-                        total_beliefs += 1
-                else:
-                    # Extract from page content (the B6 backfill path)
-                    beliefs = extract_beliefs_from_page(
-                        content, rel_path, ws.slug, topic
-                    )
-                    for belief in beliefs:
-                        conn.execute("BEGIN IMMEDIATE")
-                        try:
-                            insert_belief(conn, belief)
-                            conn.execute("COMMIT")
-                        except Exception:
-                            conn.execute("ROLLBACK")
-                            raise
-                        total_beliefs += 1
+                for belief in sidecar_beliefs:
+                    belief.wiki_document_path = rel_path
+                beliefs = sidecar_beliefs or extract_beliefs_from_page(
+                    content, rel_path, ws.slug, topic
+                )
+                under_sj = _publish_page_beliefs(
+                    home, ws.slug, ws.path, rel_path, content, beliefs,
+                    stored_ids=bool(sidecar_beliefs),
+                )
+                for belief in beliefs:
+                    conn.execute("BEGIN IMMEDIATE")
+                    try:
+                        # Under SJ an existing row is never rewritten from the sidecar, so a
+                        # belief superseded since stays superseded.
+                        insert_belief(conn, belief, replace=not under_sj)
+                        conn.execute("COMMIT")
+                    except Exception:
+                        conn.execute("ROLLBACK")
+                        raise
+                    total_beliefs += 1
 
-                    # Write the sidecar so future rebuilds are faster
-                    if beliefs:
-                        write_sidecar(md_file, beliefs)
+                # Write the sidecar so future rebuilds are faster
+                if beliefs and not sidecar_beliefs:
+                    write_sidecar(md_file, beliefs)
 
     console.print(
         f"[green]Rebuilt beliefs:[/green] {total_beliefs} beliefs "
         f"from {total_pages} pages across {len(workspaces_to_process)} workspace(s)"
     )
+
+
+def _publish_page_beliefs(
+    home: Path, slug: str, ws_path: Path, rel_path: str, content: str, beliefs: list[Belief],
+    *, stored_ids: bool,
+) -> bool:
+    """Publishes the page's cited beliefs into SJ when configured, and returns whether SJ is
+    configured; a failure exits 2 before anything of this page is indexed locally. The
+    operation is the page at its content hash; claims SJ already holds are not written again.
+    Sidecar beliefs (`stored_ids`) keep their ids, so editing a page never re-asserts them
+    under new ids."""
+    from alexandria.core.sj_store import SjWriteError, publish_beliefs
+
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    try:
+        publication = publish_beliefs(
+            home, slug, ws_path, ("reindex", rel_path, digest), rel_path, beliefs,
+            derive_ids=not stored_ids,
+        )
+    except SjWriteError as exc:
+        console.print(f"[red]SJ write failed for {rel_path}:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    for line in publication.lines() if publication else []:
+        console.print(f"[dim]{rel_path}:[/dim] {escape(line)}")
+    return publication is not None

@@ -31,6 +31,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         from alexandria.config import resolve_home
         from alexandria.core.beliefs.model import Belief
         from alexandria.core.beliefs.repository import insert_belief
+        from alexandria.core.sj_store import publish_beliefs
         from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
@@ -48,17 +49,30 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             predicate=predicate,
             object=object,
         )
+        # The same call made again is the same operation, so SJ records it once.
+        operation = (
+            "belief_add", belief.wiki_document_path, belief.statement, topic,
+            subject or "", predicate or "", object or "", ",".join(sorted(set(fn_ids))),
+        )
+        publication = publish_beliefs(
+            home, slug, ws_path, operation, belief.wiki_document_path, [belief],
+        )
 
         with connect(db_path(home)) as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
-                insert_belief(conn, belief)
+                # Under SJ the id is the operation's: a repeat never rewrites the row, so a
+                # belief superseded since stays superseded, as its SJ claim stays retracted.
+                written = insert_belief(conn, belief, replace=publication is None)
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
 
-        return f"Belief added: {belief.belief_id} — {statement[:80]}"
+        report = "".join(f"\n{line}" for line in publication.lines()) if publication else ""
+        if not written:
+            report += "\nAlready recorded: the existing belief is kept as it is."
+        return f"Belief added: {belief.belief_id} — {statement[:80]}{report}"
 
     @mcp.tool()
     def belief_supersede(
@@ -79,6 +93,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             insert_belief,
             supersede_belief,
         )
+        from alexandria.core.sj_store import publish_supersede
         from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
@@ -100,21 +115,24 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 wiki_document_path=old.wiki_document_path,
                 footnote_ids=old.footnote_ids,
             )
+            # In SJ: a Retraction of the old claim naming the new one as its replacement.
+            publication = publish_supersede(home, old, new_belief, reason)
 
             conn.execute("BEGIN IMMEDIATE")
             try:
-                insert_belief(conn, new_belief)
+                insert_belief(conn, new_belief, replace=publication is None)
                 supersede_belief(conn, belief_id, new_belief.belief_id, reason=reason)
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
 
+        report = "".join(f"\n{line}" for line in publication.lines()) if publication else ""
         return (
             f"Superseded {belief_id} with {new_belief.belief_id}\n"
             f"Old: {old.statement[:80]}\n"
             f"New: {new_statement[:80]}\n"
-            f"Reason: {reason}"
+            f"Reason: {reason}{report}"
         )
 
     @mcp.tool()
@@ -210,6 +228,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 sr = save_query_as_page(home, slug, ws_path, question, result, conn)
             if sr.committed:
                 source_text += f"\n\nSaved to: wiki/{sr.committed_paths[0]}"
+                source_text += "".join(f"\n{line}" for line in sr.sj.lines()) if sr.sj else ""
 
         return answer + source_text
 

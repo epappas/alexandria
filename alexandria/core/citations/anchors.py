@@ -94,7 +94,7 @@ def verify_quote_anchor(
         - ``source_missing``: the source file does not exist
     """
     # Resolve the source file (search raw/ if relative path)
-    source_path = _resolve_source_path(workspace_path, anchor.source_file)
+    source_path = resolve_source_path(workspace_path, anchor.source_file)
     if source_path is None:
         return AnchorVerifyResult(
             status="source_missing",
@@ -144,8 +144,11 @@ def verify_quote_anchor(
     )
 
 
-def _resolve_source_path(workspace_path: Path, source_ref: str) -> Path | None:
+def resolve_source_path(workspace_path: Path, source_ref: str) -> Path | None:
     """Resolve a source file reference to an absolute path.
+
+    The verifier and the SJ evidence mapping both use it, so a citation is bound to the
+    file the verifier checked.
 
     SECURITY: every resolved path is checked to ensure it stays within
     the workspace boundary. Path traversal via ``../`` is rejected.

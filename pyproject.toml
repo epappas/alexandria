@@ -120,6 +120,9 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 python_files = "test_*.py"
 asyncio_mode = "auto"
+markers = [
+  "sj: integration tests against a real sjd; run in the local gate, deselected in public CI",
+]
 filterwarnings = [
   "error",
   "ignore::DeprecationWarning:typer.*",

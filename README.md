@@ -52,6 +52,37 @@ uvx alexandria-wiki
 uv tool install alexandria-wiki
 ```
 
+### Publishing into SJ (optional)
+
+Alexandria can publish its knowledge writes (ingest, `belief_add`, `belief_supersede`,
+`reindex --rebuild-beliefs`, `paste`, `query --save` and conversation capture) into an SJ
+store before it updates its local index. This needs the `sj-client` package, which is not on
+PyPI; install it separately into the same environment, from its git repository at a pinned
+commit (SSH access to that repository is required):
+
+```bash
+pip install "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git@91fb49405a8b6230b82663eb2122c03bab8f4e5b#subdirectory=sdk/python"
+```
+
+Then add an `[sj]` section to `~/.alexandria/config.toml`:
+
+```toml
+[sj]
+address = "sjd.example:50051"
+tenant = "default"
+space = "default"
+ca = "sj/ca.pem"                  # relative paths resolve against the Alexandria home
+certificate = "sj/alexandria.pem"
+private_key = "sj/alexandria.key"
+server_name = "sjd.example"       # the name in sjd's certificate; empty means the address's IP
+deadline_s = 120.0
+```
+
+The certificate's principal needs the reader, writer and corrector roles in that tenant and
+space; create the namespace with `sjctl init --schema alexandria/core/sj_schema.json`. With
+`[sj]` configured, a write SJ refuses or cannot confirm fails and nothing is recorded locally.
+Without `[sj]`, Alexandria never imports `sj-client` and behaves as before.
+
 ## Quick Start
 
 ```bash

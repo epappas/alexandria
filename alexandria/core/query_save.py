@@ -11,11 +11,14 @@ import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from alexandria.core.cascade import stage_new_page
-from alexandria.core.ingest import IngestResult
-from alexandria.core.runs import commit_run, create_run, get_staged_dir
+from alexandria.core.ingest import IngestResult, first_staged_page
+from alexandria.core.runs import commit_run, create_run, get_staged_dir, reject_run
+
+if TYPE_CHECKING:
+    from alexandria.core.sj_store import Publication
 
 
 def save_query_as_page(
@@ -56,6 +59,8 @@ def save_query_as_page(
         raw_line="(generated from query)",
         footnotes=footnotes,
     )
+    cited = [str(s.get("path", "")) for s in sources]
+    publication = _publish_to_sj(home, workspace_slug, workspace_path, run.run_id, staged, cited)
 
     committed_paths = commit_run(home, run.run_id, workspace_path)
 
@@ -88,7 +93,25 @@ def save_query_as_page(
         committed_paths=committed_paths,
         verdict_reasoning="query answer saved",
         source_path=question,
+        sj=publication,
     )
+
+
+def _publish_to_sj(
+    home: Path, workspace_slug: str, workspace_path: Path, run_id: str, staged: Path,
+    cited: list[str],
+) -> Publication | None:
+    """Publishes the staged answer page into SJ before it is committed locally; a failure
+    rejects the run and raises."""
+    from alexandria.core.sj_store import SjWriteError, publish_page
+
+    page_rel = first_staged_page(staged)
+    page_file = staged / page_rel.removeprefix("wiki/")
+    try:
+        return publish_page(home, workspace_slug, workspace_path, page_rel, page_file, cited)
+    except SjWriteError as exc:
+        reject_run(home, run_id, f"SJ write failed: {exc}")
+        raise
 
 
 def _question_to_slug(question: str) -> str:

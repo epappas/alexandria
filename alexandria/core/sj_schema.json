@@ -1,0 +1,8 @@
+{
+  "entityTypes": {"names": ["Document", "Page"]},
+  "relationTypes": [{"name": "COMPILED_FROM", "source": "Page", "target": "Document"}],
+  "predicates": [
+    {"predicate": {"id": "states", "version": 1},
+     "subjectTypes": ["Page"], "literals": {"types": ["LITERAL_TYPE_STRING"]}}
+  ]
+}

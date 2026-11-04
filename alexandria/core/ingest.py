@@ -15,6 +15,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from alexandria.core.cascade import stage_cross_ref, stage_hedge, stage_merge, stage_new_page
 from alexandria.core.citations import extract_footnotes
@@ -27,13 +28,17 @@ from alexandria.core.runs import (
 from alexandria.core.verifier import DeterministicVerifier
 from alexandria.db.connection import connect, db_path
 
+if TYPE_CHECKING:
+    from alexandria.core.beliefs.model import Belief
+    from alexandria.core.sj_store import Publication, SourceFacts
+
 
 class IngestError(Exception):
     """Raised on ingest failures."""
 
 
 class IngestResult:
-    """Result of an ingest operation."""
+    """Result of an ingest operation. ``sj`` is what was published into SJ, when configured."""
 
     def __init__(
         self,
@@ -42,12 +47,14 @@ class IngestResult:
         committed_paths: list[str],
         verdict_reasoning: str,
         source_path: str,
+        sj: Publication | None = None,
     ) -> None:
         self.run_id = run_id
         self.committed = committed
         self.committed_paths = committed_paths
         self.verdict_reasoning = verdict_reasoning
         self.source_path = source_path
+        self.sj = sj
 
 
 @dataclass
@@ -134,6 +141,8 @@ def ingest_file(
     """
     if not source_file.exists():
         raise IngestError(f"Source file not found: {source_file}")
+    from alexandria.core.sj_store import require_sj_client
+    require_sj_client(home)  # before any extraction or model call a missing client would waste
 
     # PDF extraction
     if source_file.suffix.lower() == ".pdf":
@@ -261,6 +270,21 @@ def ingest_file(
     verdict = verifier.verify(run.run_id, workspace_path, staged)
 
     if verdict.verdict in ("commit",):
+        from alexandria.core.source_kind import infer_source_kind, is_ai_authored
+        raw_rel_text = str(raw_dest.relative_to(workspace_path))
+        src_kind = infer_source_kind(source_file, raw_rel_text)
+        ai_flag = 1 if is_ai_authored(source_file, raw_rel_text) else 0
+        wiki_rel = first_staged_page(staged)
+        drafts = _draft_beliefs(llm_beliefs, workspace_slug, resolved_topic, wiki_rel, run.run_id)
+        from alexandria.core.sj_store import SourceFacts
+        facts = SourceFacts(
+            kind=src_kind, ai_authored=bool(ai_flag), extracted_by_llm=llm_result is not None,
+            original_pdf=source_file.suffix.lower() == ".pdf",
+        )
+        publication = _publish_to_sj(
+            home, workspace_slug, workspace_path, raw_dest, staged, wiki_rel, drafts, facts,
+            run.run_id,
+        )
         committed_paths = commit_run(home, run.run_id, workspace_path)
 
         # Update run row + insert committed documents into SQLite
@@ -275,11 +299,6 @@ def ingest_file(
                         verdict="commit",
                         ended_at=datetime.now(UTC).isoformat(),
                     )
-
-                    # Determine source provenance
-                    from alexandria.core.source_kind import infer_source_kind, is_ai_authored
-                    src_kind = infer_source_kind(source_file, str(raw_dest.relative_to(workspace_path)))
-                    ai_flag = 1 if is_ai_authored(source_file, str(raw_dest.relative_to(workspace_path))) else 0
 
                     # Register committed wiki pages in documents table (populates FTS)
                     for rel_path in committed_paths:
@@ -323,63 +342,11 @@ def ingest_file(
                     )
 
                     # Insert LLM-extracted beliefs with dedup
-                    if llm_beliefs:
-                        from alexandria.core.beliefs.model import Belief
-                        from alexandria.core.beliefs.repository import (
-                            find_duplicate_belief,
-                            insert_belief,
-                            supersede_beliefs_for_document,
+                    if drafts:
+                        _record_beliefs(
+                            conn, workspace_slug, wiki_rel, run.run_id, drafts, src_kind,
+                            under_sj=publication is not None,
                         )
-                        wiki_rel = f"wiki/{committed_paths[0]}" if committed_paths else ""
-
-                        # Supersede all existing beliefs for this doc first
-                        supersede_beliefs_for_document(conn, wiki_rel, run.run_id)
-
-                        for b in llm_beliefs:
-                            stmt = b.get("statement", "")[:500]
-                            subj = b.get("subject")
-                            pred = b.get("predicate")
-                            obj = b.get("object")
-
-                            # Check if identical belief exists (was just superseded)
-                            dup_id = find_duplicate_belief(
-                                conn, workspace_slug, stmt, wiki_rel,
-                                subj, pred, obj,
-                            )
-                            if dup_id:
-                                # Restore the identical belief and refresh source_kind
-                                # in case the AST path produces a more precise value.
-                                restored_kind = b.get("source_kind") or src_kind
-                                conn.execute(
-                                    """UPDATE wiki_beliefs SET superseded_at = NULL,
-                                       superseded_by_belief_id = NULL,
-                                       superseded_in_run = NULL,
-                                       supersession_reason = NULL,
-                                       source_kind = ?
-                                    WHERE belief_id = ?""",
-                                    (restored_kind, dup_id),
-                                )
-                                continue
-
-                            belief = Belief(
-                                workspace=workspace_slug,
-                                statement=stmt,
-                                topic=b.get("topic", resolved_topic),
-                                wiki_document_path=wiki_rel,
-                                footnote_ids=b.get("footnote_ids", []),
-                                subject=subj,
-                                predicate=pred,
-                                object=obj,
-                                asserted_in_run=run.run_id,
-                            )
-                            insert_belief(conn, belief)
-                            # Tag with source provenance. AST-extracted beliefs carry
-                            # their own source_kind='code' and override the file kind.
-                            belief_kind = b.get("source_kind") or src_kind
-                            conn.execute(
-                                "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?",
-                                (belief_kind, belief.belief_id),
-                            )
 
                     conn.execute("COMMIT")
                 except Exception:
@@ -421,28 +388,10 @@ def ingest_file(
             committed_paths=committed_paths,
             verdict_reasoning=verdict.reasoning,
             source_path=str(source_file),
+            sj=publication,
         )
 
-    # Reject
-    reject_run(home, run.run_id, verdict.reasoning)
-
-    if db_path(home).exists():
-        with connect(db_path(home)) as conn:
-            from alexandria.core.runs import update_run_row
-            conn.execute("BEGIN IMMEDIATE")
-            try:
-                update_run_row(
-                    conn, run.run_id,
-                    status="rejected",
-                    verdict="reject",
-                    reject_reason=verdict.reasoning,
-                    ended_at=datetime.now(UTC).isoformat(),
-                )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-
+    _record_rejection(home, run.run_id, verdict.reasoning)
     return IngestResult(
         run_id=run.run_id,
         committed=False,
@@ -450,6 +399,133 @@ def ingest_file(
         verdict_reasoning=verdict.reasoning,
         source_path=str(source_file),
     )
+
+
+def _record_rejection(home: Path, run_id: str, reason: str) -> None:
+    """Moves the run to rejected, on disk and in its SQLite row."""
+    reject_run(home, run_id, reason)
+    if not db_path(home).exists():
+        return
+    with connect(db_path(home)) as conn:
+        from alexandria.core.runs import update_run_row
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            update_run_row(
+                conn, run_id,
+                status="rejected",
+                verdict="reject",
+                reject_reason=reason,
+                ended_at=datetime.now(UTC).isoformat(),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+
+def _record_beliefs(
+    conn: sqlite3.Connection,
+    workspace_slug: str,
+    wiki_rel: str,
+    run_id: str,
+    drafts: list[tuple[Belief, str | None]],
+    src_kind: str,
+    *,
+    under_sj: bool,
+) -> None:
+    """Supersedes the page's current beliefs, then records the run's: an identical one is
+    restored, a new one inserted. Under SJ a stored belief id is never rewritten: one a
+    re-ingest superseded (this run's or an earlier one's) is restored, one superseded by an
+    explicit correction stays so, as its SJ claim stays retracted."""
+    from alexandria.core.beliefs.repository import (
+        find_duplicate_belief,
+        get_belief,
+        insert_belief,
+        supersede_beliefs_for_document,
+    )
+
+    supersede_beliefs_for_document(conn, wiki_rel, run_id)
+    for belief, draft_kind in drafts:
+        # AST-extracted beliefs carry their own source_kind='code' over the file kind.
+        kind = draft_kind or src_kind
+        stored = get_belief(conn, belief.belief_id) if under_sj else None
+        if stored is not None and stored.superseded_by_belief_id:
+            continue
+        restore = stored.belief_id if stored is not None else find_duplicate_belief(
+            conn, workspace_slug, belief.statement, wiki_rel,
+            belief.subject, belief.predicate, belief.object,
+        )
+        if restore:
+            conn.execute(
+                """UPDATE wiki_beliefs SET superseded_at = NULL,
+                   superseded_by_belief_id = NULL, superseded_in_run = NULL,
+                   supersession_reason = NULL, source_kind = ?
+                WHERE belief_id = ?""",
+                (kind, restore),
+            )
+            continue
+        insert_belief(conn, belief)
+        conn.execute(
+            "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?", (kind, belief.belief_id),
+        )
+
+
+def first_staged_page(staged: Path) -> str:
+    """The workspace path of the first staged page, in commit_run's order: the page the
+    run's beliefs belong to."""
+    for path in sorted(staged.rglob("*")):
+        if path.is_file():
+            return f"wiki/{path.relative_to(staged)}"
+    return ""
+
+
+def _draft_beliefs(
+    extracted: list[dict[str, Any]], workspace: str, topic: str, wiki_rel: str, run_id: str,
+) -> list[tuple[Belief, str | None]]:
+    """The extracted belief dicts as Belief records, each with its own source_kind."""
+    from alexandria.core.beliefs.model import Belief
+    return [
+        (
+            Belief(
+                workspace=workspace,
+                statement=b.get("statement", "")[:500],
+                topic=b.get("topic", topic),
+                wiki_document_path=wiki_rel,
+                footnote_ids=b.get("footnote_ids", []),
+                subject=b.get("subject"),
+                predicate=b.get("predicate"),
+                object=b.get("object"),
+                asserted_in_run=run_id,
+            ),
+            b.get("source_kind"),
+        )
+        for b in extracted
+    ]
+
+
+def _publish_to_sj(
+    home: Path,
+    workspace_slug: str,
+    workspace_path: Path,
+    raw_dest: Path,
+    staged: Path,
+    wiki_rel: str,
+    drafts: list[tuple[Belief, str | None]],
+    facts: SourceFacts,
+    run_id: str,
+) -> Publication | None:
+    """Publishes the verified run into SJ before anything is committed locally. A failed
+    publication rejects the run and raises."""
+    from alexandria.core.sj_store import SjWriteError, publish_ingest
+    staged_page = staged / wiki_rel.removeprefix("wiki/")
+    beliefs = [belief for belief, _ in drafts]
+    try:
+        return publish_ingest(
+            home, workspace_slug, workspace_path, raw_dest, wiki_rel, staged_page, beliefs, facts,
+        )
+    except SjWriteError as exc:
+        _record_rejection(home, run_id, f"SJ write failed: {exc}")
+        raise
 
 
 def _execute_cascade(
@@ -585,6 +661,9 @@ def _ensure_in_raw(workspace_path: Path, source_file: Path, content: str) -> Pat
         while dest.exists():
             dest = raw_local / f"{stem}-{counter}{suffix}"
             counter += 1
+            # An identical earlier copy (a failed attempt's) is reused, never duplicated.
+            if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() == new_hash:
+                return dest
 
     dest.write_text(content, encoding="utf-8")
     return dest
