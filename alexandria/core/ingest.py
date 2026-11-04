@@ -434,8 +434,9 @@ def _record_beliefs(
     under_sj: bool,
 ) -> None:
     """Supersedes the page's current beliefs, then records the run's: an identical one is
-    restored, a new one inserted. Under SJ a stored belief id is never rewritten: one this
-    run just superseded is restored, one superseded by an explicit correction stays so."""
+    restored, a new one inserted. Under SJ a stored belief id is never rewritten: one a
+    re-ingest superseded (this run's or an earlier one's) is restored, one superseded by an
+    explicit correction stays so, as its SJ claim stays retracted."""
     from alexandria.core.beliefs.repository import (
         find_duplicate_belief,
         get_belief,
@@ -448,7 +449,7 @@ def _record_beliefs(
         # AST-extracted beliefs carry their own source_kind='code' over the file kind.
         kind = draft_kind or src_kind
         stored = get_belief(conn, belief.belief_id) if under_sj else None
-        if stored is not None and stored.superseded_in_run != run_id:
+        if stored is not None and stored.superseded_by_belief_id:
             continue
         restore = stored.belief_id if stored is not None else find_duplicate_belief(
             conn, workspace_slug, belief.statement, wiki_rel,

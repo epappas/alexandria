@@ -299,7 +299,7 @@ def publish_source(
     plan = records.ClaimPlan(
         unsupported=[records.Unsupported(f"source {raw_rel}", name, text) for name, text in notes],
     )
-    return _publish(config, scope, token, build, plan, needs_claims=False)
+    return _publish(config, scope, token, build, plan, needs_claims=False, held_if_expired=True)
 
 
 def publish_page(
@@ -357,11 +357,12 @@ def _cited_link(
 
 def _publish(
     config: SjConfig, scope: Scope, token: str, build: Build, plan: ClaimPlan,
-    *, needs_claims: bool,
+    *, needs_claims: bool, held_if_expired: bool = False,
 ) -> Publication:
     """Drops quotes of source versions SJ does not hold, then asks Receipt; writes only an
     operation SJ has never admitted. With `needs_claims`, nothing is written when no cited
-    belief is left."""
+    belief is left. With `held_if_expired`, an expired receipt settles the operation even
+    without claims to check, as `_absent_sources` treats a source version."""
     from sj_client import CONTRACT_VERSION, Outcome
     from sj_client.v3 import store_pb2 as v3
 
@@ -375,7 +376,9 @@ def _publish(
             return _reported(Publication(token, None, False, claims, plan.unsupported))
         prior = client.reconcile(request)
         if prior.outcome is not Outcome.UNKNOWN:
-            snapshot = _settled(client, scope, token, prior, list(claims.values()))
+            snapshot = _settled(
+                client, scope, token, prior, list(claims.values()), held_if_expired,
+            )
             return _reported(Publication(token, snapshot, True, claims, plan.unsupported))
         items = build(client)
         if not items:
@@ -407,15 +410,18 @@ def _absent_sources(client: StoreClient, scope: Scope, plan: ClaimPlan) -> set[t
 
 def _settled(
     client: StoreClient, scope: Scope, token: str, prior: Reconciliation, claims: list[str],
+    held_if_expired: bool,
 ) -> int:
     """The snapshot of an operation an earlier attempt decided, once its claims are checked.
-    An expired receipt counts as committed only when every claim it should hold is in SJ."""
+    An expired receipt counts as committed when every claim it should hold is in SJ, or, for
+    a source version (`held_if_expired`), as held: SJ checks every later quote of it against
+    the bytes it stores, so a source that was in fact refused fails those quotes loudly."""
     from sj_client import Outcome
 
     if prior.outcome is Outcome.COMMITTED:
         _require_claims(client, scope, token, claims)
         return prior.response.committed.snapshot.version
-    if prior.outcome is Outcome.EXPIRED and claims:
+    if prior.outcome is Outcome.EXPIRED and (claims or held_if_expired):
         _require_claims(client, scope, token, claims)
         return prior.response.expired.decided_version
     raise _unsettled(token, prior)

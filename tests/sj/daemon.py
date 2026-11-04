@@ -40,11 +40,15 @@ class Executables:
         return cls(**found)
 
 
-def init_store(sjctl: Path, root: Path, tenant: str, space: str) -> None:
-    """Creates the namespace tenant/space at `root` with the shipped Alexandria schema."""
+def init_store(
+    sjctl: Path, root: Path, tenant: str, space: str, receipt_window: int | None = None,
+) -> None:
+    """Creates the namespace tenant/space at `root` with the shipped Alexandria schema; with
+    `receipt_window`, a receipt expires once that many later namespace versions commit."""
+    window = [] if receipt_window is None else ["--receipt-window", str(receipt_window)]
     subprocess.run(
         [str(sjctl), "--state", str(root), "init", "--schema", str(SCHEMA_PATH),
-         "--tenant", tenant, "--space", space],
+         "--tenant", tenant, "--space", space, *window],
         check=True, capture_output=True,
     )
 
