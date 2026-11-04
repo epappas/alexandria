@@ -179,7 +179,7 @@ class SchedulerChild:
         with connect(db_path(self._home)) as conn:
             for ws in list_workspaces(self._home):
                 try:
-                    process_capture_queue(conn, ws.path)
+                    process_capture_queue(conn, ws.path, home=self._home)
                 except Exception as exc:
                     self._logger.error(
                         "drain_captures_failed",

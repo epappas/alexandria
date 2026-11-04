@@ -224,6 +224,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 sr = save_query_as_page(home, slug, ws_path, question, result, conn)
             if sr.committed:
                 source_text += f"\n\nSaved to: wiki/{sr.committed_paths[0]}"
+                source_text += "".join(f"\n{line}" for line in sr.sj.lines()) if sr.sj else ""
 
         return answer + source_text
 

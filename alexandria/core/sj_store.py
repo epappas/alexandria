@@ -1,8 +1,9 @@
 """The one SJ write path of Alexandria.
 
 With an ``[sj]`` section in ``config.toml``, every knowledge write (ingest, the jobs worker,
-MCP ``belief_add`` and ``belief_supersede``, ``reindex --rebuild-beliefs`` and ``paste``)
-publishes its records here before Alexandria updates its local index. A refused, failed or
+MCP ``belief_add`` and ``belief_supersede``, ``reindex --rebuild-beliefs``, ``paste``,
+``query --save`` and conversation capture) publishes its records here before Alexandria
+updates its local index. A refused, failed or
 uncertain write raises ``SjWriteError`` and the operation stops; there is no SQLite-only
 fallback. Without ``[sj]`` every ``publish_*`` function returns None and nothing changes.
 
@@ -103,8 +104,9 @@ class SourceFacts:
     extracted_by_llm: bool
     original_pdf: bool
 
-    def notes(self, page_rel: str) -> list[tuple[str, str]]:
-        """(field, detail) pairs for the unsupported report."""
+    def notes(self, page_rel: str | None) -> list[tuple[str, str]]:
+        """(field, detail) pairs for the unsupported report; `page_rel` is the page compiled
+        from the source, if any."""
         found = [("source_kind", f"not carried ({self.kind!r})"), DOCUMENT_NOTE]
         if self.ai_authored:
             found.append(("ai_authored", "not carried (True)"))
@@ -115,9 +117,14 @@ class SourceFacts:
                           "text is the cited source"))
         if self.extracted_by_llm:
             found.append(("model/provider", "the extracting model and provider are not carried"))
-        found.append(("page_content", f"the compiled text of {page_rel} is not carried; SJ holds "
-                      "its identity, its COMPILED_FROM link and its cited claims"))
+        if page_rel:
+            found.append(page_note(page_rel))
         return found
+
+
+def page_note(page_rel: str) -> tuple[str, str]:
+    return ("page_content", f"the compiled text of {page_rel} is not carried; SJ holds its "
+            "identity, its COMPILED_FROM links and its cited claims")
 
 
 def sj_config(home: Path) -> SjConfig | None:
@@ -258,8 +265,10 @@ def publish_supersede(home: Path, old: Belief, new: Belief, reason: str) -> Publ
 
 def publish_source(
     home: Path, workspace: str, workspace_path: Path, raw_file: Path,
+    facts: SourceFacts | None = None,
 ) -> Publication | None:
-    """Publishes one captured raw source: its Source and bytes and its Document entity."""
+    """Publishes one captured raw source (paste, conversation capture): its Source and bytes
+    and its Document entity. `facts` adds what SJ does not carry about the source."""
     config = _configured(home)
     if config is None:
         return None
@@ -275,8 +284,64 @@ def publish_source(
         items = records.source_items(scope, records.source_id(scope, raw_rel, data), data)
         return items + _absent_entity(client, scope, document, records.DOCUMENT, raw_rel)
 
-    plan = records.ClaimPlan(unsupported=[records.Unsupported(f"source {raw_rel}", *DOCUMENT_NOTE)])
+    notes = facts.notes(None) if facts else [DOCUMENT_NOTE]
+    plan = records.ClaimPlan(
+        unsupported=[records.Unsupported(f"source {raw_rel}", name, text) for name, text in notes],
+    )
     return _publish(config, scope, token, build, plan)
+
+
+def publish_page(
+    home: Path, workspace: str, workspace_path: Path, page_rel: str, page_file: Path,
+    cited: list[str],
+) -> Publication | None:
+    """Publishes a page Alexandria generated without quoted evidence (a saved query answer):
+    its Page entity and a COMPILED_FROM link to each cited raw source SJ holds. Its text and
+    every other citation are reported. `page_file` is the staged copy of `page_rel`."""
+    config = _configured(home)
+    if config is None:
+        return None
+    from alexandria.core import sj_records as records
+
+    scope = records.Scope(config.tenant, config.space, workspace)
+    token = scope.record_id(
+        "operation", "page", page_rel, records.sha256_hex(page_file.read_bytes()),
+    )
+    page, record = records.page_id(scope, page_rel), f"page {page_rel}"
+    raw = sorted({source for source in cited if source.startswith("raw/")})
+    plan = records.ClaimPlan(unsupported=[
+        records.Unsupported(record, *page_note(page_rel)),
+        records.Unsupported(record, "model/provider", "the answering model and provider are not carried"),
+        *(records.Unsupported(record, "citation", f"cites {source!r}; only raw sources are linked")
+          for source in sorted(set(cited) - set(raw))),
+    ])
+
+    def build(client: StoreClient) -> list[v3.WriteItem]:
+        created = _absent_entity(client, scope, page, records.PAGE, page_rel)
+        links = [_cited_link(client, scope, page_rel, source, bool(created), plan) for source in raw]
+        return created + [link for link in links if link is not None]
+
+    return _publish(config, scope, token, build, plan)
+
+
+def _cited_link(
+    client: StoreClient, scope: Scope, page_rel: str, source: str, new_page: bool,
+    plan: ClaimPlan,
+) -> v3.WriteItem | None:
+    """The COMPILED_FROM link from the page to the Document of raw `source`, when SJ holds
+    that Document and not yet the link. A Document SJ does not hold is reported."""
+    from alexandria.core import sj_records as records
+
+    document = records.document_id(scope, source)
+    if _absent_entity(client, scope, document, records.DOCUMENT, source):
+        plan.unsupported.append(records.Unsupported(
+            f"page {page_rel}", "citation", f"cites {source}, which SJ does not hold; not linked",
+        ))
+        return None
+    page, link = records.page_id(scope, page_rel), records.link_id(scope, page_rel, source)
+    if not new_page and _link_exists(client, scope, page, link):
+        return None
+    return records.link_item(link, page, document)
 
 
 def _publish(config: SjConfig, scope: Scope, token: str, build: Build, plan: ClaimPlan) -> Publication:

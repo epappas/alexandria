@@ -55,9 +55,10 @@ uv tool install alexandria-wiki
 ### Publishing into SJ (optional)
 
 Alexandria can publish its knowledge writes (ingest, `belief_add`, `belief_supersede`,
-`reindex --rebuild-beliefs` and `paste`) into an SJ store before it updates its local index. This needs the `sj-client` package, which is not on PyPI;
-install it separately into the same environment, from its git repository at a pinned commit
-(SSH access to that repository is required):
+`reindex --rebuild-beliefs`, `paste`, `query --save` and conversation capture) into an SJ
+store before it updates its local index. This needs the `sj-client` package, which is not on
+PyPI; install it separately into the same environment, from its git repository at a pinned
+commit (SSH access to that repository is required):
 
 ```bash
 pip install "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git@74594441783519b4f23f315bd50cba91d51cdc8f#subdirectory=sdk/python"

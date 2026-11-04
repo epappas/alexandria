@@ -272,7 +272,7 @@ def ingest_file(
         raw_rel_text = str(raw_dest.relative_to(workspace_path))
         src_kind = infer_source_kind(source_file, raw_rel_text)
         ai_flag = 1 if is_ai_authored(source_file, raw_rel_text) else 0
-        wiki_rel = _first_staged_page(staged)
+        wiki_rel = first_staged_page(staged)
         drafts = _draft_beliefs(llm_beliefs, workspace_slug, resolved_topic, wiki_rel, run.run_id)
         from alexandria.core.sj_store import SourceFacts
         facts = SourceFacts(
@@ -455,7 +455,7 @@ def _record_rejection(home: Path, run_id: str, reason: str) -> None:
             raise
 
 
-def _first_staged_page(staged: Path) -> str:
+def first_staged_page(staged: Path) -> str:
     """The workspace path of the first staged page, in commit_run's order: the page the
     run's beliefs belong to."""
     for path in sorted(staged.rglob("*")):
