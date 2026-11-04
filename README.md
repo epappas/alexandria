@@ -61,7 +61,7 @@ PyPI; install it separately into the same environment, from its git repository a
 commit (SSH access to that repository is required):
 
 ```bash
-pip install "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git@74594441783519b4f23f315bd50cba91d51cdc8f#subdirectory=sdk/python"
+pip install "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git@91fb49405a8b6230b82663eb2122c03bab8f4e5b#subdirectory=sdk/python"
 ```
 
 Then add an `[sj]` section to `~/.alexandria/config.toml`:

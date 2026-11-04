@@ -49,7 +49,7 @@ DOCUMENT_NOTE: Final = (
 # sj-client is not on PyPI and is installed separately; the README's SJ section says the same.
 SJ_CLIENT_REQUIREMENT: Final = (
     "sj-client @ git+ssh://git@github.com/epappas/graph-db-engine.git"
-    "@74594441783519b4f23f315bd50cba91d51cdc8f#subdirectory=sdk/python"
+    "@91fb49405a8b6230b82663eb2122c03bab8f4e5b#subdirectory=sdk/python"
 )
 
 
