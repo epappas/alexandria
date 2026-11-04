@@ -58,14 +58,18 @@ def process_capture_queue(
     workspace_path: Path,
     *,
     home: Path,
+    workspace: str,
 ) -> int:
-    """Process all pending captures. Returns count processed.
+    """Process the pending captures of `workspace` (whose files live in `workspace_path`).
+    Returns count processed.
 
     With SJ configured in `home`, each captured file is published into SJ before it is
     registered; a failed publication marks the capture failed with its error.
     """
     rows = conn.execute(
-        "SELECT * FROM capture_queue WHERE status = 'pending' ORDER BY enqueued_at"
+        "SELECT * FROM capture_queue WHERE status = 'pending' AND workspace = ? "
+        "ORDER BY enqueued_at",
+        (workspace,),
     ).fetchall()
 
     processed = 0

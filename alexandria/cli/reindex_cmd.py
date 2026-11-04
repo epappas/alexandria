@@ -130,14 +130,16 @@ def _rebuild_beliefs(home: Path, workspace_slug: str | None) -> None:
                 beliefs = sidecar_beliefs or extract_beliefs_from_page(
                     content, rel_path, ws.slug, topic
                 )
-                _publish_page_beliefs(
+                under_sj = _publish_page_beliefs(
                     home, ws.slug, ws.path, rel_path, content, beliefs,
                     stored_ids=bool(sidecar_beliefs),
                 )
                 for belief in beliefs:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
-                        insert_belief(conn, belief)
+                        # Under SJ an existing row is never rewritten from the sidecar, so a
+                        # belief superseded since stays superseded.
+                        insert_belief(conn, belief, replace=not under_sj)
                         conn.execute("COMMIT")
                     except Exception:
                         conn.execute("ROLLBACK")
@@ -157,11 +159,12 @@ def _rebuild_beliefs(home: Path, workspace_slug: str | None) -> None:
 def _publish_page_beliefs(
     home: Path, slug: str, ws_path: Path, rel_path: str, content: str, beliefs: list[Belief],
     *, stored_ids: bool,
-) -> None:
-    """Publishes the page's cited beliefs into SJ when configured; a failure exits 2 before
-    anything of this page is indexed locally. The operation is the page at its content hash;
-    claims SJ already holds are not written again. Sidecar beliefs (`stored_ids`) keep their
-    ids, so editing a page never re-asserts them under new ids."""
+) -> bool:
+    """Publishes the page's cited beliefs into SJ when configured, and returns whether SJ is
+    configured; a failure exits 2 before anything of this page is indexed locally. The
+    operation is the page at its content hash; claims SJ already holds are not written again.
+    Sidecar beliefs (`stored_ids`) keep their ids, so editing a page never re-asserts them
+    under new ids."""
     from alexandria.core.sj_store import SjWriteError, publish_beliefs
 
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -175,3 +178,4 @@ def _publish_page_beliefs(
         raise typer.Exit(code=2) from exc
     for line in publication.lines() if publication else []:
         console.print(f"[dim]{rel_path}:[/dim] {escape(line)}")
+    return publication is not None

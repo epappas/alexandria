@@ -1,6 +1,6 @@
 """An ingest whose SJ write outlives its deadline: sjd built with test hooks holds the write at
 a real storage barrier, Alexandria reports the outcome as uncertain and records nothing, and
-retrying the same ingest after the write commits reconciles it without a second write."""
+retrying the same ingest after the write commits reconciles it without writing it again."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from alexandria.db.connection import db_path
 from tests.sj import daemon, reads
 from tests.sj.conftest import configure, sj_settings
 from tests.sj.daemon import Daemon, Executables
+from tests.sj.helpers import CODE
 from tests.sj.pki import SERVER_NAME, Credentials
-from tests.sj.test_writes import CODE
 
 pytestmark = pytest.mark.sj
 
@@ -90,7 +90,8 @@ def test_an_interrupted_ingest_is_reconciled_on_retry_without_a_duplicate(
     )
     scope = reads.scope()
     data = (workspace / "raw/local/tides.py").read_bytes()
-    token = scope.record_id("operation", "ingest", "raw/local/tides.py", records.sha256_hex(data))
+    # The held write is the ingest's first operation: the source version.
+    token = records.source_token(scope, "raw/local/tides.py", records.sha256_hex(data))
     lookup = v3.WriteRequest(
         contract_version=CONTRACT_VERSION, namespace=scope.namespace, idempotency_token=token,
     )
@@ -101,8 +102,9 @@ def test_an_interrupted_ingest_is_reconciled_on_retry_without_a_duplicate(
         configure(home, sj_settings(address, credentials))
         retried = ingest_file(home, GLOBAL_SLUG, workspace, source, no_merge=True)
         assert retried.committed and retried.sj is not None
-        assert (retried.sj.replayed, retried.sj.snapshot) == (True, 1)
-        assert reads.version(client) == 1
+        # The source operation is reconciled, not written again; only the page is new.
+        assert (retried.sj.replayed, retried.sj.snapshot) == (False, 2)
+        assert reads.version(client) == 2
         with open_db(db_path(home)) as conn:
             beliefs = [row[0] for row in conn.execute("SELECT belief_id FROM wiki_beliefs")]
         assert len(beliefs) == 2

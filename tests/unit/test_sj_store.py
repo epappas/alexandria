@@ -12,6 +12,8 @@ from pydantic import ValidationError
 from alexandria.config import Config, SjConfig, config_path, load_config, save_config
 from alexandria.core.beliefs.model import Belief
 from alexandria.core.ingest import ingest_file
+from alexandria.core.repo_ingest import ingest_repo
+from alexandria.core.runs import runs_dir
 from alexandria.core.sj_store import (
     SCHEMA_PATH,
     SJ_CLIENT_REQUIREMENT,
@@ -83,27 +85,51 @@ def test_relative_tls_paths_resolve_against_the_alexandria_home(tmp_path: Path) 
     )
 
 
-def test_sj_configured_without_sj_client_stops_with_install_instructions(
-    initialized_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
+def _sj_without_client(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """[sj] configured and sj-client not importable. Where sj-client is installed (the local
+    gate), None in sys.modules makes the interpreter refuse the import exactly as it does
+    where the package is absent (public CI)."""
     monkeypatch.setenv("CLAUDECODE", "1")  # no LLM: the deterministic extraction path
     for key in _LLM_KEYS:
         monkeypatch.delenv(key, raising=False)
-    # Where sj-client is installed (the local gate), None in sys.modules makes the interpreter
-    # refuse the import exactly as it does where the package is absent (public CI).
     monkeypatch.setitem(sys.modules, "sj_client", None)
-    config = load_config(initialized_home)
+    config = load_config(home)
     config.sj = SjConfig(address="127.0.0.1:1", ca="ca.pem", certificate="c.pem", private_key="c.key")
-    save_config(initialized_home, config)
+    save_config(home, config)
+
+
+def _nothing_done(home: Path, workspace: Path) -> None:
+    """No run started, nothing copied into raw/, nothing indexed."""
+    assert not list(runs_dir(home).glob("*/meta.json"))
+    assert not list((workspace / "raw").rglob("note.md"))
+    with connect(db_path(home)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+
+
+def test_sj_configured_without_sj_client_stops_ingest_first_with_install_instructions(
+    initialized_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _sj_without_client(initialized_home, monkeypatch)
     note = tmp_path / "note.md"
     note.write_text("# Tides\n\nTides rise twice a day along the survey coast.\n", encoding="utf-8")
     workspace = get_workspace(initialized_home, GLOBAL_SLUG).path
     with pytest.raises(SjClientMissing) as missing:
         ingest_file(initialized_home, GLOBAL_SLUG, workspace, note, no_merge=True)
     assert f'pip install "{SJ_CLIENT_REQUIREMENT}"' in str(missing.value)
-    with connect(db_path(initialized_home)) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
-    assert not list((workspace / "wiki").rglob("note.md"))
+    _nothing_done(initialized_home, workspace)
+
+
+def test_sj_configured_without_sj_client_stops_a_directory_ingest_before_any_file(
+    initialized_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    _sj_without_client(initialized_home, monkeypatch)
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / "note.md").write_text("# Tides\n\nTides rise twice a day.\n", encoding="utf-8")
+    workspace = get_workspace(initialized_home, GLOBAL_SLUG).path
+    with pytest.raises(SjClientMissing):
+        ingest_repo(initialized_home, GLOBAL_SLUG, workspace, folder, no_merge=True)
+    _nothing_done(initialized_home, workspace)
 
 
 def test_an_sj_section_without_an_address_is_refused(tmp_path: Path) -> None:

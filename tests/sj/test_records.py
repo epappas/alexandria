@@ -60,4 +60,18 @@ def test_a_belief_may_cite_an_existing_source_outside_an_ingest(tmp_path: Path) 
     assert belief.statement == "Tides fall."
     assert quote.text == b"Old text says tides fall."
     assert quote.source_id == records.source_id(scope, "raw/local/old.md", old)
+    assert (quote.source_rel, quote.source_sha) == ("raw/local/old.md", records.sha256_hex(old))
     assert not quote.ambiguous
+
+
+def test_a_quote_the_cited_bytes_do_not_hold_is_never_built(tmp_path: Path) -> None:
+    from alexandria.core import sj_records as records
+
+    workspace = _workspace(tmp_path)
+    page = '# Tides\n\nTides boil. [^1]\n\n[^1]: raw/local/old.md — "Tides boil at noon."\n'
+    belief = Belief(statement="Tides boil.", topic="t", footnote_ids=["1"], wiki_document_path="wiki/t.md")
+    plan = records.plan_claims(records.Scope("default", "default", "w"), workspace, page, [belief])
+    assert plan.cited == []
+    details = [(item.field, item.detail) for item in plan.unsupported]
+    assert ("evidence", "footnote [^1] quotes text that raw/local/old.md does not hold") in details
+    assert ("claim", "no verbatim quote: kept as an uncited local belief, not published as a claim") in details

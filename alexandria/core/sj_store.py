@@ -18,7 +18,7 @@ import logging
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -136,6 +136,12 @@ def sj_config(home: Path) -> SjConfig | None:
     return config.model_copy(update=paths)
 
 
+def require_sj_client(home: Path) -> None:
+    """With [sj] configured, stops at once when sj-client is missing: callers check this
+    before doing work (such as model calls) that a failed publication would waste."""
+    _configured(home)
+
+
 def _configured(home: Path) -> SjConfig | None:
     """The [sj] settings, or None; with [sj] but no importable sj-client, one clear error
     saying how to install it, before anything else is done."""
@@ -162,36 +168,40 @@ def publish_ingest(
     beliefs: list[Belief],
     facts: SourceFacts,
 ) -> Publication | None:
-    """Publishes one ingested source revision: its Source and bytes, its Document and Page
-    entities, the COMPILED_FROM link and the beliefs that quote this source on the page
-    (`page_file` is the staged copy of `page_rel`). Assigns each belief its SJ-derived id."""
+    """Publishes one ingest as two operations with their own tokens. First the source version
+    (Source, bytes, Document entity), keyed on path and SHA-256 and shared with paste and
+    capture. Then the compiled page (Page entity, COMPILED_FROM link and the beliefs that
+    quote this source), keyed on the staged page's bytes, so a retry that compiles another
+    page is another operation. `page_file` is the staged copy of `page_rel`. Assigns each
+    belief its SJ-derived id; the result reports both operations."""
     config = _configured(home)
     if config is None:
         return None
     from alexandria.core import sj_records as records
 
+    source = publish_source(home, workspace, workspace_path, raw_file, facts)
+    assert source is not None
     scope = records.Scope(config.tenant, config.space, workspace)
     raw_rel = records.relative(workspace_path, raw_file)
-    data = raw_file.read_bytes()
-    token = scope.record_id("operation", "ingest", raw_rel, records.sha256_hex(data))
+    page_bytes = page_file.read_bytes() if page_file.is_file() else b""
+    token = scope.record_id(
+        "operation", "ingest-page", page_rel, raw_rel, records.sha256_hex(page_bytes),
+    )
     records.assign_belief_ids(token, beliefs)
-    page_text = page_file.read_text(encoding="utf-8") if page_file.is_file() else ""
+    page_text = page_bytes.decode("utf-8")
     plan = records.plan_claims(scope, workspace_path, page_text, beliefs, only_source=raw_file)
-    source = f"source {raw_rel}"
-    notes = facts.notes(page_rel)
-    plan.unsupported[:0] = [records.Unsupported(source, name, text) for name, text in notes]
+    plan.unsupported.insert(0, records.Unsupported(f"page {page_rel}", *page_note(page_rel)))
     page, document = records.page_id(scope, page_rel), records.document_id(scope, raw_rel)
     link = records.link_id(scope, page_rel, raw_rel)
 
     def build(client: StoreClient) -> list[v3.WriteItem]:
-        items = records.source_items(scope, records.source_id(scope, raw_rel, data), data)
-        items += _absent_entity(client, scope, document, records.DOCUMENT, raw_rel)
-        page_items = _absent_entity(client, scope, page, records.PAGE, page_rel)
-        if page_items or not _link_exists(client, scope, page, link):
-            page_items.append(records.link_item(link, page, document))
-        return items + page_items + plan.items(scope, page)
+        items = _absent_entity(client, scope, page, records.PAGE, page_rel)
+        if items or not _link_exists(client, scope, page, link):
+            items.append(records.link_item(link, page, document))
+        return items + plan.items(scope, page)
 
-    return _publish(config, scope, token, build, plan)
+    compiled = _publish(config, scope, token, build, plan, needs_claims=False)
+    return replace(compiled, unsupported=[*source.unsupported, *compiled.unsupported])
 
 
 def publish_beliefs(
@@ -226,7 +236,7 @@ def publish_beliefs(
         items = _absent_entity(client, scope, page, records.PAGE, page_rel)
         return items + plan.items(scope, page, held)
 
-    return _publish(config, scope, token, build, plan)
+    return _publish(config, scope, token, build, plan, needs_claims=True)
 
 
 def publish_supersede(home: Path, old: Belief, new: Belief, reason: str) -> Publication | None:
@@ -252,15 +262,16 @@ def publish_supersede(home: Path, old: Belief, new: Belief, reason: str) -> Publ
         ))
         return _reported(Publication(token, None, False, {}, plan.unsupported))
     page = records.page_id(scope, page_rel)
-    evidence = [records.evidence_id(scope, new.belief_id, n) for n in range(len(plan.cited[0][1]))]
 
     def build(client: StoreClient) -> list[v3.WriteItem]:
+        quotes = plan.cited[0][1]  # the quotes left once unheld source versions are dropped
+        evidence = [records.evidence_id(scope, new.belief_id, n) for n in range(len(quotes))]
         items = _absent_entity(client, scope, page, records.PAGE, page_rel)
         items += plan.items(scope, page)
         items.append(records.retraction_item(scope, old.belief_id, new.belief_id, reason, evidence))
         return items
 
-    return _publish(config, scope, token, build, plan)
+    return _publish(config, scope, token, build, plan, needs_claims=True)
 
 
 def publish_source(
@@ -277,7 +288,7 @@ def publish_source(
     scope = records.Scope(config.tenant, config.space, workspace)
     raw_rel = records.relative(workspace_path, raw_file)
     data = raw_file.read_bytes()
-    token = scope.record_id("operation", "source", raw_rel, records.sha256_hex(data))
+    token = records.source_token(scope, raw_rel, records.sha256_hex(data))
     document = records.document_id(scope, raw_rel)
 
     def build(client: StoreClient) -> list[v3.WriteItem]:
@@ -288,7 +299,7 @@ def publish_source(
     plan = records.ClaimPlan(
         unsupported=[records.Unsupported(f"source {raw_rel}", name, text) for name, text in notes],
     )
-    return _publish(config, scope, token, build, plan)
+    return _publish(config, scope, token, build, plan, needs_claims=False)
 
 
 def publish_page(
@@ -321,7 +332,7 @@ def publish_page(
         links = [_cited_link(client, scope, page_rel, source, bool(created), plan) for source in raw]
         return created + [link for link in links if link is not None]
 
-    return _publish(config, scope, token, build, plan)
+    return _publish(config, scope, token, build, plan, needs_claims=False)
 
 
 def _cited_link(
@@ -344,16 +355,24 @@ def _cited_link(
     return records.link_item(link, page, document)
 
 
-def _publish(config: SjConfig, scope: Scope, token: str, build: Build, plan: ClaimPlan) -> Publication:
-    """Asks Receipt first; writes only an operation SJ has never admitted."""
+def _publish(
+    config: SjConfig, scope: Scope, token: str, build: Build, plan: ClaimPlan,
+    *, needs_claims: bool,
+) -> Publication:
+    """Drops quotes of source versions SJ does not hold, then asks Receipt; writes only an
+    operation SJ has never admitted. With `needs_claims`, nothing is written when no cited
+    belief is left."""
     from sj_client import CONTRACT_VERSION, Outcome
     from sj_client.v3 import store_pb2 as v3
 
-    claims = plan.claims(scope)
     request = v3.WriteRequest(
         contract_version=CONTRACT_VERSION, namespace=scope.namespace, idempotency_token=token,
     )
     with _open(config) as client:
+        plan.drop_sources(_absent_sources(client, scope, plan))
+        claims = plan.claims(scope)
+        if needs_claims and not claims:
+            return _reported(Publication(token, None, False, claims, plan.unsupported))
         prior = client.reconcile(request)
         if prior.outcome is not Outcome.UNKNOWN:
             snapshot = _settled(client, scope, token, prior, list(claims.values()))
@@ -364,6 +383,26 @@ def _publish(config: SjConfig, scope: Scope, token: str, build: Build, plan: Cla
         request.items.extend([v3.WriteItem(tenant=scope.tenant), *items])
         receipt = _commit(client, request, config.deadline_s)
     return _reported(Publication(token, receipt.snapshot.version, False, claims, plan.unsupported))
+
+
+def _absent_sources(client: StoreClient, scope: Scope, plan: ClaimPlan) -> set[tuple[str, str]]:
+    """The cited source versions (path, SHA-256) SJ does not hold. A version is held when the
+    one operation that publishes it has committed (or decided long enough ago to expire)."""
+    from sj_client import CONTRACT_VERSION, Outcome
+    from sj_client.v3 import store_pb2 as v3
+
+    from alexandria.core.sj_records import source_token
+
+    versions = {(q.source_rel, q.source_sha) for _, quotes in plan.cited for q in quotes}
+    absent: set[tuple[str, str]] = set()
+    for rel, sha in sorted(versions):
+        lookup = v3.WriteRequest(
+            contract_version=CONTRACT_VERSION, namespace=scope.namespace,
+            idempotency_token=source_token(scope, rel, sha),
+        )
+        if client.reconcile(lookup).outcome not in (Outcome.COMMITTED, Outcome.EXPIRED):
+            absent.add((rel, sha))
+    return absent
 
 
 def _settled(

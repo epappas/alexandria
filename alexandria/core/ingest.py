@@ -141,6 +141,8 @@ def ingest_file(
     """
     if not source_file.exists():
         raise IngestError(f"Source file not found: {source_file}")
+    from alexandria.core.sj_store import require_sj_client
+    require_sj_client(home)  # before any extraction or model call a missing client would waste
 
     # PDF extraction
     if source_file.suffix.lower() == ".pdf":
@@ -341,44 +343,10 @@ def ingest_file(
 
                     # Insert LLM-extracted beliefs with dedup
                     if drafts:
-                        from alexandria.core.beliefs.repository import (
-                            find_duplicate_belief,
-                            insert_belief,
-                            supersede_beliefs_for_document,
+                        _record_beliefs(
+                            conn, workspace_slug, wiki_rel, run.run_id, drafts, src_kind,
+                            under_sj=publication is not None,
                         )
-
-                        # Supersede all existing beliefs for this doc first
-                        supersede_beliefs_for_document(conn, wiki_rel, run.run_id)
-
-                        for belief, draft_kind in drafts:
-                            # Check if identical belief exists (was just superseded)
-                            dup_id = find_duplicate_belief(
-                                conn, workspace_slug, belief.statement, wiki_rel,
-                                belief.subject, belief.predicate, belief.object,
-                            )
-                            if dup_id:
-                                # Restore the identical belief and refresh source_kind
-                                # in case the AST path produces a more precise value.
-                                restored_kind = draft_kind or src_kind
-                                conn.execute(
-                                    """UPDATE wiki_beliefs SET superseded_at = NULL,
-                                       superseded_by_belief_id = NULL,
-                                       superseded_in_run = NULL,
-                                       supersession_reason = NULL,
-                                       source_kind = ?
-                                    WHERE belief_id = ?""",
-                                    (restored_kind, dup_id),
-                                )
-                                continue
-
-                            insert_belief(conn, belief)
-                            # Tag with source provenance. AST-extracted beliefs carry
-                            # their own source_kind='code' and override the file kind.
-                            belief_kind = draft_kind or src_kind
-                            conn.execute(
-                                "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?",
-                                (belief_kind, belief.belief_id),
-                            )
 
                     conn.execute("COMMIT")
                 except Exception:
@@ -453,6 +421,52 @@ def _record_rejection(home: Path, run_id: str, reason: str) -> None:
         except Exception:
             conn.execute("ROLLBACK")
             raise
+
+
+def _record_beliefs(
+    conn: sqlite3.Connection,
+    workspace_slug: str,
+    wiki_rel: str,
+    run_id: str,
+    drafts: list[tuple[Belief, str | None]],
+    src_kind: str,
+    *,
+    under_sj: bool,
+) -> None:
+    """Supersedes the page's current beliefs, then records the run's: an identical one is
+    restored, a new one inserted. Under SJ a stored belief id is never rewritten: one this
+    run just superseded is restored, one superseded by an explicit correction stays so."""
+    from alexandria.core.beliefs.repository import (
+        find_duplicate_belief,
+        get_belief,
+        insert_belief,
+        supersede_beliefs_for_document,
+    )
+
+    supersede_beliefs_for_document(conn, wiki_rel, run_id)
+    for belief, draft_kind in drafts:
+        # AST-extracted beliefs carry their own source_kind='code' over the file kind.
+        kind = draft_kind or src_kind
+        stored = get_belief(conn, belief.belief_id) if under_sj else None
+        if stored is not None and stored.superseded_in_run != run_id:
+            continue
+        restore = stored.belief_id if stored is not None else find_duplicate_belief(
+            conn, workspace_slug, belief.statement, wiki_rel,
+            belief.subject, belief.predicate, belief.object,
+        )
+        if restore:
+            conn.execute(
+                """UPDATE wiki_beliefs SET superseded_at = NULL,
+                   superseded_by_belief_id = NULL, superseded_in_run = NULL,
+                   supersession_reason = NULL, source_kind = ?
+                WHERE belief_id = ?""",
+                (kind, restore),
+            )
+            continue
+        insert_belief(conn, belief)
+        conn.execute(
+            "UPDATE wiki_beliefs SET source_kind = ? WHERE belief_id = ?", (kind, belief.belief_id),
+        )
 
 
 def first_staged_page(staged: Path) -> str:

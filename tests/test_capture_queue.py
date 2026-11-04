@@ -71,7 +71,7 @@ class TestProcessCaptureQueue:
         workspace_path.mkdir()
 
         enqueue_capture(conn, "sess-1", "test", "claude-code", str(transcript))
-        processed = process_capture_queue(conn, workspace_path, home=tmp_path / "home")
+        processed = process_capture_queue(conn, workspace_path, home=tmp_path / "home", workspace="test")
         assert processed == 1
 
         row = conn.execute("SELECT * FROM capture_queue WHERE session_id = 'sess-1'").fetchone()
@@ -86,7 +86,7 @@ class TestProcessCaptureQueue:
             "INSERT INTO capture_queue (session_id, workspace, client, transcript_path, status, enqueued_at, last_content_hash) "
             "VALUES ('bad', 'test', 'claude-code', '/nonexistent', 'pending', '2025-01-01', '')"
         )
-        processed = process_capture_queue(conn, workspace_path, home=tmp_path / "home")
+        processed = process_capture_queue(conn, workspace_path, home=tmp_path / "home", workspace="test")
         assert processed == 0
 
         row = conn.execute("SELECT * FROM capture_queue WHERE session_id = 'bad'").fetchone()

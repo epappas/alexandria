@@ -61,13 +61,17 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         with connect(db_path(home)) as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
-                insert_belief(conn, belief)
+                # Under SJ the id is the operation's: a repeat never rewrites the row, so a
+                # belief superseded since stays superseded, as its SJ claim stays retracted.
+                written = insert_belief(conn, belief, replace=publication is None)
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
 
         report = "".join(f"\n{line}" for line in publication.lines()) if publication else ""
+        if not written:
+            report += "\nAlready recorded: the existing belief is kept as it is."
         return f"Belief added: {belief.belief_id} — {statement[:80]}{report}"
 
     @mcp.tool()
@@ -116,7 +120,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
 
             conn.execute("BEGIN IMMEDIATE")
             try:
-                insert_belief(conn, new_belief)
+                insert_belief(conn, new_belief, replace=publication is None)
                 supersede_belief(conn, belief_id, new_belief.belief_id, reason=reason)
                 conn.execute("COMMIT")
             except Exception:

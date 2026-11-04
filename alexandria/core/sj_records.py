@@ -20,6 +20,7 @@ Mapping (schema in ``sj_schema.json``):
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
@@ -60,7 +61,7 @@ class Scope:
         return v3.Namespace(tenant=self.tenant, space=self.space)
 
     def record_id(self, kind: str, *parts: str) -> str:
-        name = "\x1f".join((self.tenant, self.space, self.workspace, kind, *parts))
+        name = json.dumps([self.tenant, self.space, self.workspace, kind, *parts])
         return str(uuid.uuid5(ID_NAMESPACE, name))
 
 
@@ -78,10 +79,13 @@ class Unsupported:
 
 @dataclass(frozen=True)
 class Quote:
-    """Exact bytes of one source; `ambiguous` when they occur more than once there, in which
-    case the first occurrence is cited, as Alexandria's verifier anchors it."""
+    """Exact bytes of one source version (`source_rel` at SHA-256 `source_sha`); `ambiguous`
+    when they occur more than once there, in which case the first occurrence is cited, as
+    Alexandria's verifier anchors it."""
 
     source_id: str
+    source_rel: str
+    source_sha: str
     text: bytes
     ambiguous: bool
 
@@ -113,6 +117,27 @@ class ClaimPlan:
         """Alexandria belief id -> SJ claim id."""
         return {belief.belief_id: claim_id(scope, belief.belief_id) for belief, _ in self.cited}
 
+    def drop_sources(self, absent: set[tuple[str, str]]) -> None:
+        """Removes quotes of source versions (path, SHA-256) SJ does not hold. A belief left
+        without quotes is reported and stays uncited; no other version's bytes are used."""
+        cited: list[tuple[Belief, list[Quote]]] = []
+        for belief, quotes in self.cited:
+            kept = [q for q in quotes if (q.source_rel, q.source_sha) not in absent]
+            record = f"belief {belief.belief_id}"
+            for quote in quotes:
+                if (quote.source_rel, quote.source_sha) in absent:
+                    self.unsupported.append(Unsupported(record, "evidence", (
+                        f"cites {quote.source_rel} at a version SJ does not hold "
+                        f"(SHA-256 {quote.source_sha[:12]}); import it first"
+                    )))
+            if kept:
+                cited.append((belief, kept))
+                continue
+            self.unsupported.append(Unsupported(
+                record, "claim", "no quote of a source SJ holds: kept as an uncited local belief",
+            ))
+        self.cited = cited
+
     def items(
         self, scope: Scope, page: str, held: frozenset[str] = frozenset(),
     ) -> list[v3.WriteItem]:
@@ -135,6 +160,12 @@ def sha256_hex(data: bytes) -> str:
 
 def source_id(scope: Scope, raw_rel: str, data: bytes) -> str:
     return scope.record_id("source", raw_rel, sha256_hex(data))
+
+
+def source_token(scope: Scope, raw_rel: str, sha_hex: str) -> str:
+    """The token of the one operation that publishes this source version. Its committed
+    Receipt is how Alexandria knows SJ holds the version."""
+    return scope.record_id("operation", "source", raw_rel, sha_hex)
 
 
 def document_id(scope: Scope, raw_rel: str) -> str:
@@ -164,12 +195,11 @@ def retraction_id(scope: Scope, belief_id: str) -> str:
 def derive_belief_id(token: str, belief: Belief) -> str:
     """The belief id under SJ: fixed by the operation and the belief's content, so a retry of
     the operation gives the same belief, and so the same claim, again."""
-    parts = (
+    parts = [
         token, belief.wiki_document_path, belief.statement, belief.topic,
-        belief.subject or "", belief.predicate or "", belief.object or "",
-        ",".join(sorted(set(belief.footnote_ids))),
-    )
-    return "b-" + sha256_hex("\x1f".join(parts).encode("utf-8"))[:16]
+        belief.subject, belief.predicate, belief.object, sorted(set(belief.footnote_ids)),
+    ]
+    return "b-" + sha256_hex(json.dumps(parts).encode("utf-8"))[:16]
 
 
 def assign_belief_ids(token: str, beliefs: list[Belief]) -> None:
@@ -241,18 +271,19 @@ def _cited_quotes(
     record = f"belief {belief.belief_id}"
     quotes: list[Quote] = []
     for number in sorted(set(belief.footnote_ids)):
-        found = _footnote_evidence(workspace_path, page, number, only_source)
+        found = _footnote_evidence(scope, workspace_path, page, number, only_source)
         if isinstance(found, str):
             problems.append(Unsupported(record, "evidence", f"footnote [^{number}] {found}"))
             continue
-        quotes.append(_quote(scope, workspace_path, *found))
+        quotes.append(found)
     return quotes
 
 
 def _footnote_evidence(
-    workspace_path: Path, page: Page, number: str, only_source: Path | None,
-) -> tuple[Path, str] | str:
-    """The cited file and quote of footnote `number`, or why it cannot be evidence."""
+    scope: Scope, workspace_path: Path, page: Page, number: str, only_source: Path | None,
+) -> Quote | str:
+    """The quote footnote `number` binds to exact source bytes, or why it cannot be evidence.
+    A quote the cited bytes do not hold is never sent."""
     note = page.footnotes.get(number)
     if note is None or note.quote is None or not note.quote.strip():
         return "has no verbatim quote on the page"
@@ -263,15 +294,13 @@ def _footnote_evidence(
         return f"cites {note.source_file}, which is missing"
     if only_source is not None and path != only_source.resolve():
         return f"cites {note.source_file}, not the source this ingest publishes"
-    return path, note.quote
-
-
-def _quote(scope: Scope, workspace_path: Path, path: Path, quote: str) -> Quote:
-    data = path.read_bytes()
-    text = quote.strip().encode("utf-8")
+    data, text = path.read_bytes(), note.quote.strip().encode("utf-8")
     first = data.find(text)
-    ambiguous = first >= 0 and data.find(text, first + 1) >= 0
-    return Quote(source_id(scope, relative(workspace_path, path), data), text, ambiguous)
+    if first < 0:
+        return f"quotes text that {note.source_file} does not hold"
+    rel = relative(workspace_path, path)
+    ambiguous = data.find(text, first + 1) >= 0
+    return Quote(source_id(scope, rel, data), rel, sha256_hex(data), text, ambiguous)
 
 
 def source_items(scope: Scope, source: str, data: bytes) -> list[v3.WriteItem]:
