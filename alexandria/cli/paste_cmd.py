@@ -7,9 +7,11 @@ import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
 from alexandria.core.workspace import (
@@ -18,6 +20,9 @@ from alexandria.core.workspace import (
     get_workspace,
 )
 from alexandria.db.connection import connect, db_path
+
+if TYPE_CHECKING:
+    from alexandria.core.sj_store import Publication
 
 console = Console()
 
@@ -104,12 +109,33 @@ def paste_command(
         f"\n"
     )
     target.write_text(header + body.rstrip() + "\n", encoding="utf-8")
+    publication = _publish_capture(home, ws, target)
 
     _record_document(home, ws, target, body_sha)
 
     console.print(
         f"[green]Captured[/green] [bold]{target.relative_to(ws.path)}[/bold]"
     )
+    for line in publication.lines() if publication else []:
+        console.print(escape(line))
+
+
+def _publish_capture(home: Path, ws: Workspace, target: Path) -> Publication | None:
+    """Publishes the captured file into SJ when configured. On failure the command exits 2
+    and nothing is recorded locally; the capture is removed unless SJ may have committed it,
+    in which case it stays as the exact bytes SJ may hold."""
+    from alexandria.core.sj_store import SjUncertain, SjWriteError, publish_source
+
+    try:
+        return publish_source(home, ws.slug, ws.path, target)
+    except SjUncertain as exc:
+        console.print(f"[red]error:[/red] {escape(str(exc))}")
+        console.print(f"The capture stays at {target.relative_to(ws.path)}; do not paste it again.")
+        raise typer.Exit(code=2) from exc
+    except SjWriteError as exc:
+        target.unlink()
+        console.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
 
 
 def _slugify(text: str) -> str:

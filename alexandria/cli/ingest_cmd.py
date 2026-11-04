@@ -11,6 +11,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from alexandria.config import load_config, resolve_home, resolve_workspace
 from alexandria.core.workspace import WorkspaceNotFoundError, get_workspace
@@ -114,7 +115,7 @@ def _ingest_single_file(
             source_file=source_path, topic=topic, no_merge=no_merge,
         )
     except IngestError as exc:
-        console.print(f"[red]Ingest failed:[/red] {exc}")
+        console.print(f"[red]Ingest failed:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     if result.committed:
@@ -122,6 +123,8 @@ def _ingest_single_file(
         for path in result.committed_paths:
             console.print(f"  [cyan]wiki/{path}[/cyan]")
         console.print(f"[dim]Verifier: {result.verdict_reasoning}[/dim]")
+        for line in result.sj.lines() if result.sj else []:
+            console.print(escape(line))
     elif "content unchanged" in (result.verdict_reasoning or ""):
         console.print("[dim]Already ingested (skipped)[/dim]")
     else:
@@ -227,7 +230,7 @@ def _ingest_directory(
     home: Path, slug: str, ws_path: Path, dir_path: Path,
     topic: str | None, no_merge: bool = False,
 ) -> None:
-    from alexandria.core.repo_ingest import ALL_INGEST_EXTS, _collect_files, ingest_repo
+    from alexandria.core.repo_ingest import ALL_INGEST_EXTS, _collect_files
 
     files = _collect_files(dir_path, ALL_INGEST_EXTS)
     console.print(f"Found [bold]{len(files)}[/bold] files to ingest")
@@ -235,11 +238,25 @@ def _ingest_directory(
         console.print("[yellow]No supported files found.[/yellow]")
         return
 
-    result = ingest_repo(
-        home=home, workspace_slug=slug, workspace_path=ws_path,
-        repo_path=dir_path, topic=topic,
-        on_progress=_print_progress, no_merge=no_merge,
-    )
+    _run_repo_ingest(home, slug, ws_path, dir_path, topic, no_merge)
+
+
+def _run_repo_ingest(
+    home: Path, slug: str, ws_path: Path, repo_path: Path, topic: str | None, no_merge: bool,
+) -> None:
+    """Ingests every file; an ingest error that stops the walk (SJ unreachable) exits 2."""
+    from alexandria.core.ingest import IngestError
+    from alexandria.core.repo_ingest import ingest_repo
+
+    try:
+        result = ingest_repo(
+            home=home, workspace_slug=slug, workspace_path=ws_path,
+            repo_path=repo_path, topic=topic,
+            on_progress=_print_progress, no_merge=no_merge,
+        )
+    except IngestError as exc:
+        console.print(f"[red]Ingest failed:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
     _print_summary(result)
 
 
@@ -252,7 +269,6 @@ def _ingest_git_repo(
         IngestError,
         _collect_files,
         clone_repo,
-        ingest_repo,
     )
 
     console.print(f"[dim]Cloning {url}...[/dim]")
@@ -270,12 +286,7 @@ def _ingest_git_repo(
         console.print("[yellow]No supported files found.[/yellow]")
         return
 
-    result = ingest_repo(
-        home=home, workspace_slug=slug, workspace_path=ws_path,
-        repo_path=repo_path, topic=topic,
-        on_progress=_print_progress, no_merge=no_merge,
-    )
-    _print_summary(result)
+    _run_repo_ingest(home, slug, ws_path, repo_path, topic, no_merge)
 
 
 def _print_progress(rel: str, status: str) -> None:

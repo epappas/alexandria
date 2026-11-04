@@ -31,6 +31,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
         from alexandria.config import resolve_home
         from alexandria.core.beliefs.model import Belief
         from alexandria.core.beliefs.repository import insert_belief
+        from alexandria.core.sj_store import publish_beliefs
         from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
@@ -48,6 +49,14 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             predicate=predicate,
             object=object,
         )
+        # The same call made again is the same operation, so SJ records it once.
+        operation = (
+            "belief_add", belief.wiki_document_path, belief.statement, topic,
+            subject or "", predicate or "", object or "", ",".join(sorted(set(fn_ids))),
+        )
+        publication = publish_beliefs(
+            home, slug, ws_path, operation, belief.wiki_document_path, [belief],
+        )
 
         with connect(db_path(home)) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -58,7 +67,8 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 conn.execute("ROLLBACK")
                 raise
 
-        return f"Belief added: {belief.belief_id} — {statement[:80]}"
+        report = "".join(f"\n{line}" for line in publication.lines()) if publication else ""
+        return f"Belief added: {belief.belief_id} — {statement[:80]}{report}"
 
     @mcp.tool()
     def belief_supersede(
@@ -79,6 +89,7 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
             insert_belief,
             supersede_belief,
         )
+        from alexandria.core.sj_store import publish_supersede
         from alexandria.db.connection import connect, db_path
 
         ws_path, slug = resolve(workspace)
@@ -100,6 +111,8 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 wiki_document_path=old.wiki_document_path,
                 footnote_ids=old.footnote_ids,
             )
+            # In SJ: a Retraction of the old claim naming the new one as its replacement.
+            publication = publish_supersede(home, old, new_belief, reason)
 
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -110,11 +123,12 @@ def register(mcp: FastMCP, resolve: WorkspaceResolver) -> None:
                 conn.execute("ROLLBACK")
                 raise
 
+        report = "".join(f"\n{line}" for line in publication.lines()) if publication else ""
         return (
             f"Superseded {belief_id} with {new_belief.belief_id}\n"
             f"Old: {old.statement[:80]}\n"
             f"New: {new_statement[:80]}\n"
-            f"Reason: {reason}"
+            f"Reason: {reason}{report}"
         )
 
     @mcp.tool()

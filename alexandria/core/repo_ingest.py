@@ -14,6 +14,7 @@ from typing import Any
 
 from alexandria.core.code import LANG_EXTENSIONS
 from alexandria.core.ingest import IngestError, IngestResult, ingest_file
+from alexandria.core.sj_store import SjUnavailable
 
 # Extensions we ingest from repos
 _CODE_EXTS = set(LANG_EXTENSIONS.keys())
@@ -145,6 +146,8 @@ def ingest_repo(
                     topic=file_topic,
                     no_merge=no_merge,
                 )
+        except SjUnavailable:
+            raise  # every further file would fail the same way: stop the whole ingest
         except (IngestError, Exception) as exc:
             result.errors.append(f"{rel}: {exc}")
             if on_progress:

@@ -94,6 +94,26 @@ class JobsConfig(BaseModel):
     stale_after_s: int = 300       # reclaim 'running' jobs idle this long
 
 
+class SjConfig(BaseModel):
+    """Where knowledge writes are published: the optional ``[sj]`` section.
+
+    Needs the ``sj`` extra. When present, every knowledge write goes to SJ first and fails if
+    SJ refuses it or cannot be reached. ``certificate`` and ``private_key`` name the mutual-TLS
+    principal, which needs the writer and corrector roles in ``tenant``/``space``; ``ca`` is the
+    only authority trusted for the server; ``server_name`` is the name its certificate holds
+    (empty: the address's IP). ``deadline_s`` bounds every call.
+    """
+
+    address: str
+    tenant: str = "default"
+    space: str = "default"
+    ca: str
+    certificate: str
+    private_key: str
+    server_name: str = ""
+    deadline_s: float = 120.0
+
+
 class Config(BaseModel):
     """The complete alexandria configuration."""
 
@@ -105,6 +125,7 @@ class Config(BaseModel):
     secrets: SecretsConfig = Field(default_factory=SecretsConfig)
     bot: BotConfig = Field(default_factory=BotConfig)
     jobs: JobsConfig = Field(default_factory=JobsConfig)
+    sj: SjConfig | None = None  # absent: no SJ publication, Alexandria behaves as before
 
 
 def resolve_home() -> Path:
